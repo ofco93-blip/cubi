@@ -1,77 +1,36 @@
 package com.cubi.robot;
 
 import android.Manifest;
-import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothGatt;
-import android.bluetooth.BluetoothGattCallback;
-import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattDescriptor;
-import android.bluetooth.BluetoothGattService;
-import android.bluetooth.BluetoothManager;
-import android.bluetooth.BluetoothProfile;
-import android.bluetooth.le.BluetoothLeScanner;
-import android.bluetooth.le.ScanCallback;
-import android.bluetooth.le.ScanFilter;
-import android.bluetooth.le.ScanResult;
-import android.bluetooth.le.ScanSettings;
+import android.app.PendingIntent;
 import android.content.Intent;
+import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.ParcelUuid;
+import android.provider.Settings;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.util.ArrayDeque;
-import java.util.Collections;
-import java.util.UUID;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
-// La interfaz vive en assets/index.html. Todo con el robot va por Bluetooth (BLE), también la actualización.
-@SuppressLint("MissingPermission")
+// La interfaz vive en assets/index.html. La conexión con Cubi la lleva CubiService (sigue con la pantalla apagada).
 public class MainActivity extends Activity {
-    static final UUID SRV = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
-    static final UUID RX = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
-    static final UUID TX = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
-    static final UUID OTA = UUID.fromString("6e400004-b5a3-f393-e0a9-e50e24dcca9e");
-    static final UUID CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
-    static final int PEDAZO = 240;  // bytes del firmware por escritura (cabe en el MTU de 247)
+    // Versiones publicadas por GitHub Actions (Cubi.apk y cubi.ino.bin en cada versión)
+    static final String VERSIONES = "https://api.github.com/repos/ofco93-blip/cubi/releases/latest";
 
     private WebView web;
-    private final Handler ui = new Handler(Looper.getMainLooper());
-
-    private BluetoothLeScanner scanner;
-    private ScanCallback scanCb;
-    private BluetoothGatt gatt;
-    private BluetoothGattCharacteristic rx, ota;
-    private boolean listo, ocupado;
-
-    // Cola de escrituras: Android solo deja una operación de Bluetooth a la vez.
-    static class Paquete {
-        final boolean firmware; final byte[] datos;
-        Paquete(boolean f, byte[] d) { firmware = f; datos = d; }
-    }
-    private final ArrayDeque<Paquete> cola = new ArrayDeque<>();
-    private Paquete enVuelo;
-    private final StringBuilder entrada = new StringBuilder();
-
-    // Actualización en curso
-    private byte[] fw;
-    private int otaEnviados, otaTotal, otaPct = -1;
-    private boolean otaActiva, otaTerminando;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -83,43 +42,66 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         web.addJavascriptInterface(new Puente(), "Android");
-        web.setWebViewClient(new WebViewClient());
+        web.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView v, String url) {
+                if (CubiService.yo != null) js("bleEstado(" + JSONObject.quote(CubiService.yo.ultimoEstado) + ")");
+            }
+        });
         web.loadUrl("file:///android_asset/index.html");
         setContentView(web);
+        if (tienePermisos()) arrancar();
+        instalacion(getIntent());
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (CubiService.yo != null) CubiService.yo.oyente = this::js;
+    }
+
+    @Override
+    protected void onPause() {
+        if (CubiService.yo != null) CubiService.yo.oyente = null;
+        super.onPause();
+    }
+
+    @Override
+    protected void onNewIntent(Intent i) {
+        super.onNewIntent(i);
+        instalacion(i);
     }
 
     @Override
     public void onBackPressed() {
-        if (otaActiva) return;  // durante la actualización no se sale
-        if (web.canGoBack()) web.goBack();
-        else super.onBackPressed();
+        if (CubiService.yo != null && CubiService.yo.otaActiva) return;  // durante la actualización no se sale
+        super.onBackPressed();
     }
 
-    @Override
-    protected void onDestroy() {
-        if (gatt != null) gatt.close();
-        super.onDestroy();
+    void js(String code) {
+        runOnUiThread(() -> web.evaluateJavascript(code, null));
     }
 
-    private void js(String code) {
-        ui.post(() -> web.evaluateJavascript(code, null));
-    }
-
-    private void avisar(String estado) {
-        js("bleEstado(" + JSONObject.quote(estado) + ")");
+    private void arrancar() {
+        Intent i = new Intent(this, CubiService.class);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
+        else startService(i);
+        web.postDelayed(() -> { if (CubiService.yo != null) CubiService.yo.oyente = this::js; }, 300);
     }
 
     // ---------- permisos ----------
-    private String[] permisosBle() {
-        return Build.VERSION.SDK_INT >= 31
-                ? new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT}
-                : new String[]{Manifest.permission.ACCESS_FINE_LOCATION};
+    private String[] permisos() {
+        if (Build.VERSION.SDK_INT >= 33)
+            return new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS};
+        if (Build.VERSION.SDK_INT >= 31)
+            return new String[]{Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT};
+        return new String[]{Manifest.permission.ACCESS_FINE_LOCATION};
     }
 
     private boolean tienePermisos() {
-        for (String p : permisosBle())
+        for (String p : permisos())
             if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(permisosBle(), 2);
+                requestPermissions(permisos(), 2);
                 return false;
             }
         return true;
@@ -128,272 +110,194 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int code, String[] p, int[] r) {
         if (code != 2) return;
-        boolean ok = r.length > 0;
-        for (int x : r) ok &= x == PackageManager.PERMISSION_GRANTED;
-        if (ok) buscar();
-        else avisar("sin-permiso");
+        boolean ok = true;
+        for (int i = 0; i < p.length; i++)
+            if (!p[i].equals(Manifest.permission.POST_NOTIFICATIONS) && r[i] != PackageManager.PERMISSION_GRANTED) ok = false;
+        if (ok) arrancar();
+        else js("bleEstado('sin-permiso')");
     }
 
-    // ---------- buscar y conectar ----------
-    private void buscar() {
-        if (gatt != null || !tienePermisos()) return;
-        BluetoothAdapter a = ((BluetoothManager) getSystemService(BLUETOOTH_SERVICE)).getAdapter();
-        if (a == null || !a.isEnabled()) {
-            avisar("apagado");
-            return;
-        }
-        avisar("buscando");
-        scanner = a.getBluetoothLeScanner();
-        scanCb = new ScanCallback() {
-            @Override
-            public void onScanResult(int tipo, ScanResult r) {
-                pararBusqueda();
-                conectar(r.getDevice());
-            }
-        };
-        ScanFilter f = new ScanFilter.Builder().setServiceUuid(new ParcelUuid(SRV)).build();
-        ScanSettings cfg = new ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build();
-        scanner.startScan(Collections.singletonList(f), cfg, scanCb);
-        ui.postDelayed(() -> {
-            if (scanCb != null) {
-                pararBusqueda();
-                avisar("no-encontrado");
-            }
-        }, 12000);
-    }
-
-    private void pararBusqueda() {
-        if (scanner != null && scanCb != null) scanner.stopScan(scanCb);
-        scanCb = null;
-    }
-
-    private void conectar(BluetoothDevice d) {
-        if (gatt != null) return;
-        avisar("conectando");
-        gatt = d.connectGatt(this, false, new BluetoothGattCallback() {
-            @Override
-            public void onConnectionStateChange(BluetoothGatt g, int st, int nuevo) {
-                if (nuevo == BluetoothProfile.STATE_CONNECTED) g.requestMtu(247);
-                else if (nuevo == BluetoothProfile.STATE_DISCONNECTED) {
-                    g.close();
-                    synchronized (cola) {
-                        gatt = null;
-                        listo = ocupado = false;
-                        cola.clear();
-                        enVuelo = null;
-                    }
-                    if (otaTerminando) otaFin(true, "Cubi se está reiniciando con la versión nueva");
-                    else if (otaActiva) otaFin(false, "Se perdió la conexión. Cubi sigue con la versión que tenía; vuelve a intentarlo.");
-                    avisar("desconectado");
-                }
-            }
-
-            @Override
-            public void onMtuChanged(BluetoothGatt g, int mtu, int st) {
-                g.discoverServices();
-            }
-
-            @Override
-            public void onServicesDiscovered(BluetoothGatt g, int st) {
-                BluetoothGattService s = g.getService(SRV);
-                if (s == null) {
-                    g.disconnect();
-                    return;
-                }
-                rx = s.getCharacteristic(RX);
-                ota = s.getCharacteristic(OTA);
-                BluetoothGattCharacteristic tx = s.getCharacteristic(TX);
-                g.setCharacteristicNotification(tx, true);
-                BluetoothGattDescriptor dsc = tx.getDescriptor(CCCD);
-                dsc.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-                g.writeDescriptor(dsc);
-            }
-
-            @Override
-            public void onDescriptorWrite(BluetoothGatt g, BluetoothGattDescriptor d, int st) {
-                synchronized (cola) {
-                    listo = true;
-                }
-                avisar("conectado");
-                siguiente();
-            }
-
-            @Override
-            public void onCharacteristicWrite(BluetoothGatt g, BluetoothGattCharacteristic c, int st) {
-                Paquete p;
-                synchronized (cola) {
-                    p = enVuelo;
-                    enVuelo = null;
-                    ocupado = false;
-                }
-                if (p != null && p.firmware) {
-                    if (st != BluetoothGatt.GATT_SUCCESS) {
-                        otaFallo("Falló un pedazo del envío. Cubi sigue con la versión que tenía.");
-                        return;
-                    }
-                    otaEnviados += p.datos.length;
-                    int pct = (int) (otaEnviados * 100L / otaTotal);
-                    if (pct != otaPct) {
-                        otaPct = pct;
-                        js("otaProgreso(" + otaEnviados + "," + otaTotal + ")");
-                    }
-                    if (otaEnviados >= otaTotal) enviarTexto("ota|/ota/fin");
-                }
-                siguiente();
-            }
-
-            @Override
-            public void onCharacteristicChanged(BluetoothGatt g, BluetoothGattCharacteristic c) {
-                if (Build.VERSION.SDK_INT < 33) llega(c.getValue());
-            }
-
-            @Override
-            public void onCharacteristicChanged(BluetoothGatt g, BluetoothGattCharacteristic c, byte[] v) {
-                llega(v);
-            }
-        }, BluetoothDevice.TRANSPORT_LE);
-    }
-
-    // El robot responde "id|respuesta\n" en pedazos: se juntan hasta el salto de línea.
-    // Las respuestas "ota|..." son de la actualización y las maneja Java; las demás van a la interfaz.
-    private void llega(byte[] v) {
-        synchronized (entrada) {
-            entrada.append(new String(v, StandardCharsets.UTF_8));
-            int n;
-            while ((n = entrada.indexOf("\n")) >= 0) {
-                String linea = entrada.substring(0, n);
-                entrada.delete(0, n + 1);
-                if (linea.startsWith("ota|")) respuestaOta(linea.substring(4));
-                else js("bleRespuesta(" + JSONObject.quote(linea) + ")");
-            }
-        }
-    }
-
-    private void enviarTexto(String s) {
-        synchronized (cola) {
-            cola.add(new Paquete(false, s.getBytes(StandardCharsets.UTF_8)));
-        }
-        siguiente();
-    }
-
-    private void siguiente() {
-        synchronized (cola) {
-            if (!listo || ocupado || cola.isEmpty() || gatt == null) return;
-            Paquete p = cola.poll();
-            BluetoothGattCharacteristic c = p.firmware ? ota : rx;
-            c.setValue(p.datos);
-            c.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);  // con confirmación: ninguno se pierde
-            enVuelo = p;
-            ocupado = gatt.writeCharacteristic(c);
-            if (!ocupado) enVuelo = null;
-        }
-    }
-
-    // ---------- actualización por Bluetooth ----------
+    // ---------- actualizar el firmware de Cubi desde un archivo ----------
     @Override
     protected void onActivityResult(int req, int res, Intent data) {
-        if (req != 3 || res != RESULT_OK || data == null || data.getData() == null) {
-            if (req == 3) js("otaCancelada()");
-            return;
-        }
+        if (req != 3) return;
+        if (res != RESULT_OK || data == null || data.getData() == null) return;
         try (InputStream in = getContentResolver().openInputStream(data.getData())) {
-            ByteArrayOutputStream o = new ByteArrayOutputStream();
-            byte[] b = new byte[16384];
-            int n;
-            while ((n = in.read(b)) > 0) o.write(b, 0, n);
-            fw = o.toByteArray();
+            mandarFirmware(leer(in));
         } catch (Exception e) {
             js("otaFin(false," + JSONObject.quote("No pude leer el archivo") + ")");
-            return;
         }
+    }
+
+    private void mandarFirmware(byte[] fw) {
         // Un firmware del ESP32 empieza con 0xE9 y pesa más de 100 KB: así no se sube cualquier archivo por error
         if (fw.length < 100000 || (fw[0] & 0xFF) != 0xE9) {
-            js("otaFin(false," + JSONObject.quote("Ese archivo no es un firmware de Cubi. Elige cubi.ino.bin.") + ")");
+            js("otaFin(false," + JSONObject.quote("Ese archivo no es un firmware de Cubi.") + ")");
             return;
         }
-        if (ota == null || gatt == null) {
-            js("otaFin(false," + JSONObject.quote("Cubi no está conectado por Bluetooth.") + ")");
-            return;
-        }
-        String md5;
-        try {
-            StringBuilder h = new StringBuilder();
-            for (byte x : MessageDigest.getInstance("MD5").digest(fw)) h.append(String.format("%02x", x));
-            md5 = h.toString();
-        } catch (Exception e) {
-            md5 = "";
-        }
-        otaActiva = true;
-        otaTerminando = false;
-        otaEnviados = 0;
-        otaTotal = fw.length;
-        otaPct = -1;
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
-        js("otaEmpieza(" + otaTotal + ")");
-        enviarTexto("ota|/ota/inicio?tam=" + otaTotal + (md5.isEmpty() ? "" : "&md5=" + md5));
+        if (CubiService.yo == null) return;
+        runOnUiThread(() -> getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
+        CubiService.yo.ota(fw);
     }
 
-    private void respuestaOta(String r) {
-        if (!otaActiva) return;
-        if (r.startsWith("!")) {
-            otaFallo(r.substring(1));
-            return;
+    static byte[] leer(InputStream in) throws Exception {
+        ByteArrayOutputStream o = new ByteArrayOutputStream();
+        byte[] b = new byte[16384];
+        int n;
+        while ((n = in.read(b)) > 0) o.write(b, 0, n);
+        return o.toByteArray();
+    }
+
+    // ---------- actualizaciones desde GitHub: la app y el firmware de Cubi ----------
+    private JSONObject ultimaVersion() throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(VERSIONES).openConnection();
+        c.setRequestProperty("Accept", "application/vnd.github+json");
+        c.setConnectTimeout(10000);
+        c.setReadTimeout(15000);
+        if (c.getResponseCode() == 404) throw new Exception("No veo las versiones en GitHub (¿el proyecto es privado?)");
+        try (InputStream in = c.getInputStream()) {
+            return new JSONObject(new String(leer(in), "UTF-8"));
         }
-        if (otaEnviados == 0 && !otaTerminando && otaPct < 0) {  // respuesta al inicio: ahora sí manda el firmware
-            otaPct = 0;
-            synchronized (cola) {
-                for (int i = 0; i < fw.length; i += PEDAZO) {
-                    byte[] p = new byte[Math.min(PEDAZO, fw.length - i)];
-                    System.arraycopy(fw, i, p, 0, p.length);
-                    cola.add(new Paquete(true, p));
-                }
+    }
+
+    private String urlArchivo(JSONObject v, String nombre) throws Exception {
+        JSONArray a = v.getJSONArray("assets");
+        for (int i = 0; i < a.length(); i++)
+            if (a.getJSONObject(i).getString("name").equals(nombre)) return a.getJSONObject(i).getString("browser_download_url");
+        throw new Exception("La versión no trae " + nombre);
+    }
+
+    private byte[] descargar(String url) throws Exception {
+        HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+        c.setInstanceFollowRedirects(true);
+        c.setConnectTimeout(10000);
+        c.setReadTimeout(30000);
+        try (InputStream in = c.getInputStream()) {
+            return leer(in);
+        }
+    }
+
+    // número de compilación: el tag es v2.0.N y N es el versionCode de esa app
+    private static int numero(String tag) {
+        try { return Integer.parseInt(tag.substring(tag.lastIndexOf('.') + 1)); } catch (Exception e) { return 0; }
+    }
+
+    private int miVersion() {
+        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; } catch (Exception e) { return 0; }
+    }
+
+    private void instalarApk(byte[] apk) throws Exception {
+        PackageInstaller pi = getPackageManager().getPackageInstaller();
+        int id = pi.createSession(new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL));
+        try (PackageInstaller.Session s = pi.openSession(id)) {
+            try (OutputStream o = s.openWrite("cubi.apk", 0, apk.length)) {
+                o.write(apk);
+                s.fsync(o);
             }
-            siguiente();
-        } else if (otaEnviados >= otaTotal) {  // respuesta al fin: verificado, el robot se reinicia
-            otaTerminando = true;
+            Intent i = new Intent(this, MainActivity.class).setAction("cubi.INSTALADA");
+            int f = PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0);
+            s.commit(PendingIntent.getActivity(this, 7, i, f).getIntentSender());
         }
     }
 
-    private void otaFallo(String msg) {
-        synchronized (cola) {
-            cola.clear();
+    // Android pide confirmar la instalación: se muestra su ventana
+    private void instalacion(Intent i) {
+        if (i == null || !"cubi.INSTALADA".equals(i.getAction())) return;
+        int st = i.getIntExtra(PackageInstaller.EXTRA_STATUS, -999);
+        if (st == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            Intent confirmar = i.getParcelableExtra(Intent.EXTRA_INTENT);
+            if (confirmar != null) startActivity(confirmar.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } else if (st != PackageInstaller.STATUS_SUCCESS && st != -999) {
+            js("toast(" + JSONObject.quote("No se instaló: " + i.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)) + ")");
         }
-        if (gatt != null) enviarTexto("ota|/ota/cancelar");
-        otaFin(false, msg);
-    }
-
-    private void otaFin(boolean ok, String msg) {
-        if (!otaActiva) return;
-        otaActiva = false;
-        fw = null;
-        ui.post(() -> getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
-        js("otaFin(" + ok + "," + JSONObject.quote(msg) + ")");
-        if (ok) ui.postDelayed(this::buscar, 6000);  // se vuelve a conectar cuando Cubi termina de reiniciar
     }
 
     class Puente {
         @JavascriptInterface
         public void bleBuscar() {
-            ui.post(MainActivity.this::buscar);
+            if (!tienePermisos()) return;
+            if (CubiService.yo == null) arrancar();
+            else CubiService.yo.buscar();
         }
 
         @JavascriptInterface
         public void bleEnviar(String orden) {
-            if (otaActiva) return;  // durante la actualización no se manda nada más
-            synchronized (cola) {
-                if (cola.size() < 20) cola.add(new Paquete(false, orden.getBytes(StandardCharsets.UTF_8)));
-            }
-            siguiente();
+            if (CubiService.yo != null) CubiService.yo.enviar(orden);
         }
 
         @JavascriptInterface
         public void otaElegir() {
-            if (otaActiva) return;
             Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
             i.setType("*/*");
-            ui.post(() -> startActivityForResult(i, 3));
+            runOnUiThread(() -> startActivityForResult(i, 3));
+        }
+
+        @JavascriptInterface
+        public void otaListo() {
+            runOnUiThread(() -> getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
+        }
+
+        @JavascriptInterface
+        public void abrirAsistente() {
+            if (CubiService.yo != null) CubiService.yo.abrirAsistente();
+        }
+
+        @JavascriptInterface
+        public boolean puedeAbrirSolo() {
+            return Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public void pedirAbrirSolo() {
+            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+        }
+
+        @JavascriptInterface
+        public int version() {
+            return miVersion();
+        }
+
+        // Revisa GitHub y le cuenta a la interfaz: versión de la app y si hay nueva
+        @JavascriptInterface
+        public void buscarVersion() {
+            new Thread(() -> {
+                try {
+                    JSONObject v = ultimaVersion();
+                    js("versionGithub(" + numero(v.getString("tag_name")) + "," + miVersion() + ")");
+                } catch (Exception e) {
+                    js("versionGithub(-1,0," + JSONObject.quote(e.getMessage()) + ")");
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void actualizarApp() {
+            if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+                startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())));
+                js("toast('Activa “Permitir de esta fuente” y vuelve a tocar Actualizar la app')");
+                return;
+            }
+            new Thread(() -> {
+                try {
+                    js("toast('Descargando la app nueva…')");
+                    instalarApk(descargar(urlArchivo(ultimaVersion(), "Cubi.apk")));
+                } catch (Exception e) {
+                    js("toast(" + JSONObject.quote("No pude actualizar la app: " + e.getMessage()) + ")");
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
+        public void actualizarCubi() {
+            new Thread(() -> {
+                try {
+                    js("toast('Descargando el firmware de Cubi…')");
+                    mandarFirmware(descargar(urlArchivo(ultimaVersion(), "cubi.ino.bin")));
+                } catch (Exception e) {
+                    js("otaFin(false," + JSONObject.quote("No pude descargar el firmware: " + e.getMessage()) + ")");
+                }
+            }).start();
         }
     }
 }

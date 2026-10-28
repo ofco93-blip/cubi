@@ -22,6 +22,7 @@ struct C3 { float r, g, b; };
 enum Emo { NEUTRAL, FELIZ, ENOJADO, TRISTE, SORPRESA, ENAMORADO, SUENO, MIEDO, MAREADO, N_EMO };
 enum { CANTA = N_EMO, SIENTE, REPOSO, N_CARAS };  // caras de la música y del reposo (no se piden desde la app)
 enum { NINGUNA, MIRAR, GUINO, BOSTEZO, SALTITO, CABECEO, N_ANIM };  // animaciones al azar en reposo
+enum { NO_ASIS, ESCUCHA, HABLA };  // asistente del celular (Gemini): escuchando a uno o respondiendo
 enum Modo { NORMAL, WHATSAPP, RING, ENLLAMADA };
 enum Estilo { NADA, VOZ, BALADA, TROPICAL, REGGAETON, ELECTRO, ROCK, N_EST };
 struct V { float x, y, z; };
@@ -110,6 +111,7 @@ const Nota S_SUENO[] = { { 90, 60, 700, 2, 70 }, { 0, 0, 300, 0, 0 }, { 70, 50, 
 const Nota S_MIEDO[] = { { 900, 300, 320, 5, 190 }, { 0, 0, 0, 0, 0 } };
 const Nota S_MAREADO[] = { { 500, 900, 200, 5, 160 }, { 900, 500, 200, 5, 160 }, { 500, 900, 200, 5, 160 }, { 0, 0, 0, 0, 0 } };
 const Nota S_BACHE[] = { { 250, 700, 110, 5, 190 }, { 0, 0, 0, 0, 0 } };
+const Nota S_ESCUCHA[] = { { 700, 700, 70, 0, 170 }, { 0, 0, 30, 0, 0 }, { 1050, 1050, 110, 0, 190 }, { 0, 0, 0, 0, 0 } };
 const Nota *SONIDO_EMO[N_EMO] = { nullptr, S_FELIZ, S_ENOJADO, S_TRISTE, S_SORPRESA, S_ENAMORADO, S_SUENO, S_MIEDO, S_MAREADO };
 struct SonNom { const char *n; const Nota *s; };
 const SonNom SONIDOS[] = { { "arranque", S_ARRANQUE }, { "whatsapp", S_WHATSAPP }, { "ring", S_RING }, { "colgar", S_COLGAR }, { "feliz", S_FELIZ },
@@ -312,6 +314,8 @@ uint32_t emoHasta = 0;
 bool emoForzada = false;  // pedida desde la app o tocando: le gana a la música; las del movimiento no
 uint8_t anim = NINGUNA; uint32_t animT0 = 0, animProx = 8000, animPaso = 0;
 float bostezo = 0, abreDer = 1;
+uint8_t asis = NO_ASIS; uint32_t asisHasta = 0, asisT0 = 0;
+void ponerAsistente(uint8_t e, uint32_t ms) { asis = e; asisT0 = millis(); asisHasta = asisT0 + ms; emoHasta = 0; }
 void setEmo(Emo e, uint32_t ms) { if (e != emo) sonar(SONIDO_EMO[e]); emo = e; emoHasta = ms ? millis() + ms : 0; emoForzada = false; }
 
 Modo modo = NORMAL;
@@ -526,7 +530,10 @@ void animar(uint32_t now) {
     uint32_t b = (now - demoT0) / 476; if (b != demoBeat) { demoBeat = b; enGolpe(now); }
   }
   bool musica = est >= BALADA;
-  if (!libre || !musica) voz = false;  // solo canta cuando hay música: si alguien habla, no mueve la boca
+  if (asis && now > asisHasta) asis = NO_ASIS;
+  if (asis) { musica = false; est = NADA; libre = true; despertar(now); }  // el asistente le gana a todo
+  // solo mueve la boca con canciones, o cuando el asistente (Gemini) le está hablando a uno
+  if (!libre || !(musica || asis == HABLA)) voz = false;
   if (musica) despertar(now);
   if (beatCnt != beatVisto) { beatVisto = beatCnt; if (musica) enGolpe(now); }
   if (hiCnt != hiVisto) { hiVisto = hiCnt; if (musica) chispa(now); }
@@ -538,10 +545,11 @@ void animar(uint32_t now) {
   if (modo == RING) { c = SORPRESA; escala = 0.62f; cyBase = 92; tlx = 0; tly = 25; }
   if (modo == ENLLAMADA) { c = FELIZ; escala = 0.62f; cyBase = 92; tlx = 30 + 15 * sinf(now * 0.012f); tly = 22; }
   if (libre && musica) c = voz ? CANTA : (est == ROCK ? ENOJADO : SIENTE);
+  if (asis) c = NEUTRAL;
 
   // reposo: medio dormido, y de vez en cuando una animación al azar
   uint32_t ta = now - animT0;
-  bool reposo = libre && !musica && emo == NEUTRAL && !emoHasta;
+  bool reposo = libre && !musica && !asis && emo == NEUTRAL && !emoHasta;
   if (!reposo || ta > DUR_ANIM[anim]) anim = NINGUNA;
   if (reposo) {
     c = REPOSO;
@@ -551,6 +559,11 @@ void animar(uint32_t now) {
   }
   tgt = PRESET[c];
   bostezo = 0; abreDer = 1;
+  if (asis == ESCUCHA) {  // atento: ojos grandes, cejas arriba, mira hacia uno y suelta un anillo por segundo
+    tgt.eh *= 1.12f; tgt.ceja = 0.7f; tgt.cejaY = 10; tlx = 0; tly = -8;
+    if ((now - asisT0) / 1000 != animPaso) { animPaso = (now - asisT0) / 1000; for (auto &a : anillos) if (!a.t0) { a = { now, cur.c1 }; break; } }
+  }
+  if (asis == HABLA) { tgt.ceja = 0.4f; tgt.cejaY = 4; }
   switch (anim) {
     case MIRAR: if (ta / 650 != animPaso) { animPaso = ta / 650; tlx = random(-55, 56); tly = random(-28, 20); } break;  // mira a todos lados
     case GUINO: if (ta > 300 && ta < 650) abreDer = 0.05f; tgt.boca = 1; break;
@@ -768,7 +781,15 @@ void touchUpdate(uint32_t now) {
   bool t = tpAddr && i2cR(tpAddr, 0x02, &n, 1) && (n & 0x0F) && (n & 0x0F) < 3;
   if (t && !tPrev) { tDown = now; nextDemo = now + 1500; despertar(now); }
   if (t && now > nextDemo) { demoIdx = (demoIdx + 1) % N_EMO; setEmo(Emo(demoIdx), 3000); emoForzada = true; nextDemo = now + 1200; }
+  // toque corto: se ríe. Dos toques seguidos: llama al asistente del celular (Gemini).
+  // El primer toque espera 350 ms para saber si viene el segundo.
+  static uint32_t toque1 = 0;
   if (!t && tPrev && now - tDown < 600) {
+    if (toque1 && now - toque1 < 350) { toque1 = 0; llamarAsistente(); }
+    else toque1 = now;
+  }
+  if (toque1 && now - toque1 >= 350) {
+    toque1 = 0;
     if (modo == RING || modo == WHATSAPP) setModo(NORMAL, 0);
     setEmo(FELIZ, 2000); sonar(S_RISA); bounce = -20;
   }
@@ -835,6 +856,13 @@ String atender(const String &ruta, const Params &p, int &cod) {
     String n = p.get("n");
     for (auto &s : SONIDOS) if (n == s.n) { sonar(s.s); return "ok"; }
     cod = 400; return "sonido desconocido";
+  }
+  if (ruta == "/asistente") {  // el celular avisa en qué va Gemini: escucha, habla o fin
+    String e = p.get("estado");
+    if (e == "escucha") ponerAsistente(ESCUCHA, 15000);
+    else if (e == "habla") ponerAsistente(HABLA, 60000);
+    else ponerAsistente(NO_ASIS, 0);
+    return "ok";
   }
   if (ruta == "/demo") { despertar(millis()); emoHasta = 0; demo(p.get("t") != "baile"); return "ok"; }
   if (ruta == "/brillo") { brillo = constrain(p.get("v").toInt(), 0, 255); panel->setBrightness(brillo); return "ok"; }
@@ -939,6 +967,22 @@ void bleInit() {
   a->setScanResponse(true);
   BLEDevice::startAdvertising();
   Serial.printf("BLE listo: %s  %s\n", NOMBRE_BLE, BLEDevice::getAddress().toString().c_str());
+}
+
+// Aviso que Cubi le manda al celular sin que se lo pidan: "ev|nombre"
+void bleEvento(const char *nombre) {
+  if (!bleOn) return;
+  String m = String("ev|") + nombre + "\n";
+  bleTx->setValue((uint8_t *)m.c_str(), m.length());
+  bleTx->notify();
+}
+
+// Doble toque o "Hola Cubi": cara de escuchar y le pide al celular que abra el asistente
+void llamarAsistente() {
+  despertar(millis());
+  ponerAsistente(ESCUCHA, 15000);
+  sonar(S_ESCUCHA);
+  bleEvento("asistente");
 }
 
 void bleAtender() {

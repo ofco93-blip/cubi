@@ -96,6 +96,12 @@ section[hidden] { display: none; }
 
 <!-- ================= CARA ================= -->
 <section id="tab-cara">
+  <h2>Asistente</h2>
+  <div class="card">
+    <button class="btn main" id="gemini">Hablar con Gemini</button>
+    <p class="note">También con <b>doble toque</b> en la pantalla de Cubi. Mientras Gemini te contesta, Cubi mueve la boca.</p>
+    <button class="btn" id="permisoGemini" hidden>Permitir que Cubi abra Gemini con la pantalla apagada</button>
+  </div>
   <h2>Cara</h2>
   <div class="grid" id="caras"></div>
   <h2>Avisos</h2>
@@ -152,10 +158,13 @@ section[hidden] { display: none; }
     <p class="note" id="bleNota">La app se conecta sola a Cubi por Bluetooth. El celular sigue con su internet.</p>
     <button class="btn main" id="reconectar">Conectar por Bluetooth</button>
   </div>
-  <h2>Actualizar el robot</h2>
+  <h2>Actualizaciones</h2>
   <div class="card">
-    <p class="note">Descarga <b>cubi.ino.bin</b> de la última versión del proyecto y elígelo aquí. Va por Bluetooth: tarda unos minutos y la app queda bloqueada hasta que termine.</p>
-    <button class="btn main" id="subir">Elegir archivo y actualizar</button>
+    <p class="note" id="verNota">Revisando si hay versión nueva…</p>
+    <button class="btn main" id="actApp">Actualizar la app</button>
+    <button class="btn main" id="actCubi">Actualizar a Cubi (firmware)</button>
+    <p class="note">El firmware va por Bluetooth: tarda unos minutos y la app queda bloqueada hasta que termine.</p>
+    <button class="btn" id="subir">Subir un firmware desde un archivo</button>
   </div>
   <p class="note" id="info" style="margin:18px 2px"></p>
 </section>
@@ -224,6 +233,7 @@ function api(path, ms = 3000) {
 }
 const mandar = p => api(p).catch(e => toast(e.message));
 function conectar() { if (window.Android) Android.bleBuscar(); else $('conn').textContent = 'Abre esto desde la app Cubi'; }
+// la app se reabre con Cubi ya conectado: la parte Android avisa el estado al cargar
 $('conn').onclick = () => { if (!vivo) conectar(); };
 $('reconectar').onclick = conectar;
 
@@ -308,8 +318,24 @@ function otaProgreso(hecho, total) {
 function otaFin(ok, msg) {
   actualizando = false;
   $('bloqueo').hidden = true;
+  if (window.Android) Android.otaListo();
   toast(ok ? '¡Listo! ' + msg : msg);
 }
+$('actCubi').onclick = () => {
+  if (!vivo) return toast('Primero conecta a Cubi por Bluetooth');
+  Android.actualizarCubi();
+};
+$('actApp').onclick = () => Android.actualizarApp();
+function versionGithub(ultima, mia, error) {
+  $('verNota').textContent = ultima < 0 ? 'No pude revisar las versiones: ' + error
+    : ultima > mia ? 'Hay una versión nueva (' + ultima + '). Tienes la ' + mia + '.' : 'Tienes la última versión (' + mia + ').';
+}
+
+// ---------- asistente ----------
+$('gemini').onclick = () => { if (window.Android) Android.abrirAsistente(); };
+$('permisoGemini').onclick = () => Android.pedirAbrirSolo();
+function revisarPermisoGemini() { if (window.Android) $('permisoGemini').hidden = Android.puedeAbrirSolo(); }
+document.addEventListener('visibilitychange', () => { if (!document.hidden) revisarPermisoGemini(); });
 function otaCancelada() {}
 
 // ---------- botones de caras y sonidos ----------
@@ -336,6 +362,8 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 
 etiquetas();
 conectar();
+revisarPermisoGemini();
+if (window.Android) Android.buscarVersion();
 setInterval(estado, 2000);
 setInterval(audio, 150);
 </script>
