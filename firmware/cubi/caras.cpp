@@ -666,7 +666,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
           r.boca = fmaxf(r.boca, 0.3f);
           break;
         case R_JAZZ:                                          // "cool" con el saxo: ojos entrecerrados, se mece lento
-          escalar(r, 0.86f, 0.86f); mover(r, -46 + 10 * vaiven, -54 + 6 * g); tapas(r, 0.5f);
+          escalar(r, 0.84f, 0.84f); mover(r, -44 + 8 * vaiven, -30 + 6 * g); tapas(r, 0.35f);
           r.L.incl = r.R.incl = -0.06f * vaiven; r.boca = 0;
           break;
         case R_DJ:                                            // con audífonos: cabecea con el golpe y se alegra
@@ -826,7 +826,7 @@ static void extrasBase(float t, const Entradas &e, bool delante) {
           break;
         case R_JAZZ: {
           if (!delante) break;
-          float bx = ahora.bx + 4, by = ahora.by - 6, ang = -0.42f + 0.08f * vaiven, e2 = 0.62f, c = cosf(ang), sn = sinf(ang);
+          float bx = ahora.bx, by = ahora.by - 4, ang = -0.95f + 0.06f * vaiven, e2 = 0.85f, c = cosf(ang), sn = sinf(ang);
           auto en = [&](float a, float b, float &wx, float &wy) { wx = bx + (a * c - b * sn) * e2; wy = by + (a * sn + b * c) * e2; };
           saxofon(bx, by, ang, e2);
           float hx, hy;
