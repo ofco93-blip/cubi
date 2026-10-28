@@ -1053,6 +1053,12 @@ void setup() {
   else panel = new Arduino_SH8601(bus, -1, 0, 368, 448);
   cv = new Arduino_Canvas(368, 448, panel, 0, 0, rotacion);
   if (!cv->begin()) Serial.println("ERROR pantalla (sin PSRAM? activa OPI PSRAM)");
+  // Borra TODA la memoria del panel: hay una franja fuera de los 368x448 que nunca se dibuja
+  // y mostraba basura (la "línea verde" de abajo)
+  panel->startWrite();
+  panel->writeAddrWindow(0, 0, 480, 480);
+  bus->writeRepeat(0x0000, 480UL * 480UL);
+  panel->endWrite();
   panel->setBrightness(brillo);
   cv->fillScreen(0); cv->flush();
 

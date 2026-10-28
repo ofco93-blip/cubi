@@ -15,24 +15,23 @@ android {
         versionName "2.0." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
     }
 
-    // Llave fija para que las actualizaciones se instalen sin desinstalar. Es una app casera: la clave no es secreta.
+    // Llave fija para que las actualizaciones se instalen sin desinstalar. Vive en los secretos de GitHub
+    // (CUBI_LLAVE / CUBI_CLAVE) y la compilación la escribe en cubi.p12; sin ella se firma con la llave de pruebas.
+    def llave = file('cubi.p12')
     signingConfigs {
         cubi {
-            storeFile file('cubi.p12')
+            storeFile llave
             storeType 'pkcs12'
-            storePassword 'boli-robot'
-            keyAlias 'boli'
-            keyPassword 'boli-robot'
+            storePassword System.getenv('CUBI_CLAVE')
+            keyAlias 'cubi'
+            keyPassword System.getenv('CUBI_CLAVE')
         }
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            signingConfig signingConfigs.cubi
-        }
-        debug {
-            signingConfig signingConfigs.cubi
+            signingConfig llave.exists() ? signingConfigs.cubi : signingConfigs.debug
         }
     }
 
