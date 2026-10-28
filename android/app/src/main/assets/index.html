@@ -152,6 +152,7 @@ section[hidden] { display: none; }
     <label class="sl"><div class="row"><span>Volumen</span><span id="vVol"></span></div><input type="range" id="vol" min="0" max="100"></label>
     <div class="row"><span>Sonidos del robot</span><label class="sw"><input type="checkbox" id="son"><i></i></label></div>
     <button class="btn" id="rot">Girar la pantalla 180°</button>
+    <button class="btn" id="adl">Al frenar se alegra en vez de asustarse: invertir</button>
   </div>
   <h2>Bluetooth</h2>
   <div class="card">
@@ -295,6 +296,7 @@ $('bri').onchange = e => mandar('/brillo?v=' + e.target.value);
 $('vol').onchange = e => mandar('/ajuste?vol=' + e.target.value);
 $('son').onchange = e => mandar('/ajuste?son=' + (e.target.checked ? 1 : 0));
 $('rot').onclick = () => mandar('/ajuste?rot=1');
+$('adl').onclick = () => { mandar('/ajuste?adl=1'); toast('Listo: frenar y arrancar quedaron al revés'); };
 document.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => mandar('/evento?tipo=' + b.dataset.ev));
 document.querySelectorAll('[data-demo]').forEach(b => b.onclick = () => { mandar('/demo?t=' + b.dataset.demo); toast(b.dataset.demo === 'canto' ? 'Cubi está cantando…' : 'Cubi está bailando…'); });
 

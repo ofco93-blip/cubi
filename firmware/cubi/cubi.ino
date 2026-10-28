@@ -269,7 +269,10 @@ void tareaAudio(void *) {
     aBpm = bpm; aReg = reg; aBajo = fB; aMedio = fM; aAgudo = fA;
     uint8_t e = clasificar(bpm, reg, fB, fM, fA);
     if (e == cand) candN++; else { cand = e; candN = 1; }
-    if (candN >= 2) estilo = e;  // debe repetirse 2 veces (4 s) para cambiar
+    // Entrar a la música: 4 s. Cambiar de estilo: 6 s. Salir de la música mientras sigue sonando algo: 10 s
+    // (un verso suave sin golpe no la saca). Con silencio sale a los 3 s (arriba).
+    uint8_t pide = estilo < BALADA ? 2 : e >= BALADA ? 3 : 5;
+    if (candN >= pide) estilo = e;
   }
 }
 
@@ -534,6 +537,13 @@ void animar(uint32_t now) {
   if (asis) { musica = false; est = NADA; libre = true; despertar(now); }  // el asistente le gana a todo
   // solo mueve la boca con canciones, o cuando el asistente (Gemini) le está hablando a uno
   if (!libre || !(musica || asis == HABLA)) voz = false;
+  if (asis == HABLA && !voz) {  // si el micrófono no alcanza a oír a Gemini, habla igual (sílabas inventadas)
+    float t = (now - asisT0) / 1000.f;
+    voz = true; bIn = constrain((0.5f * sinf(t * 9.3f) + 0.3f * sinf(t * 3.7f) + 0.3f) * ganBoca / GANANCIA_BOCA, 0.f, 1.f); aIn = 0.5f + 0.4f * sinf(t * 1.7f);
+  }
+  static uint32_t cantaHasta = 0;  // la cara de cantar aguanta 1,5 s entre frases: no salta canta/baila a cada respiro
+  if (voz) cantaHasta = now + 1500;
+  bool canta = voz || now < cantaHasta;
   if (musica) despertar(now);
   if (beatCnt != beatVisto) { beatVisto = beatCnt; if (musica) enGolpe(now); }
   if (hiCnt != hiVisto) { hiVisto = hiCnt; if (musica) chispa(now); }
@@ -544,8 +554,8 @@ void animar(uint32_t now) {
   if (modo == WHATSAPP) { c = FELIZ; tlx = 40; tly = -25; }
   if (modo == RING) { c = SORPRESA; escala = 0.62f; cyBase = 92; tlx = 0; tly = 25; }
   if (modo == ENLLAMADA) { c = FELIZ; escala = 0.62f; cyBase = 92; tlx = 30 + 15 * sinf(now * 0.012f); tly = 22; }
-  if (libre && musica) c = voz ? CANTA : (est == ROCK ? ENOJADO : SIENTE);
-  if (asis) c = NEUTRAL;
+  if (libre && musica) c = canta ? CANTA : (est == ROCK ? ENOJADO : SIENTE);
+  if (asis) c = asis == HABLA ? CANTA : SORPRESA;
 
   // reposo: medio dormido, y de vez en cuando una animación al azar
   uint32_t ta = now - animT0;
@@ -559,11 +569,16 @@ void animar(uint32_t now) {
   }
   tgt = PRESET[c];
   bostezo = 0; abreDer = 1;
-  if (asis == ESCUCHA) {  // atento: ojos grandes, cejas arriba, mira hacia uno y suelta un anillo por segundo
-    tgt.eh *= 1.12f; tgt.ceja = 0.7f; tgt.cejaY = 10; tlx = 0; tly = -8;
-    if ((now - asisT0) / 1000 != animPaso) { animPaso = (now - asisT0) / 1000; for (auto &a : anillos) if (!a.t0) { a = { now, cur.c1 }; break; } }
+  // Gemini: colores de Gemini (azul a violeta) para que se note de lejos
+  if (asis) { tgt.c1 = hx(0x8AB4F8); tgt.c2 = hx(0xA142F4); }
+  if (asis == ESCUCHA) {  // "parando la oreja": ojos grandes, cabeza ladeada, asiente "ajá" y suelta un anillo por segundo
+    float t = (now - asisT0) * 0.001f;
+    tgt.eh *= 1.1f; tgt.boca = 0; tgt.cejaY = 10; tgt.ang = 0.18f;
+    tlx = 26; tly = -14 + 6 * sinf(t * 5.2f);
+    uint32_t paso = (now - asisT0) / 1000;
+    if (paso != animPaso) { animPaso = paso; sqy = 1.08f; sqx = 0.95f; for (auto &a : anillos) if (!a.t0) { a = { now, tgt.c1 }; break; } }
   }
-  if (asis == HABLA) { tgt.ceja = 0.4f; tgt.cejaY = 4; }
+  if (asis == HABLA) { tgt.arco = 0.25f; tgt.cejaY = 4 + 8 * bocaV; tlx = 0; tly = -6; }
   switch (anim) {
     case MIRAR: if (ta / 650 != animPaso) { animPaso = ta / 650; tlx = random(-55, 56); tly = random(-28, 20); } break;  // mira a todos lados
     case GUINO: if (ta > 300 && ta < 650) abreDer = 0.05f; tgt.boca = 1; break;
@@ -581,7 +596,7 @@ void animar(uint32_t now) {
     if (est == ELECTRO) { tgt.c1 = hsv(tono); tgt.c2 = hsv(tono + 0.35f); }
     if (est == ROCK) { tgt.arco = 0; tgt.boca = 0; }  // cabeceo con cejas de rockero
   }
-  if (c == CANTA) {  // canta con sentimiento: si sostiene una nota fuerte, cierra los ojos y sube las cejas
+  if (c == CANTA && !asis) {  // canta con sentimiento: si sostiene una nota fuerte, cierra los ojos y sube las cejas
     if (bocaV > 0.65f) { if (!fuerteDesde) fuerteDesde = now; } else fuerteDesde = 0;
     if (fuerteDesde && now - fuerteDesde > 350) { tgt.arco = 0.85f; tgt.cejaY = 16; tgt.cejaAng = -0.5f; }
   }
@@ -604,8 +619,9 @@ void animar(uint32_t now) {
   sqx += (1 - sqx) * 0.16f; sqy += (1 - sqy) * 0.16f;
   if (c == MAREADO) giro += 9;
 
-  if (modo == NORMAL) {
-    if (est == BALADA) { tlx = 25 * sinf(now * 0.0015f); tly = 0; }
+  if (modo == NORMAL && !asis) {
+    if (musica && fabsf(curvaLook) > 15) { tlx = curvaLook; tly = 0; }  // en curva mira hacia la curva, aun bailando
+    else if (est == BALADA) { tlx = 25 * sinf(now * 0.0015f); tly = 0; }
     else if (est >= TROPICAL) tly = 0;  // el baile mueve la mirada en enGolpe()
     else if (fabsf(curvaLook) > 8) { tlx = curvaLook; tly = 0; }
     else if (anim != MIRAR && now > nextSacc) {
@@ -713,6 +729,7 @@ void dibujar(uint32_t now) {
 // ---------- IMU QMI8658 ----------
 V acc{ 0, 0, 1 }, gyr{ 0, 0, 0 }, gLP{ 0, 0, 1 };
 float lon = 0, vert = 0, yaw = 0;
+int8_t adelante = ADELANTE_SIGNO;  // se invierte desde la app si al frenar se pone feliz
 uint32_t cdEvento = 0, mareoDesde = 0, lastImu = 0;
 float dot(V a, V b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 
@@ -745,16 +762,16 @@ void imuUpdate(uint32_t now) {
   if (now - lastImu < 10 || !imuLeer()) return;
   lastImu = now;
   float gmag = sqrtf(dot(gyr, gyr));
-  // ponytail: gravedad por filtro lento; en aceleraciones largas (>3 s) se "come" la señal. Fusión completa si hace falta.
-  if (gmag < 20) { gLP.x += (acc.x - gLP.x) * 0.01f; gLP.y += (acc.y - gLP.y) * 0.01f; gLP.z += (acc.z - gLP.z) * 0.01f; }
+  // ponytail: gravedad por filtro lento (~8 s); en aceleraciones muy largas se "come" la señal. Fusión completa si hace falta.
+  if (gmag < 20) { gLP.x += (acc.x - gLP.x) * 0.0012f; gLP.y += (acc.y - gLP.y) * 0.0012f; gLP.z += (acc.z - gLP.z) * 0.0012f; }
   float gn = sqrtf(dot(gLP, gLP)); V g{ gLP.x / gn, gLP.y / gn, gLP.z / gn };
   V d{ acc.x - gLP.x, acc.y - gLP.y, acc.z - gLP.z };
   float v = dot(d, g);
   V hz{ d.x - v * g.x, d.y - v * g.y, d.z - v * g.z };
   V f{ -g.z * g.x, -g.z * g.y, 1 - g.z * g.z };
   float fn = sqrtf(dot(f, f));
-  float l = fn > 0.3f ? dot(hz, f) / fn * ADELANTE_SIGNO : 0;
-  lon += (l - lon) * 0.3f;
+  float l = fn > 0.3f ? dot(hz, f) / fn * adelante : 0;
+  lon += (l - lon) * 0.1f;
   vert = v;
   yaw = dot(gyr, g) * GIRO_SIGNO;
   curvaLook = constrain(-yaw * 1.5f, -60.f, 60.f);
@@ -762,13 +779,22 @@ void imuUpdate(uint32_t now) {
   if (sqrtf(dot(d, d)) > 0.06f || gmag > 6) despertar(now);
   if (emoBase != SUENO && now - lastMotion > MINUTOS_SUENO * 60000UL && modo == NORMAL) { emoBase = SUENO; setEmo(SUENO, 0); }
 
-  if (modo == NORMAL && now > cdEvento) {
-    if (lon < -UMBRAL_FRENO) { setEmo(MIEDO, 1500); cdEvento = now + 2000; }
-    else if (lon > UMBRAL_ACEL) { setEmo(FELIZ, 1500); cdEvento = now + 2000; }
-    else if (fabsf(vert) > UMBRAL_BACHE) { setEmo(SORPRESA, 700); sonar(S_BACHE); bounce = -30; cdEvento = now + 1000; }
+  // Frenón y arranque: deben durar 0,3 s (un hueco no cuenta) y le ganan a la música un ratico.
+  static uint32_t frenaDesde = 0, aceleraDesde = 0;
+  frenaDesde = lon < -UMBRAL_FRENO ? (frenaDesde ? frenaDesde : now) : 0;
+  aceleraDesde = lon > UMBRAL_ACEL ? (aceleraDesde ? aceleraDesde : now) : 0;
+  if (modo == NORMAL && !asis && now > cdEvento) {
+    if (frenaDesde && now - frenaDesde > 300) { setEmo(MIEDO, 1800); emoForzada = true; bounce = 18; cdEvento = now + 4000; }
+    else if (aceleraDesde && now - aceleraDesde > 300) { setEmo(FELIZ, 1500); emoForzada = true; cdEvento = now + 4000; }
+    else if (fabsf(vert) > UMBRAL_BACHE) {  // hueco: brinca siempre; la cara y el sonido solo si no hay música
+      bounce = -30; cdEvento = now + 1500;
+      if (estilo < BALADA) { setEmo(SORPRESA, 700); sonar(S_BACHE); }
+    }
   }
-  if (fabsf(yaw) > GIRO_MAREO) { if (!mareoDesde) mareoDesde = now; if (now - mareoDesde > 1000 && modo == NORMAL) setEmo(MAREADO, 2500); }
-  else mareoDesde = 0;
+  if (fabsf(yaw) > GIRO_MAREO) {
+    if (!mareoDesde) mareoDesde = now;
+    if (now - mareoDesde > 1000 && modo == NORMAL && !asis && emo != MAREADO) { setEmo(MAREADO, 2500); emoForzada = true; }
+  } else mareoDesde = 0;
 #if DEBUG_IMU
   static uint32_t dbg; if (now - dbg > 300) { dbg = now; Serial.printf("lon=%.2f vert=%.2f giro=%.0f\n", lon, vert, yaw); }
 #endif
@@ -828,7 +854,7 @@ void energiaUpdate(uint32_t now) {
 
 void guardar() {
   prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn);
-  prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan);
+  prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan); prefs.putChar("adl", adelante);
 }
 
 // ---------- Órdenes de la app: "ruta?clave=valor&..." -> texto o JSON ----------
@@ -870,6 +896,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     if (p.has("vol")) { volumen = constrain(p.get("vol").toInt(), 0, 100); if (es) es8311_voice_volume_set(es, volumen, NULL); sonar(S_WHATSAPP); }
     if (p.has("son")) sonidoOn = p.get("son") == "1";
     if (p.has("mus")) musicaOn = p.get("mus") == "1";
+    if (p.has("adl")) adelante = -adelante;  // al frenar se pone feliz: se invierte
     if (p.has("rot")) { rotacion = rotacion == 3 ? 1 : 3; cv->setRotation(rotacion); }
     if (p.has("uv")) umbralVoz = constrain(p.get("uv").toFloat(), 0.05f, 0.95f);
     if (p.has("gb")) ganBoca = constrain(p.get("gb").toFloat(), 0.3f, 3.f);
@@ -883,7 +910,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
       ",\"estilo\":\"" + EST_NOM[estilo] + "\",\"bpm\":" + int(aBpm) + ",\"bat\":" + bat + ",\"usb\":" + (pmuOk && pmu.isVbusIn() ? 1 : 0) +
       ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn +
       ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
-      ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + "}";
+      ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + "}";
   }
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
     char b[300];
@@ -1037,7 +1064,7 @@ void setup() {
   rotacion = prefs.getUChar("rot", ROTACION_INICIAL); volumen = prefs.getUChar("vol", VOLUMEN_INICIAL);
   sonidoOn = prefs.getBool("son", true); musicaOn = prefs.getBool("mus", true);
   umbralVoz = prefs.getFloat("uv", UMBRAL_VOZ); ganBoca = prefs.getFloat("gb", GANANCIA_BOCA);
-  sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC);
+  sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO);
 
   // Reset de pantalla y táctil por el expansor TCA9554 (pines 0..2), misma secuencia que el firmware de fábrica V2.
   // Con pulsos cortos (20 ms) el panel puede quedar trabado tras regrabar: ver github.com/waveshareteam/ESP32-S3-Touch-AMOLED-1.8/issues/12

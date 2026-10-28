@@ -99,6 +99,7 @@ public class CubiService extends Service {
                 .build();
         if (Build.VERSION.SDK_INT >= 29) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
         else startForeground(1, n);
+        escucharAsistente();
     }
 
     @Override
@@ -298,7 +299,6 @@ public class CubiService extends Service {
 
     private long asisDesde;
     private String asisEstado = "";
-    private long ultimoActivo;
 
     // Abre el asistente del celular (Gemini), como "Hey Google". Con la pantalla apagada necesita el permiso
     // "Mostrar sobre otras apps". En Samsung el comando de voz genérico abre Bixby: primero se le pide a Google.
@@ -318,10 +318,8 @@ public class CubiService extends Service {
             try {
                 startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
                 asisDesde = System.currentTimeMillis();
-                asisEstado = "";
-                ultimoActivo = asisDesde;
-                enviar("asis|/asistente?estado=escucha");
-                ui.postDelayed(this::seguirAsistente, 400);
+                asisEstado = "escucha";  // Cubi ya puso la cara de escuchar al recibir el doble toque
+                revisarAsistente();
                 return;
             } catch (Exception ignored) {
             }
@@ -330,31 +328,61 @@ public class CubiService extends Service {
         js("toast('No pude abrir Gemini: dale a la app el permiso “Mostrar sobre otras apps”')");
     }
 
-    // Mira qué audio hay en el celular (sin escuchar su contenido): si Gemini graba → escucha; si suena → habla.
-    private void seguirAsistente() {
-        long ahora = System.currentTimeMillis();
-        if (ahora - asisDesde > 90000) { ponerAsis("fin"); return; }
+    // Imitar al asistente (lo que Lumi hacía bien): Android cuenta qué TIPO de audio suena y si alguien usa el
+    // micrófono (nunca el contenido). Se mira siempre, no solo tras el doble toque: también "Ok Google" o el botón.
+    //  - Suena "asistente" o "navegación" más de 1,2 s → habla. Un timbre corto con ese tipo no cuenta.
+    //  - En los 2 min tras abrir Gemini desde Cubi, la voz "tipo llamada" (Gemini Live) también es hablar.
+    //  - Alguien graba → escucha. En el carro graba el micrófono del carro (el celular no): ahí el pitido corto
+    //    del asistente cuenta como "te escucho" por 8 s o hasta que hable.
+    private long hablaDesde, pitidoHasta, ultimoEnvio;
+    private boolean pitido;
+    private final Runnable revisar = this::revisarAsistente;
+
+    private final AudioManager.AudioRecordingCallback oyeMic = new AudioManager.AudioRecordingCallback() {
+        @Override public void onRecordingConfigChanged(java.util.List<android.media.AudioRecordingConfiguration> c) { revisarAsistente(); }
+    };
+
+    void escucharAsistente() {
         AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
-        boolean graba = !am.getActiveRecordingConfigurations().isEmpty();
-        boolean habla = false;
-        for (AudioPlaybackConfiguration c : am.getActivePlaybackConfigurations()) {
-            int u = c.getAudioAttributes().getUsage();
-            if (u == AudioAttributes.USAGE_ASSISTANT || u == AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE
-                    || u == AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY) habla = true;
-        }
-        if (habla) ponerAsis("habla");
-        else if (graba) ponerAsis("escucha");
-        if (habla || graba) ultimoActivo = ahora;
-        // terminó: 4 s sin que Gemini grabe ni hable (o 12 s si nunca arrancó)
-        if (ahora - ultimoActivo > (asisEstado.isEmpty() ? 12000 : 4000)) { ponerAsis("fin"); return; }
-        ui.postDelayed(this::seguirAsistente, 300);
+        am.registerAudioRecordingCallback(oyeMic, ui);
+        if (Build.VERSION.SDK_INT >= 26) am.registerAudioPlaybackCallback(new AudioManager.AudioPlaybackCallback() {
+            @Override public void onPlaybackConfigChanged(java.util.List<AudioPlaybackConfiguration> c) { revisarAsistente(); }
+        }, ui);
     }
 
-    private void ponerAsis(String e) {
-        if (e.equals(asisEstado)) return;
-        asisEstado = e;
-        enviar("asis|/asistente?estado=" + e);
-        if (e.equals("fin")) asisDesde = 0;
+    private void revisarAsistente() {
+        ui.removeCallbacks(revisar);
+        AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+        long ahora = System.currentTimeMillis();
+        boolean ventana = ahora - asisDesde < 120000;
+        boolean graba = !am.getActiveRecordingConfigurations().isEmpty() && am.getMode() != AudioManager.MODE_IN_CALL;
+        boolean suenaAsis = false, suenaNav = false, suenaVoz = false;
+        if (Build.VERSION.SDK_INT >= 26) for (AudioPlaybackConfiguration c : am.getActivePlaybackConfigurations()) {
+            int u = c.getAudioAttributes().getUsage();
+            if (u == AudioAttributes.USAGE_ASSISTANT) suenaAsis = true;
+            else if (u == AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE) suenaNav = true;
+            else if (u == AudioAttributes.USAGE_VOICE_COMMUNICATION || u == AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY) suenaVoz = true;
+        }
+        // la voz "tipo llamada" solo es Gemini hablando si nadie graba: si graban, manda la oreja
+        boolean hablaOtro = suenaAsis || suenaNav || (ventana && !graba && suenaVoz);
+        if (hablaOtro && hablaDesde == 0) { hablaDesde = ahora; pitido = suenaAsis; }
+        if (!hablaOtro && hablaDesde != 0) {
+            if (ahora - hablaDesde < 1200 && pitido && !asisEstado.equals("habla")) pitidoHasta = ahora + 8000;
+            hablaDesde = 0;
+        }
+        boolean habla = hablaOtro && (ventana || asisEstado.equals("habla") || ahora - hablaDesde >= 1200);
+        if (habla) pitidoHasta = 0;
+        boolean oye = !hablaOtro && (graba || ahora < pitidoHasta);
+        String nuevo = habla ? "habla" : oye ? "escucha" : "";
+        if (nuevo.isEmpty() && ahora - asisDesde < 6000) nuevo = "escucha";  // Gemini tarda en abrir el micrófono
+        if (!nuevo.equals(asisEstado) || (!nuevo.isEmpty() && ahora - ultimoEnvio > 5000)) {  // se repite: en Cubi el estado caduca
+            boolean fin = nuevo.isEmpty();
+            if (!(fin && asisEstado.isEmpty())) enviar("asis|/asistente?estado=" + (fin ? "fin" : nuevo));
+            asisEstado = nuevo;
+            ultimoEnvio = ahora;
+        }
+        // los callbacks no avisan cuando pasa el tiempo: mientras algo esté en juego se vuelve a mirar
+        if (!asisEstado.isEmpty() || hablaDesde != 0 || ahora < pitidoHasta || ventana) ui.postDelayed(revisar, 400);
     }
 
     // ---------- actualización por Bluetooth ----------
