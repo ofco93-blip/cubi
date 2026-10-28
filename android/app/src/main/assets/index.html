@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Cubi</title>
+<style>
+:root {
+  --bg: #0d0f12; --panel: #161a1f; --panel2: #1e242b; --line: #2a323b;
+  --ink: #e9eef2; --muted: #8d99a6; --accent: #3cd6e8; --accent-ink: #041417;
+  --sing: #ff6fa3; --music: #ffc43d; --ok: #5be38a; --bad: #ff6b5b;
+  --r: 16px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; }
+body { padding: 0 16px calc(84px + env(safe-area-inset-bottom)); }
+h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 26px 2px 10px; font-weight: 600; }
+button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+input, select { font: inherit; }
+
+/* cabecera */
+.top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 14px 0 10px; display: flex; align-items: center; gap: 12px; }
+.logo { width: 42px; height: 42px; border-radius: 50%; background: #000; display: grid; place-items: center; flex: none; }
+.logo i { display: inline-block; width: 8px; height: 14px; border-radius: 4px; background: var(--accent); margin: 0 2.5px; }
+.top .t { flex: 1; min-width: 0; }
+.top b { display: block; font-size: 18px; }
+.top small { color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); flex: none; }
+.dot.on { background: var(--ok); }
+
+/* tarjetas y controles */
+.card { background: var(--panel); border-radius: var(--r); padding: 16px; display: grid; gap: 14px; }
+.row { display: flex; align-items: center; gap: 12px; }
+.row > span:first-child { flex: 1; }
+.btn { background: var(--panel2); border-radius: 12px; padding: 12px 14px; font-weight: 600; }
+.btn.main { background: var(--accent); color: var(--accent-ink); }
+.btn:active { transform: scale(.97); }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+label.sl { display: grid; gap: 6px; }
+label.sl .row span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 14px; }
+input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
+input[type=text], input[type=password] { width: 100%; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); border-radius: 12px; padding: 12px; }
+.sw { position: relative; width: 50px; height: 30px; flex: none; }
+.sw input { opacity: 0; width: 0; height: 0; position: absolute; }
+.sw i { position: absolute; inset: 0; background: var(--line); border-radius: 15px; transition: .2s; }
+.sw i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: .2s; }
+.sw input:checked + i { background: var(--accent); }
+.sw input:checked + i::after { left: 23px; }
+.note { color: var(--muted); font-size: 14px; }
+
+/* caras */
+.face { background: var(--panel2); border-radius: 14px; padding: 14px 6px 10px; display: grid; justify-items: center; gap: 8px; font-size: 13px; }
+.face .eyes { display: flex; gap: 9px; height: 26px; align-items: center; }
+.face .eyes i { width: 13px; height: 22px; border-radius: 7px; background: var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 50%, transparent); }
+.face.sel { outline: 2px solid var(--accent); }
+
+/* música en vivo */
+.live { display: grid; gap: 14px; }
+.state { display: flex; align-items: center; gap: 12px; }
+.chip { padding: 6px 12px; border-radius: 999px; font-weight: 700; font-size: 14px; background: var(--panel2); color: var(--muted); }
+.chip.s1 { background: #17323a; color: var(--accent); }
+.chip.s2 { background: #3a3012; color: var(--music); }
+.chip.s3 { background: #3a1626; color: var(--sing); }
+.bpm { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
+.meter { display: grid; gap: 6px; font-size: 14px; }
+.meter .bar { position: relative; height: 12px; background: var(--panel2); border-radius: 6px; overflow: hidden; }
+.meter .bar b { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 6px; background: var(--accent); transition: width .12s linear; }
+.meter .bar u { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #fff; }
+.mouth { display: grid; place-items: center; height: 92px; }
+.mouth div { width: 60px; height: 8px; border-radius: 50%; border: 5px solid var(--sing); background: #2a0614; transition: height .08s linear, width .12s; }
+
+/* pestañas */
+nav { position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: #0f1216; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); z-index: 6; }
+nav button { flex: 1; padding: 12px 0 14px; display: grid; justify-items: center; gap: 4px; font-size: 12px; color: var(--muted); background: none; }
+nav button svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+nav button.on { color: var(--accent); }
+section[hidden] { display: none; }
+.toast { position: fixed; left: 16px; right: 16px; bottom: calc(92px + env(safe-area-inset-bottom)); background: var(--panel2); border: 1px solid var(--line); padding: 12px 14px; border-radius: 12px; opacity: 0; transform: translateY(8px); transition: .25s; pointer-events: none; z-index: 7; }
+.toast.on { opacity: 1; transform: none; }
+progress { width: 100%; accent-color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="logo"><i></i><i></i></div>
+  <div class="t"><b>Cubi</b><small><span class="dot" id="dot"></span><span id="conn">Buscando al robot…</span></small></div>
+</div>
+
+<!-- ================= CARA ================= -->
+<section id="tab-cara">
+  <h2>Cara</h2>
+  <div class="grid" id="caras"></div>
+  <h2>Avisos</h2>
+  <div class="grid2">
+    <button class="btn" data-ev="whatsapp">WhatsApp</button>
+    <button class="btn" data-ev="llamada">Llamada</button>
+    <button class="btn" data-ev="encurso">En llamada</button>
+    <button class="btn" data-ev="colgar">Colgar</button>
+  </div>
+  <h2>Sonidos</h2>
+  <div class="grid" id="sonidos"></div>
+</section>
+
+<!-- ================= MÚSICA ================= -->
+<section id="tab-musica" hidden>
+  <h2>En vivo</h2>
+  <div class="card live">
+    <div class="state"><span class="chip" id="chip">Silencio</span><span class="bpm" id="bpm"></span></div>
+    <div class="mouth"><div id="mouth"></div></div>
+    <div class="meter"><div class="row"><span>Volumen que escucha</span></div><div class="bar"><b id="mNivel"></b></div></div>
+    <div class="meter"><div class="row"><span>Parecido a voz</span><span class="note">la línea es desde dónde canta</span></div><div class="bar"><b id="mVoz" style="background:var(--sing)"></b><u id="mUmbral"></u></div></div>
+  </div>
+  <h2>Probar sin música</h2>
+  <div class="grid2">
+    <button class="btn main" data-demo="canto">Que cante</button>
+    <button class="btn" data-demo="baile">Que baile</button>
+  </div>
+  <h2>Ajustar el canto</h2>
+  <div class="card">
+    <div class="row"><span>Reaccionar a la música</span><label class="sw"><input type="checkbox" id="mus"><i></i></label></div>
+    <label class="sl"><div class="row"><span>Empieza a cantar con</span><span id="vUv"></span></div>
+      <input type="range" id="uv" min="5" max="95" step="1"></label>
+    <label class="sl"><div class="row"><span>Qué tanto abre la boca</span><span id="vGb"></span></div>
+      <input type="range" id="gb" min="30" max="300" step="5"></label>
+    <label class="sl"><div class="row"><span>Sensibilidad a la música</span><span id="vSk"></span></div>
+      <input type="range" id="sk" min="0" max="100" step="1"></label>
+    <label class="sl"><div class="row"><span>Micrófono</span><span id="vMg"></span></div>
+      <input type="range" id="mg" min="0" max="7" step="1"></label>
+    <p class="note">Pon una canción con voz cerca del robot. Si mueve la boca cuando solo suenan instrumentos, sube "Empieza a cantar con". Si no canta nunca, bájalo.</p>
+  </div>
+</section>
+
+<!-- ================= AJUSTES ================= -->
+<section id="tab-ajustes" hidden>
+  <h2>Pantalla y sonido</h2>
+  <div class="card">
+    <label class="sl"><div class="row"><span>Brillo</span><span id="vBri"></span></div><input type="range" id="bri" min="10" max="255"></label>
+    <label class="sl"><div class="row"><span>Volumen</span><span id="vVol"></span></div><input type="range" id="vol" min="0" max="100"></label>
+    <div class="row"><span>Sonidos del robot</span><label class="sw"><input type="checkbox" id="son"><i></i></label></div>
+    <button class="btn" id="rot">Girar la pantalla 180°</button>
+  </div>
+  <h2>WiFi de la casa</h2>
+  <div class="card">
+    <p class="note" id="redActual">El robot siempre crea su propia red “Cubi”. Además se puede conectar a la WiFi de la casa.</p>
+    <input type="text" id="ssid" placeholder="Nombre de la red" autocomplete="off" autocapitalize="off">
+    <input type="password" id="pass" placeholder="Clave">
+    <button class="btn main" id="guardarWifi">Guardar en el robot</button>
+  </div>
+  <h2>Conexión</h2>
+  <div class="card">
+    <input type="text" id="dir" placeholder="192.168.4.1" inputmode="decimal" autocapitalize="off">
+    <div class="grid2"><button class="btn" id="conectar">Conectar</button><button class="btn" id="buscar">Buscar en la WiFi</button></div>
+    <p class="note">Conectado a “Cubi” (clave 12345678) la dirección es 192.168.4.1. En la WiFi de la casa usa “Buscar”.</p>
+  </div>
+  <h2>Actualizar el robot</h2>
+  <div class="card">
+    <p class="note">Elige el archivo <b>cubi.ino.bin</b> que viene en cada versión del proyecto.</p>
+    <input type="file" id="bin" accept=".bin">
+    <progress id="prog" max="100" value="0" hidden></progress>
+    <button class="btn main" id="subir">Subir al robot</button>
+  </div>
+  <p class="note" id="info" style="margin:18px 2px"></p>
+</section>
+
+<nav>
+  <button data-tab="cara" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 10v1M15 10v1M8.5 15c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8"/></svg>Cara</button>
+  <button data-tab="musica"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Música</button>
+  <button data-tab="ajustes"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Ajustes</button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const CARAS = [
+  ['neutral', 'Normal', '#7CF7FF'], ['feliz', 'Feliz', '#FFE66B'], ['enojado', 'Enojado', '#FF6A3D'],
+  ['triste', 'Triste', '#9CC9FF'], ['sorpresa', 'Sorpresa', '#FFFFFF'], ['enamorado', 'Enamorado', '#FF8FCF'],
+  ['sueno', 'Sueño', '#C3B5FF'], ['miedo', 'Miedo', '#EDEBFF'], ['mareado', 'Mareado', '#C6FF6B'],
+];
+const SONIDOS = [['risa', 'Risa'], ['feliz', 'Feliz'], ['sorpresa', 'Sorpresa'], ['enojado', 'Enojado'], ['triste', 'Triste'],
+  ['enamorado', 'Amor'], ['mareado', 'Mareado'], ['sueno', 'Sueño'], ['arranque', 'Arranque']];
+const ESTADOS = ['Silencio', 'Hablando', 'Sintiendo la música', 'Cantando'];
+
+let base = '';
+try { base = localStorage.getItem('robot') || ''; } catch (e) {}
+let vivo = false, tab = 'cara', ini = true;
+
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove('on'), 2600); }
+
+async function api(path, ms = 2500, url = base) {
+  const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
+  try {
+    const r = await fetch(url + path, { signal: c.signal });
+    if (!r.ok) throw new Error(await r.text());
+    return (r.headers.get('content-type') || '').includes('json') ? r.json() : r.text();
+  } finally { clearTimeout(t); }
+}
+const mandar = p => api(p).catch(() => toast('No pude hablar con el robot'));
+
+function usar(url) {
+  base = url.replace(/\/$/, '');
+  try { localStorage.setItem('robot', base); } catch (e) {}
+}
+
+// ---------- buscar al robot ----------
+async function probar(url, ms) { try { const j = await api('/estado', ms, url); return j && j.ver ? url : null; } catch (e) { return null; } }
+async function buscar(conRed) {
+  $('conn').textContent = 'Buscando al robot…';
+  const cand = [base, 'http://192.168.4.1', 'http://cubi.local'].filter(Boolean);
+  for (const u of cand) if (await probar(u, 1500)) { usar(u); return true; }
+  const sub = conRed && window.Android ? Android.subred() : '';
+  if (!sub) return false;
+  for (let i = 1; i < 255; i += 32) {
+    const lote = [];
+    for (let k = i; k < Math.min(i + 32, 255); k++) lote.push(probar('http://' + sub + k, 1200));
+    const ok = (await Promise.all(lote)).find(Boolean);
+    if (ok) { usar(ok); return true; }
+  }
+  return false;
+}
+
+// ---------- estado ----------
+function pintarEstado(j) {
+  vivo = true;
+  $('dot').classList.add('on');
+  $('conn').textContent = base.replace('http://', '') + (j.bat >= 0 ? ' · batería ' + j.bat + '%' : '');
+  document.querySelectorAll('.face').forEach(b => b.classList.toggle('sel', b.dataset.n === j.emo));
+  $('info').textContent = 'Cubi v' + j.ver + (j.ip ? ' · en la WiFi ' + j.red + ' como ' + j.ip : '');
+  $('redActual').textContent = j.red ? 'Conectado a la WiFi “' + j.red + '” (' + j.ip + ').' : 'El robot no está en la WiFi de la casa. Siempre crea su propia red “Cubi”.';
+  if (ini) {
+    ini = false;
+    $('bri').value = j.bri; $('vol').value = j.vol; $('son').checked = !!j.son; $('mus').checked = !!j.mus;
+    $('uv').value = Math.round(j.uv * 100); $('gb').value = Math.round(j.gb * 100);
+    $('sk').value = Math.round((8 - j.sk) / 6.7 * 100); $('mg').value = j.mg;
+    etiquetas();
+  }
+}
+async function estado() {
+  if (!base) return;
+  try { pintarEstado(await api('/estado')); }
+  catch (e) { vivo = false; $('dot').classList.remove('on'); $('conn').textContent = 'Sin conexión · toca Ajustes › Buscar'; }
+}
+
+// ---------- música en vivo ----------
+async function audio() {
+  if (tab !== 'musica' || !vivo) return;
+  try {
+    const a = await api('/audio', 1000);
+    const chip = $('chip');
+    chip.textContent = ESTADOS[a.estado] || 'Silencio';
+    chip.className = 'chip s' + a.estado;
+    $('bpm').textContent = a.bpm > 0 && a.estado >= 2 ? Math.round(a.bpm) + ' bpm · ' + a.estilo : '';
+    $('mNivel').style.width = (a.nivel * 100) + '%';
+    $('mVoz').style.width = (a.voz * 100) + '%';
+    const m = $('mouth');
+    m.style.height = (8 + a.boca * 70) + 'px';
+    m.style.width = (44 + a.ancho * 40) + 'px';
+  } catch (e) {}
+}
+
+// ---------- ajustes ----------
+function etiquetas() {
+  $('vUv').textContent = $('uv').value + '%';
+  $('mUmbral').style.left = $('uv').value + '%';
+  $('vGb').textContent = ($('gb').value / 100).toFixed(1) + '×';
+  $('vSk').textContent = $('sk').value + '%';
+  $('vMg').textContent = $('mg').value + ' de 7';
+  $('vBri').textContent = Math.round($('bri').value / 2.55) + '%';
+  $('vVol').textContent = $('vol').value + '%';
+}
+document.querySelectorAll('input[type=range]').forEach(r => r.addEventListener('input', etiquetas));
+$('uv').onchange = e => mandar('/ajuste?uv=' + (e.target.value / 100));
+$('gb').onchange = e => mandar('/ajuste?gb=' + (e.target.value / 100));
+$('sk').onchange = e => mandar('/ajuste?sk=' + (8 - e.target.value / 100 * 6.7).toFixed(2));
+$('mg').onchange = e => mandar('/ajuste?mg=' + e.target.value);
+$('mus').onchange = e => mandar('/ajuste?mus=' + (e.target.checked ? 1 : 0));
+$('bri').onchange = e => mandar('/brillo?v=' + e.target.value);
+$('vol').onchange = e => mandar('/ajuste?vol=' + e.target.value);
+$('son').onchange = e => mandar('/ajuste?son=' + (e.target.checked ? 1 : 0));
+$('rot').onclick = () => mandar('/ajuste?rot=1');
+document.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => mandar('/evento?tipo=' + b.dataset.ev));
+document.querySelectorAll('[data-demo]').forEach(b => b.onclick = () => { mandar('/demo?t=' + b.dataset.demo); toast(b.dataset.demo === 'canto' ? 'Cubi está cantando…' : 'Cubi está bailando…'); });
+
+$('guardarWifi').onclick = async () => {
+  const s = $('ssid').value.trim();
+  if (!s) return toast('Escribe el nombre de la red');
+  try {
+    await api('/wifi?ssid=' + encodeURIComponent(s) + '&pass=' + encodeURIComponent($('pass').value));
+    $('pass').value = '';
+    toast('Guardado. El robot se está conectando a “' + s + '”.');
+  } catch (e) { toast('No pude guardar: ' + e.message); }
+};
+$('conectar').onclick = async () => {
+  let d = $('dir').value.trim();
+  if (!d) return toast('Escribe la dirección del robot');
+  if (!d.startsWith('http')) d = 'http://' + d;
+  if (await probar(d, 2500)) { usar(d); ini = true; estado(); toast('Conectado'); } else toast('No encontré el robot en ' + d);
+};
+$('buscar').onclick = async () => { if (await buscar(true)) { ini = true; estado(); toast('Robot encontrado'); } else toast('No lo encontré. ¿El celular está en la misma WiFi?'); };
+
+$('subir').onclick = () => {
+  const f = $('bin').files[0];
+  if (!f) return toast('Primero elige el archivo .bin');
+  const fd = new FormData(); fd.append('f', f, f.name);
+  const x = new XMLHttpRequest(), p = $('prog');
+  p.hidden = false; p.value = 0;
+  x.upload.onprogress = e => { if (e.lengthComputable) p.value = e.loaded / e.total * 100; };
+  x.onload = () => { toast(x.status === 200 ? x.responseText : 'Falló la actualización'); p.hidden = true; ini = true; };
+  x.onerror = () => { toast('Se cortó la conexión durante la subida'); p.hidden = true; };
+  x.open('POST', base + '/update'); x.send(fd);
+};
+
+// ---------- botones de caras y sonidos ----------
+CARAS.forEach(([n, t, c]) => {
+  const b = document.createElement('button');
+  b.className = 'face'; b.dataset.n = n; b.style.setProperty('--c', c);
+  b.innerHTML = '<span class="eyes"><i></i><i></i></span>' + t;
+  b.onclick = () => mandar('/e?n=' + n);
+  $('caras').appendChild(b);
+});
+SONIDOS.forEach(([n, t]) => {
+  const b = document.createElement('button');
+  b.className = 'btn'; b.textContent = t; b.onclick = () => mandar('/sonar?n=' + n);
+  $('sonidos').appendChild(b);
+});
+
+// ---------- pestañas ----------
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  tab = b.dataset.tab;
+  document.querySelectorAll('nav button').forEach(o => o.classList.toggle('on', o === b));
+  document.querySelectorAll('section').forEach(s => s.hidden = s.id !== 'tab-' + tab);
+  window.scrollTo(0, 0);
+});
+
+etiquetas();
+(async () => {
+  if (await buscar(true)) estado();
+  else { $('conn').textContent = 'Sin conexión · toca Ajustes › Buscar'; }
+  setInterval(estado, 2000);
+  setInterval(audio, 150);
+})();
+</script>
+</body>
+</html>

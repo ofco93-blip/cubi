@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.cubi.robot'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.cubi.robot'
+        minSdk 24
+        targetSdk 34
+        // cada compilación en GitHub sube el número, así la app nueva se instala encima de la vieja
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int)
+        versionName "2.0." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+
+    // Llave fija para que las actualizaciones se instalen sin desinstalar. Es una app casera: la clave no es secreta.
+    signingConfigs {
+        cubi {
+            storeFile file('cubi.p12')
+            storeType 'pkcs12'
+            storePassword 'boli-robot'
+            keyAlias 'boli'
+            keyPassword 'boli-robot'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.cubi
+        }
+        debug {
+            signingConfig signingConfigs.cubi
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
