@@ -1,0 +1,28 @@
+name: Ver caras
+
+# Dibuja las caras en el PC (mismo código del firmware) y deja la hoja y los GIFs en la versión "vista".
+on:
+  push:
+    branches: [main]
+    paths: ["firmware/cubi/caras.*", "firmware/cubi/dibujo.*", "herramientas/vista/**", ".github/workflows/vista.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  vista:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dibujar
+        run: |
+          pip install -q pillow
+          g++ -O2 -std=c++17 -I herramientas/vista herramientas/vista/vista.cpp firmware/cubi/caras.cpp firmware/cubi/dibujo.cpp -o vista
+          python3 herramientas/vista/hoja.py ./vista vista canta_jazz canta_dj canta_piano canta_barras canta_pop canta_tropical canta_urbano canta_electro reposo escucha habla frenazo bache
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: vista
+          name: Caras (vista previa)
+          prerelease: true
+          files: vista/*
