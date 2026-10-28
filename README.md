@@ -18,11 +18,11 @@ Placa: Waveshare ESP32-S3-Touch-AMOLED-1.8 (V1 con SH8601 o V2 con CO5300, se de
 2. Ábrelo e instálalo (Android pide permitir "instalar apps de esta fuente" la primera vez).
 3. Abre la app con el Bluetooth prendido: se conecta sola a Cubi y el celular sigue con su internet.
 
-En la pestaña **Música** se ve en vivo si está cantando y se ajusta la sensibilidad. En **Ajustes** se actualiza el robot (eso sí va por WiFi: red **Cubi**, clave `12345678`, o la WiFi de la casa si se la pusiste).
+En la pestaña **Música** se ve en vivo si está cantando y se ajusta la sensibilidad. En **Ajustes** se actualiza el robot, también por Bluetooth.
 
 ## Actualizar el robot
 
-- **Por WiFi**: descarga `cubi.ino.bin` de la última versión y súbelo desde la app (Ajustes › Actualizar el robot).
+- **Por Bluetooth**: descarga `cubi.ino.bin` de la última versión y elígelo en la app (Ajustes › Actualizar el robot). Tarda unos minutos; la app muestra el avance y no deja tocar nada hasta que termine. Si se corta, Cubi sigue con la versión que tenía.
 - **Por cable**: abre `firmware/cubi` en Arduino IDE con la placa *Waveshare ESP32-S3-Touch-AMOLED-1.8*, PSRAM activada y USB CDC On Boot activado. Librerías: GFX Library for Arduino 1.6.9, arduinoFFT 2.0.4 y XPowersLib 0.3.3.
 
 Cada cambio en `main` compila la app y el firmware en GitHub Actions y publica una versión nueva con los dos archivos.
@@ -31,3 +31,7 @@ Cada cambio en `main` compila la app y el firmware en GitHub Actions y publica u
 
 - `firmware/cubi`: programa del robot. Los valores de fábrica están en `config.h`.
 - `android`: app. La interfaz está en `app/src/main/assets/index.html`; la parte Android solo la muestra.
+
+## Batería
+
+Funciona con la batería de la placa (conector BAT). Sin WiFi gasta mucho menos. Se apaga solo si la batería baja del 5 % y vuelve a prender al conectar el USB. La app muestra el porcentaje y si está cargando.

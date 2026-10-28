@@ -19,46 +19,59 @@ import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.net.Uri;
-import android.net.wifi.WifiManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.ParcelUuid;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
-import android.webkit.ValueCallback;
-import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.UUID;
 
-// La interfaz vive en assets/index.html. Le habla al robot por Bluetooth (BLE) y, para actualizarlo, por WiFi.
+// La interfaz vive en assets/index.html. Todo con el robot va por Bluetooth (BLE), también la actualización.
 @SuppressLint("MissingPermission")
 public class MainActivity extends Activity {
     static final UUID SRV = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e");
     static final UUID RX = UUID.fromString("6e400002-b5a3-f393-e0a9-e50e24dcca9e");
     static final UUID TX = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e");
+    static final UUID OTA = UUID.fromString("6e400004-b5a3-f393-e0a9-e50e24dcca9e");
     static final UUID CCCD = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
+    static final int PEDAZO = 240;  // bytes del firmware por escritura (cabe en el MTU de 247)
 
     private WebView web;
-    private ValueCallback<Uri[]> archivo;
     private final Handler ui = new Handler(Looper.getMainLooper());
 
     private BluetoothLeScanner scanner;
     private ScanCallback scanCb;
     private BluetoothGatt gatt;
-    private BluetoothGattCharacteristic rx;
+    private BluetoothGattCharacteristic rx, ota;
     private boolean listo, ocupado;
-    private final ArrayDeque<String> cola = new ArrayDeque<>();
+
+    // Cola de escrituras: Android solo deja una operación de Bluetooth a la vez.
+    static class Paquete {
+        final boolean firmware; final byte[] datos;
+        Paquete(boolean f, byte[] d) { firmware = f; datos = d; }
+    }
+    private final ArrayDeque<Paquete> cola = new ArrayDeque<>();
+    private Paquete enVuelo;
     private final StringBuilder entrada = new StringBuilder();
+
+    // Actualización en curso
+    private byte[] fw;
+    private int otaEnviados, otaTotal, otaPct = -1;
+    private boolean otaActiva, otaTerminando;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -69,37 +82,15 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true);
-        s.setAllowUniversalAccessFromFileURLs(true);
         web.addJavascriptInterface(new Puente(), "Android");
         web.setWebViewClient(new WebViewClient());
-        web.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public boolean onShowFileChooser(WebView v, ValueCallback<Uri[]> cb, FileChooserParams p) {
-                archivo = cb;
-                try {
-                    startActivityForResult(p.createIntent(), 1);
-                } catch (Exception e) {
-                    archivo = null;
-                    return false;
-                }
-                return true;
-            }
-        });
         web.loadUrl("file:///android_asset/index.html");
         setContentView(web);
     }
 
     @Override
-    protected void onActivityResult(int req, int res, Intent data) {
-        if (req == 1 && archivo != null) {
-            archivo.onReceiveValue(WebChromeClient.FileChooserParams.parseResult(res, data));
-            archivo = null;
-        }
-    }
-
-    @Override
     public void onBackPressed() {
+        if (otaActiva) return;  // durante la actualización no se sale
         if (web.canGoBack()) web.goBack();
         else super.onBackPressed();
     }
@@ -189,7 +180,10 @@ public class MainActivity extends Activity {
                         gatt = null;
                         listo = ocupado = false;
                         cola.clear();
+                        enVuelo = null;
                     }
+                    if (otaTerminando) otaFin(true, "Cubi se está reiniciando con la versión nueva");
+                    else if (otaActiva) otaFin(false, "Se perdió la conexión. Cubi sigue con la versión que tenía; vuelve a intentarlo.");
                     avisar("desconectado");
                 }
             }
@@ -207,6 +201,7 @@ public class MainActivity extends Activity {
                     return;
                 }
                 rx = s.getCharacteristic(RX);
+                ota = s.getCharacteristic(OTA);
                 BluetoothGattCharacteristic tx = s.getCharacteristic(TX);
                 g.setCharacteristicNotification(tx, true);
                 BluetoothGattDescriptor dsc = tx.getDescriptor(CCCD);
@@ -225,8 +220,24 @@ public class MainActivity extends Activity {
 
             @Override
             public void onCharacteristicWrite(BluetoothGatt g, BluetoothGattCharacteristic c, int st) {
+                Paquete p;
                 synchronized (cola) {
+                    p = enVuelo;
+                    enVuelo = null;
                     ocupado = false;
+                }
+                if (p != null && p.firmware) {
+                    if (st != BluetoothGatt.GATT_SUCCESS) {
+                        otaFallo("Falló un pedazo del envío. Cubi sigue con la versión que tenía.");
+                        return;
+                    }
+                    otaEnviados += p.datos.length;
+                    int pct = (int) (otaEnviados * 100L / otaTotal);
+                    if (pct != otaPct) {
+                        otaPct = pct;
+                        js("otaProgreso(" + otaEnviados + "," + otaTotal + ")");
+                    }
+                    if (otaEnviados >= otaTotal) enviarTexto("ota|/ota/fin");
                 }
                 siguiente();
             }
@@ -244,6 +255,7 @@ public class MainActivity extends Activity {
     }
 
     // El robot responde "id|respuesta\n" en pedazos: se juntan hasta el salto de línea.
+    // Las respuestas "ota|..." son de la actualización y las maneja Java; las demás van a la interfaz.
     private void llega(byte[] v) {
         synchronized (entrada) {
             entrada.append(new String(v, StandardCharsets.UTF_8));
@@ -251,19 +263,113 @@ public class MainActivity extends Activity {
             while ((n = entrada.indexOf("\n")) >= 0) {
                 String linea = entrada.substring(0, n);
                 entrada.delete(0, n + 1);
-                js("bleRespuesta(" + JSONObject.quote(linea) + ")");
+                if (linea.startsWith("ota|")) respuestaOta(linea.substring(4));
+                else js("bleRespuesta(" + JSONObject.quote(linea) + ")");
             }
         }
     }
 
-    // Una escritura a la vez: Android no deja encolar operaciones de Bluetooth.
+    private void enviarTexto(String s) {
+        synchronized (cola) {
+            cola.add(new Paquete(false, s.getBytes(StandardCharsets.UTF_8)));
+        }
+        siguiente();
+    }
+
     private void siguiente() {
         synchronized (cola) {
             if (!listo || ocupado || cola.isEmpty() || gatt == null) return;
-            rx.setValue(cola.poll().getBytes(StandardCharsets.UTF_8));
-            rx.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
-            ocupado = gatt.writeCharacteristic(rx);
+            Paquete p = cola.poll();
+            BluetoothGattCharacteristic c = p.firmware ? ota : rx;
+            c.setValue(p.datos);
+            c.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);  // con confirmación: ninguno se pierde
+            enVuelo = p;
+            ocupado = gatt.writeCharacteristic(c);
+            if (!ocupado) enVuelo = null;
         }
+    }
+
+    // ---------- actualización por Bluetooth ----------
+    @Override
+    protected void onActivityResult(int req, int res, Intent data) {
+        if (req != 3 || res != RESULT_OK || data == null || data.getData() == null) {
+            if (req == 3) js("otaCancelada()");
+            return;
+        }
+        try (InputStream in = getContentResolver().openInputStream(data.getData())) {
+            ByteArrayOutputStream o = new ByteArrayOutputStream();
+            byte[] b = new byte[16384];
+            int n;
+            while ((n = in.read(b)) > 0) o.write(b, 0, n);
+            fw = o.toByteArray();
+        } catch (Exception e) {
+            js("otaFin(false," + JSONObject.quote("No pude leer el archivo") + ")");
+            return;
+        }
+        // Un firmware del ESP32 empieza con 0xE9 y pesa más de 100 KB: así no se sube cualquier archivo por error
+        if (fw.length < 100000 || (fw[0] & 0xFF) != 0xE9) {
+            js("otaFin(false," + JSONObject.quote("Ese archivo no es un firmware de Cubi. Elige cubi.ino.bin.") + ")");
+            return;
+        }
+        if (ota == null || gatt == null) {
+            js("otaFin(false," + JSONObject.quote("Cubi no está conectado por Bluetooth.") + ")");
+            return;
+        }
+        String md5;
+        try {
+            StringBuilder h = new StringBuilder();
+            for (byte x : MessageDigest.getInstance("MD5").digest(fw)) h.append(String.format("%02x", x));
+            md5 = h.toString();
+        } catch (Exception e) {
+            md5 = "";
+        }
+        otaActiva = true;
+        otaTerminando = false;
+        otaEnviados = 0;
+        otaTotal = fw.length;
+        otaPct = -1;
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        gatt.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH);
+        js("otaEmpieza(" + otaTotal + ")");
+        enviarTexto("ota|/ota/inicio?tam=" + otaTotal + (md5.isEmpty() ? "" : "&md5=" + md5));
+    }
+
+    private void respuestaOta(String r) {
+        if (!otaActiva) return;
+        if (r.startsWith("!")) {
+            otaFallo(r.substring(1));
+            return;
+        }
+        if (otaEnviados == 0 && !otaTerminando && otaPct < 0) {  // respuesta al inicio: ahora sí manda el firmware
+            otaPct = 0;
+            synchronized (cola) {
+                for (int i = 0; i < fw.length; i += PEDAZO) {
+                    byte[] p = new byte[Math.min(PEDAZO, fw.length - i)];
+                    System.arraycopy(fw, i, p, 0, p.length);
+                    cola.add(new Paquete(true, p));
+                }
+            }
+            siguiente();
+        } else if (otaEnviados >= otaTotal) {  // respuesta al fin: verificado, el robot se reinicia
+            otaTerminando = true;
+        }
+    }
+
+    private void otaFallo(String msg) {
+        synchronized (cola) {
+            cola.clear();
+        }
+        if (gatt != null) enviarTexto("ota|/ota/cancelar");
+        otaFin(false, msg);
+    }
+
+    private void otaFin(boolean ok, String msg) {
+        if (!otaActiva) return;
+        otaActiva = false;
+        fw = null;
+        ui.post(() -> getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
+        js("otaFin(" + ok + "," + JSONObject.quote(msg) + ")");
+        if (ok) ui.postDelayed(this::buscar, 6000);  // se vuelve a conectar cuando Cubi termina de reiniciar
     }
 
     class Puente {
@@ -274,19 +380,20 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void bleEnviar(String orden) {
+            if (otaActiva) return;  // durante la actualización no se manda nada más
             synchronized (cola) {
-                if (cola.size() < 20) cola.add(orden);
+                if (cola.size() < 20) cola.add(new Paquete(false, orden.getBytes(StandardCharsets.UTF_8)));
             }
             siguiente();
         }
 
-        // Primeros tres números de la IP del celular (ej. "192.168.1.") para buscar al robot por WiFi al actualizarlo.
         @JavascriptInterface
-        public String subred() {
-            WifiManager w = (WifiManager) getApplicationContext().getSystemService(WIFI_SERVICE);
-            int ip = w.getConnectionInfo().getIpAddress();
-            if (ip == 0) return "";
-            return (ip & 255) + "." + ((ip >> 8) & 255) + "." + ((ip >> 16) & 255) + ".";
+        public void otaElegir() {
+            if (otaActiva) return;
+            Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("*/*");
+            ui.post(() -> startActivityForResult(i, 3));
         }
     }
 }

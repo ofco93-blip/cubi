@@ -78,7 +78,13 @@ nav button.on { color: var(--accent); }
 section[hidden] { display: none; }
 .toast { position: fixed; left: 16px; right: 16px; bottom: calc(92px + env(safe-area-inset-bottom)); background: var(--panel2); border: 1px solid var(--line); padding: 12px 14px; border-radius: 12px; opacity: 0; transform: translateY(8px); transition: .25s; pointer-events: none; z-index: 7; }
 .toast.on { opacity: 1; transform: none; }
-progress { width: 100%; accent-color: var(--accent); }
+.bloqueo { position: fixed; inset: 0; z-index: 20; background: rgba(5, 7, 9, .92); display: grid; place-items: center; padding: 24px; touch-action: none; }
+.bloqueo[hidden] { display: none; }
+.bloqueo .caja { width: 100%; max-width: 380px; background: var(--panel); border-radius: var(--r); padding: 20px; display: grid; gap: 14px; }
+.bloqueo .caja > b { font-size: 18px; }
+.bloqueo .barra { height: 14px; background: var(--panel2); border-radius: 7px; overflow: hidden; }
+.bloqueo .barra b { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 7px; transition: width .2s linear; }
+#otaPct { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
 </style>
 </head>
 <body>
@@ -148,18 +154,8 @@ progress { width: 100%; accent-color: var(--accent); }
   </div>
   <h2>Actualizar el robot</h2>
   <div class="card">
-    <p class="note">Esto sí va por WiFi porque el archivo es grande. Conecta el celular un momento a la red <b>Cubi</b> (clave 12345678), o pon abajo la WiFi de la casa para no tener que cambiar de red.</p>
-    <p class="note">Elige el archivo <b>cubi.ino.bin</b> de la última versión del proyecto.</p>
-    <input type="file" id="bin" accept=".bin">
-    <progress id="prog" max="100" value="0" hidden></progress>
-    <button class="btn main" id="subir">Subir al robot</button>
-  </div>
-  <h2>WiFi de la casa (opcional)</h2>
-  <div class="card">
-    <p class="note" id="redActual">Solo sirve para actualizar el robot sin cambiar de red.</p>
-    <input type="text" id="ssid" placeholder="Nombre de la red" autocomplete="off" autocapitalize="off">
-    <input type="password" id="pass" placeholder="Clave">
-    <button class="btn" id="guardarWifi">Guardar en el robot</button>
+    <p class="note">Descarga <b>cubi.ino.bin</b> de la última versión del proyecto y elígelo aquí. Va por Bluetooth: tarda unos minutos y la app queda bloqueada hasta que termine.</p>
+    <button class="btn main" id="subir">Elegir archivo y actualizar</button>
   </div>
   <p class="note" id="info" style="margin:18px 2px"></p>
 </section>
@@ -170,6 +166,15 @@ progress { width: 100%; accent-color: var(--accent); }
   <button data-tab="ajustes"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Ajustes</button>
 </nav>
 <div class="toast" id="toast"></div>
+<!-- Mientras se actualiza: tapa toda la app, no deja tocar nada -->
+<div class="bloqueo" id="bloqueo" hidden>
+  <div class="caja">
+    <b>Actualizando a Cubi</b>
+    <p class="note">No cierres la app, no apagues el robot y deja el celular cerca.</p>
+    <div class="barra"><b id="otaBarra"></b></div>
+    <div class="row"><span id="otaPct">0 %</span><span class="note" id="otaKb"></span></div>
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
@@ -182,7 +187,7 @@ const SONIDOS = [['risa', 'Risa'], ['feliz', 'Feliz'], ['sorpresa', 'Sorpresa'],
   ['enamorado', 'Amor'], ['mareado', 'Mareado'], ['sueno', 'Sueño'], ['arranque', 'Arranque']];
 const ESTADOS = ['Silencio', 'Hablando', 'Sintiendo la música', 'Cantando'];
 
-let vivo = false, tab = 'cara', ini = true, ipCasa = '';
+let vivo = false, tab = 'cara', ini = true;
 
 function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove('on'), 2600); }
 
@@ -209,6 +214,7 @@ function bleRespuesta(linea) {
 }
 function api(path, ms = 3000) {
   return new Promise((res, rej) => {
+    if (actualizando) return rej(new Error('Espera a que termine la actualización'));
     if (!vivo || !window.Android) return rej(new Error('Sin conexión con Cubi'));
     const id = String(sigId++);
     pend[id] = { res, rej };
@@ -225,9 +231,7 @@ $('reconectar').onclick = conectar;
 function pintarEstado(j) {
   document.querySelectorAll('.face').forEach(b => b.classList.toggle('sel', b.dataset.n === j.emo));
   $('conn').textContent = 'Conectado por Bluetooth' + (j.bat >= 0 ? ' · batería ' + j.bat + '%' : '');
-  ipCasa = j.ip || '';
-  $('info').textContent = 'Cubi v' + j.ver + (j.ip ? ' · en la WiFi ' + j.red + ' como ' + j.ip : '');
-  $('redActual').textContent = j.red ? 'Cubi está en la WiFi “' + j.red + '”: puedes actualizarlo desde esa red.' : 'Solo sirve para actualizar el robot sin cambiar de red.';
+  $('info').textContent = 'Cubi v' + j.ver + (j.carga ? ' · cargando' : j.usb ? ' · conectado al USB' : ' · con batería');
   if (ini) {
     ini = false;
     $('bri').value = j.bri; $('vol').value = j.vol; $('son').checked = !!j.son; $('mus').checked = !!j.mus;
@@ -284,37 +288,29 @@ $('rot').onclick = () => mandar('/ajuste?rot=1');
 document.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => mandar('/evento?tipo=' + b.dataset.ev));
 document.querySelectorAll('[data-demo]').forEach(b => b.onclick = () => { mandar('/demo?t=' + b.dataset.demo); toast(b.dataset.demo === 'canto' ? 'Cubi está cantando…' : 'Cubi está bailando…'); });
 
-$('guardarWifi').onclick = async () => {
-  const s = $('ssid').value.trim();
-  if (!s) return toast('Escribe el nombre de la red');
-  try {
-    await api('/wifi?ssid=' + encodeURIComponent(s) + '&pass=' + encodeURIComponent($('pass').value));
-    $('pass').value = '';
-    toast('Guardado. El robot se está conectando a “' + s + '”.');
-  } catch (e) { toast('No pude guardar: ' + e.message); }
+// ---------- actualizar por Bluetooth: Android elige el archivo, lo manda y avisa el avance ----------
+let actualizando = false;
+$('subir').onclick = () => {
+  if (!vivo) return toast('Primero conecta a Cubi por Bluetooth');
+  Android.otaElegir();
 };
-// Prueba primero la WiFi de la casa (si el robot está en ella) y si no, la red propia de Cubi.
-async function direccionWifi() {
-  for (const u of [ipCasa && 'http://' + ipCasa, 'http://192.168.4.1'].filter(Boolean)) {
-    const c = new AbortController(), t = setTimeout(() => c.abort(), 2000);
-    try { if ((await fetch(u + '/estado', { signal: c.signal })).ok) return u; } catch (e) {} finally { clearTimeout(t); }
-  }
-  return '';
+function otaEmpieza(total) {
+  actualizando = true;
+  $('bloqueo').hidden = false;
+  otaProgreso(0, total);
 }
-
-$('subir').onclick = async () => {
-  const f = $('bin').files[0];
-  if (!f) return toast('Primero elige el archivo .bin');
-  const base = await direccionWifi();
-  if (!base) return toast('No veo a Cubi por WiFi. Conecta el celular a la red “Cubi” y vuelve a intentar.');
-  const fd = new FormData(); fd.append('f', f, f.name);
-  const x = new XMLHttpRequest(), p = $('prog');
-  p.hidden = false; p.value = 0;
-  x.upload.onprogress = e => { if (e.lengthComputable) p.value = e.loaded / e.total * 100; };
-  x.onload = () => { toast(x.status === 200 ? x.responseText : 'Falló la actualización'); p.hidden = true; ini = true; };
-  x.onerror = () => { toast('Se cortó la conexión durante la subida'); p.hidden = true; };
-  x.open('POST', base + '/update'); x.send(fd);
-};
+function otaProgreso(hecho, total) {
+  const p = Math.floor(hecho * 100 / total);
+  $('otaBarra').style.width = p + '%';
+  $('otaPct').textContent = p + ' %';
+  $('otaKb').textContent = Math.round(hecho / 1024) + ' de ' + Math.round(total / 1024) + ' KB';
+}
+function otaFin(ok, msg) {
+  actualizando = false;
+  $('bloqueo').hidden = true;
+  toast(ok ? '¡Listo! ' + msg : msg);
+}
+function otaCancelada() {}
 
 // ---------- botones de caras y sonidos ----------
 CARAS.forEach(([n, t, c]) => {

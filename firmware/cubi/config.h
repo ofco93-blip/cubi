@@ -1,32 +1,23 @@
 // ===== Cubi — ajustes =====
 #pragma once
 
-// --- WiFi: la red de la casa se configura desde la app (queda guardada en el robot).
-// Estas dos son de respaldo si no hay ninguna guardada.
-#define WIFI1_SSID "MiCelular"
-#define WIFI1_PASS "clave123"
-#define WIFI2_SSID "WiFiCasa"
-#define WIFI2_PASS "clave456"
-
-// Red propia del robot (siempre activa): conéctate y abre http://192.168.4.1
-#define AP_SSID "Cubi"
-#define AP_PASS "12345678"          // mínimo 8 caracteres
-#define NOMBRE_MDNS "cubi"          // http://cubi.local
+// --- Bluetooth: así aparece el robot para la app ---
+#define NOMBRE_BLE "Cubi"
 
 // --- Pantalla ---
 #define PANTALLA 0                  // 0 = auto, 1 = SH8601 (original), 2 = CO5300 (V2)
 #define BRILLO_INICIAL 200          // 0..255
 #define ROTACION_INICIAL 3          // 3 = montada de cabeza (carro), 1 = normal. Se cambia desde la app.
 
-// --- Energía (chip AXP2101) ---
-#define APAGAR_SIN_USB_SEG 60       // con batería: si se quita el USB (apagas el carro) se apaga solo tras N s.
-                                    // Prende solo al volver el USB. 0 = nunca se apaga solo.
+// --- Energía y batería (chip AXP2101) ---
+// Funciona con la batería sin USB. Siempre se apaga solo si la batería baja del 5 % (y prende al conectar el USB).
+#define APAGAR_SIN_USB_SEG 0        // si es más de 0: también se apaga N s después de quitar el USB (útil en el carro)
 
 // --- Sonido (parlante de la placa) ---
 #define VOLUMEN_INICIAL 70          // 0..100
 #define GANANCIA_MIC 4              // 0..7 (sube si no reacciona a la música, baja si reacciona a todo)
 
-// --- Detección de música (perillas: mira los valores en http://IP/audio mientras suena) ---
+// --- Detección de música (se ven los valores en vivo en la app, pestaña Música) ---
 #define BEAT_K          1.45f       // qué tanto debe saltar el bajo para contar un golpe
 #define SONIDO_K        3.0f        // nivel sobre el ruido de fondo para considerar que "hay sonido"
 #define BAJO_ALTO       0.38f       // proporción de bajos que se considera "bajo fuerte" (electrónica/reggaetón)

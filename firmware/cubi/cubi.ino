@@ -1,11 +1,8 @@
 // Cubi v2 — Waveshare ESP32-S3-Touch-AMOLED-1.8 (V1 y V2)
 // Caras nuevas, canta con la música (lipsync por el micrófono), siente la música con efectos,
-// sonidos, energía (AXP2101), reacciones al movimiento, app Android por WiFi y actualización OTA.
+// sonidos, energía y batería (AXP2101), reacciones al movimiento, app Android por Bluetooth y actualización por Bluetooth.
 #include <Arduino_GFX_Library.h>
 #include <Wire.h>
-#include <WiFi.h>
-#include <WebServer.h>
-#include <ESPmDNS.h>
 #include <Update.h>
 #include <Preferences.h>
 #include <ESP_I2S.h>
@@ -40,7 +37,7 @@ struct Cara {
   C3 c1, c2;                   // color del ojo de arriba hacia abajo
 };
 const int N_FLOAT = 11;  // floats al inicio de Cara (se animan en bloque)
-struct Params {  // argumentos de una orden (de la app por WiFi o Bluetooth)
+struct Params {  // argumentos de una orden de la app
   String k[8], v[8]; int n = 0;
   void add(const String &a, const String &b) { if (n < 8) { k[n] = a; v[n++] = b; } }
   bool has(const char *x) const { for (int i = 0; i < n; i++) if (k[i] == x) return true; return false; }
@@ -59,7 +56,6 @@ Arduino_DataBus *bus;
 Arduino_OLED *panel;
 Arduino_Canvas *cv;
 uint8_t tpAddr = 0, imuAddr = 0;
-WebServer srv(80);
 Preferences prefs;
 XPowersPMU pmu;
 bool pmuOk = false;
@@ -70,6 +66,9 @@ es8311_handle_t es = nullptr;
 uint8_t rotacion = ROTACION_INICIAL, volumen = VOLUMEN_INICIAL, micGan = GANANCIA_MIC;
 bool sonidoOn = true, musicaOn = true;
 float umbralVoz = UMBRAL_VOZ, ganBoca = GANANCIA_BOCA, sensK = SONIDO_K;
+volatile uint32_t otaTotal = 0, otaHecho = 0;  // actualización por Bluetooth en curso (bytes)
+volatile bool otaError = false;
+uint32_t reinicioEn = 0;
 
 // ---------- I2C ----------
 bool i2cHay(uint8_t a) { Wire.beginTransmission(a); return Wire.endTransmission() == 0; }
@@ -328,7 +327,7 @@ void evento(const String &t) {
 
 float lx = 0, ly = 0, vlx = 0, vly = 0, tlx = 0, tly = 0, bounce = 0, escala = 1, pulso = 0, eyeCy = H / 2, sqx = 1, sqy = 1;
 C3 fondoC = { 0, 0, 0 };  // color detrás de los ojos (para suavizar sus bordes)
-uint32_t frameUs = 0;
+uint32_t frameUs = 0, tAnim = 0, tDib = 0, tFlush = 0;
 float bocaV = 0, anchoV = 0.5f, hablaV = 0, fondo = 0, giro = 0, tono = 0;
 uint32_t nextSacc = 0, nextBlink = 0, blinkT0 = 0, lastMotion = 0, fuerteDesde = 0;
 uint32_t demoT0 = 0, demoHasta = 0, demoBeat = 0; bool demoCanto = false;
@@ -613,8 +612,22 @@ void animar(uint32_t now) {
   if (now > nextBlink && c != SUENO) { blinkT0 = now; nextBlink = now + random(2000, 6000); }
 }
 
+// Mientras se actualiza: anillo de progreso y porcentaje (sin cara, para que se note que no hay que apagarlo)
+void pantallaOta() {
+  float p = otaTotal ? float(otaHecho) / otaTotal : 1;
+  C3 c = hx(0x3CD6E8);
+  cv->fillArc(W / 2, H / 2, 120 * U, 106 * U, 0, 360, tenue(c, 0.2f));
+  if (p > 0.005f) cv->fillArc(W / 2, H / 2, 120 * U, 106 * U, -90, -90 + 360 * p, c565(c));
+  char t[8]; snprintf(t, sizeof t, "%d%%", int(p * 100));
+  cv->setTextColor(0xFFFF); cv->setTextSize(5);
+  cv->setCursor(W / 2 - strlen(t) * 15, H / 2 - 18); cv->print(t);
+  cv->setTextColor(c565(c)); cv->setTextSize(2);
+  cv->setCursor(W / 2 - 72, H / 2 + 30); cv->print("Actualizando");
+}
+
 void dibujar(uint32_t now) {
   cv->fillScreen(0x0000);
+  if (otaTotal || reinicioEn) { pantallaOta(); return; }
   float abre = 1;
   if (now - blinkT0 < 180) abre = max(0.f, 1 - sinf(PI * (now - blinkT0) / 180.f));
   float sx = 0, sy = 0;
@@ -778,12 +791,13 @@ void energiaInit() {
 
 void energiaUpdate(uint32_t now) {
   static uint32_t t, sinUsb;
-  if (!pmuOk || now - t < 1000) return;
+  if (!pmuOk || otaTotal || now - t < 1000) return;
   t = now;
-  if (pmu.isVbusIn() || !pmu.isBatteryConnect() || !APAGAR_SIN_USB_SEG) { sinUsb = 0; return; }
+  if (pmu.isVbusIn() || !pmu.isBatteryConnect()) { sinUsb = 0; return; }
   if (!sinUsb) sinUsb = now;
-  if (now - sinUsb > APAGAR_SIN_USB_SEG * 1000UL || pmu.getBatteryPercent() < 5) {
-    // Se apaga del todo; el AXP2101 lo vuelve a prender solo cuando entra el USB (o con el botón PWR).
+  bool vacia = pmu.getBatteryPercent() < 5;
+  if (vacia || (APAGAR_SIN_USB_SEG && now - sinUsb > APAGAR_SIN_USB_SEG * 1000UL)) {
+    // Se apaga del todo para cuidar la batería; el AXP2101 lo vuelve a prender al conectar el USB (o con el botón PWR).
     emoBase = SUENO; setEmo(SUENO, 0); sonar(S_SUENO);
     for (uint32_t t0 = millis(); millis() - t0 < 2500;) { animar(millis()); dibujar(millis()); cv->flush(); delay(30); }
     panel->setBrightness(0);
@@ -791,21 +805,12 @@ void energiaUpdate(uint32_t now) {
   }
 }
 
-// ---------- Web: la app Android habla con estas rutas ----------
-const char PAGINA[] PROGMEM = R"HTML(<!doctype html><html><head><meta charset=utf-8>
-<meta name=viewport content="width=device-width,initial-scale=1"><title>Cubi</title>
-<style>body{font-family:system-ui;background:#0d0f12;color:#e8ecf0;margin:24px;max-width:480px;line-height:1.5}
-button{padding:10px 14px;border:0;border-radius:10px;background:#2ad1e8;color:#041014;font-weight:600}</style></head><body>
-<h2>Cubi v2</h2><p>Para manejar a Cubi usa la app <b>Cubi</b> en el celular.</p>
-<h3>Actualizar firmware</h3><form method=POST action=/update enctype=multipart/form-data>
-<input type=file name=f accept=.bin> <button>Subir .bin</button></form></body></html>)HTML";
-
 void guardar() {
   prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn);
   prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan);
 }
 
-// Las órdenes llegan igual por WiFi (HTTP) o por Bluetooth: "ruta?clave=valor&...". Devuelve el texto o JSON de respuesta.
+// ---------- Órdenes de la app: "ruta?clave=valor&..." -> texto o JSON ----------
 String urlDec(const String &s) {
   String o;
   for (int i = 0; i < s.length(); i++) {
@@ -817,9 +822,9 @@ String urlDec(const String &s) {
   return o;
 }
 
-uint32_t wifiTry = 0;
 String atender(const String &ruta, const Params &p, int &cod) {
   cod = 200;
+  if (otaTotal && !ruta.startsWith("/ota")) { cod = 409; return "actualizando"; }  // durante la actualización no se toca nada
   if (ruta == "/e") {
     String n = p.get("n");
     for (int i = 0; i < N_EMO; i++) if (n == EMO_NOM[i]) { despertar(millis()); emoBase = NEUTRAL; demoHasta = 0; setEmo(Emo(i), 5000); emoForzada = true; return "ok"; }
@@ -844,21 +849,13 @@ String atender(const String &ruta, const Params &p, int &cod) {
     if (p.has("mg")) { micGan = constrain(p.get("mg").toInt(), 0, 7); if (es) es8311_microphone_gain_set(es, (es8311_mic_gain_t)micGan); }
     guardar(); return "ok";
   }
-  if (ruta == "/wifi") {
-    String s = p.get("ssid");
-    if (!s.length()) { cod = 400; return "falta el nombre de la red"; }
-    prefs.putString("ssid", s); prefs.putString("pass", p.get("pass"));
-    WiFi.disconnect(); wifiTry = 0;
-    return "ok";
-  }
   if (ruta == "/estado") {
     int bat = pmuOk && pmu.isBatteryConnect() ? pmu.getBatteryPercent() : -1;
-    bool sta = WiFi.status() == WL_CONNECTED;
     return String("{\"emo\":\"") + EMO_NOM[emo] + "\",\"modo\":" + modo + ",\"estado\":" + estado +
       ",\"estilo\":\"" + EST_NOM[estilo] + "\",\"bpm\":" + int(aBpm) + ",\"bat\":" + bat + ",\"usb\":" + (pmuOk && pmu.isVbusIn() ? 1 : 0) +
-      ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" +
-      ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) + ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan +
-      ",\"red\":\"" + (sta ? WiFi.SSID() : String("")) + "\",\"ip\":\"" + (sta ? WiFi.localIP().toString() : String("")) + "\"}";
+      ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn +
+      ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
+      ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + "}";
   }
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
     char b[300];
@@ -867,36 +864,33 @@ String atender(const String &ruta, const Params &p, int &cod) {
       estado, EST_NOM[estilo], aBpm, aNivel, aVoz, aCanta ? 1 : 0, aBoca, aAncho, aBajoP, aRms, aPiso, (unsigned long)beatCnt);
     return b;
   }
+  // Actualización por Bluetooth: inicio (tamaño y MD5), los datos llegan por la característica OTA, y fin (verifica y reinicia).
+  if (ruta == "/ota/inicio") {
+    uint32_t tam = p.get("tam").toInt();
+    if (tam < 100000 || !Update.begin(tam)) { cod = 400; return String("no se puede actualizar: ") + Update.errorString(); }
+    if (p.has("md5")) Update.setMD5(p.get("md5").c_str());
+    otaHecho = 0; otaError = false; otaTotal = tam;
+    return "ok";
+  }
+  if (ruta == "/ota/fin") {
+    uint32_t tam = otaTotal, hecho = otaHecho;
+    otaTotal = 0;
+    if (otaError || hecho != tam) { Update.abort(); cod = 400; return String("llegaron ") + hecho + " de " + tam + " bytes"; }
+    if (!Update.end()) { cod = 400; return String("el archivo no pasó la verificación: ") + Update.errorString(); }
+    reinicioEn = millis() + 1500;  // da tiempo de mandar la respuesta
+    return "ok";
+  }
+  if (ruta == "/ota/cancelar") { if (otaTotal) { otaTotal = 0; Update.abort(); } return "ok"; }
   cod = 404; return "no existe";
-}
-
-void webInit() {
-  srv.enableCORS(true);  // la app carga su interfaz desde el celular y le pide datos al robot
-  srv.on("/", [] { srv.send_P(200, "text/html", PAGINA); });
-  srv.on("/update", HTTP_POST, [] {
-    bool ok = !Update.hasError();
-    srv.send(200, "text/plain", ok ? "Listo, reiniciando..." : "Fallo la actualizacion");
-    if (ok) { delay(500); ESP.restart(); }
-  }, [] {
-    HTTPUpload &u = srv.upload();
-    if (u.status == UPLOAD_FILE_START) Update.begin(UPDATE_SIZE_UNKNOWN);
-    else if (u.status == UPLOAD_FILE_WRITE) Update.write(u.buf, u.currentSize);
-    else if (u.status == UPLOAD_FILE_END) Update.end(true);
-  });
-  srv.onNotFound([] {
-    Params p; int cod;
-    for (int i = 0; i < srv.args(); i++) p.add(srv.argName(i), srv.arg(i));
-    String r = atender(srv.uri(), p, cod);
-    srv.send(cod, r.startsWith("{") ? "application/json" : "text/plain", r);
-  });
-  srv.begin();
 }
 
 // ---------- Bluetooth (BLE): la app se conecta sin quitarle el internet al celular ----------
 // Estilo "UART de Nordic": la app escribe "id|ruta?args" en RX y el robot responde "id|respuesta\n" por TX (en pedazos).
+// La característica OTA recibe el firmware en pedazos, cada uno con confirmación (no se pierde ninguno).
 #define BLE_SRV "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_RX  "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_TX  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+#define BLE_OTA "6e400004-b5a3-f393-e0a9-e50e24dcca9e"
 struct OrdenBle { char t[240]; };
 QueueHandle_t bleCola;
 BLECharacteristic *bleTx;
@@ -909,14 +903,26 @@ class BleRx : public BLECharacteristicCallbacks {
     xQueueSend(bleCola, &o, 0);
   }
 };
+class BleOta : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *c) override {  // escribe directo en la memoria: llegan en orden, uno por uno
+    if (!otaTotal || otaError) return;
+    size_t n = c->getLength();
+    if (Update.write(c->getData(), n) != n) otaError = true;
+    otaHecho += n;
+  }
+};
 class BleSrv : public BLEServerCallbacks {
   void onConnect(BLEServer *) override { bleOn = true; }
-  void onDisconnect(BLEServer *s) override { bleOn = false; s->startAdvertising(); }
+  void onDisconnect(BLEServer *s) override {
+    bleOn = false;
+    if (otaTotal) { otaTotal = 0; Update.abort(); }  // se cortó a mitad: sigue con la versión que tenía
+    s->startAdvertising();
+  }
 };
 
 void bleInit() {
   bleCola = xQueueCreate(8, sizeof(OrdenBle));
-  BLEDevice::init(AP_SSID);
+  BLEDevice::init(NOMBRE_BLE);
   BLEDevice::setMTU(247);
   BLEServer *s = BLEDevice::createServer();
   s->setCallbacks(new BleSrv());
@@ -925,11 +931,14 @@ void bleInit() {
   rx->setCallbacks(new BleRx());
   bleTx = sv->createCharacteristic(BLE_TX, BLECharacteristic::PROPERTY_NOTIFY);
   bleTx->addDescriptor(new BLE2902());
+  BLECharacteristic *ota = sv->createCharacteristic(BLE_OTA, BLECharacteristic::PROPERTY_WRITE);
+  ota->setCallbacks(new BleOta());
   sv->start();
   BLEAdvertising *a = BLEDevice::getAdvertising();
   a->addServiceUUID(BLE_SRV);
   a->setScanResponse(true);
   BLEDevice::startAdvertising();
+  Serial.printf("BLE listo: %s  %s\n", NOMBRE_BLE, BLEDevice::getAddress().toString().c_str());
 }
 
 void bleAtender() {
@@ -960,22 +969,8 @@ void bleAtender() {
   }
 }
 
-// La red guardada desde la app va primero; si no hay, alterna las dos de config.h.
-void wifiCheck(uint32_t now) {
-  static bool staOk = false; static int idx = 1;
-  bool ok = WiFi.status() == WL_CONNECTED;
-  if (ok && !staOk) Serial.println("WiFi " + WiFi.SSID() + " -> " + WiFi.localIP().toString());
-  staOk = ok;
-  if (ok || (wifiTry && now - wifiTry < 15000)) return;
-  wifiTry = now | 1;
-  String s = prefs.getString("ssid", "");
-  if (s.length()) { WiFi.begin(s.c_str(), prefs.getString("pass", "").c_str()); return; }
-  idx ^= 1;
-  WiFi.begin(idx ? WIFI2_SSID : WIFI1_SSID, idx ? WIFI2_PASS : WIFI1_PASS);
-}
-
 // ---------- Depuración por el cable USB ----------
-// c = captura de pantalla (FB + ancho, alto + RGB565 crudo), 0..8 = emoción, s = simular canto, m = simular baile
+// c = captura de pantalla (FB + ancho, alto + RGB565 crudo), 0..8 = emoción, s = simular canto, m = simular baile, t = tiempo por cuadro
 void serialDebug() {
   while (Serial.available()) {
     char ch = Serial.read();
@@ -984,7 +979,8 @@ void serialDebug() {
       Serial.write("FB"); Serial.write((uint8_t *)dim, 4); Serial.write((uint8_t *)cv->getFramebuffer(), 368 * 448 * 2); Serial.flush();
     } else if (ch >= '0' && ch <= '8') { emoBase = NEUTRAL; demoHasta = 0; setEmo(Emo(ch - '0'), 8000); emoForzada = true; }
     else if (ch == 's' || ch == 'm') { emoHasta = 0; demo(ch == 's'); }
-    else if (ch == 't') Serial.printf("cuadro %lu us\n", (unsigned long)frameUs);
+    else if (ch == 't') Serial.printf("cuadro %lu us (animar %lu, dibujar %lu, flush %lu)  ble=%d\n", (unsigned long)frameUs,
+      (unsigned long)tAnim, (unsigned long)tDib, (unsigned long)tFlush, (int)bleOn);
   }
 }
 
@@ -1020,29 +1016,28 @@ void setup() {
   lastMotion = millis();
   audioInit();
   sonar(S_ARRANQUE);
-
-  WiFi.mode(WIFI_AP_STA);
-  WiFi.softAP(AP_SSID, AP_PASS);
-  MDNS.begin(NOMBRE_MDNS);
-  MDNS.addService("http", "tcp", 80);
-  webInit();
-  bleInit();
+  bleInit();  // sin WiFi: todo va por Bluetooth y la batería dura mucho más
 }
 
 void loop() {
   uint32_t now = millis();
-  srv.handleClient();
   serialDebug();
   bleAtender();
+  if (reinicioEn && now > reinicioEn) ESP.restart();
   imuUpdate(now);
   touchUpdate(now);
-  wifiCheck(now);
   energiaUpdate(now);
-  static uint32_t lastFrame;
-  if (now - lastFrame >= 33) {  // 30 cuadros por segundo (las animaciones están afinadas para este ritmo)
-    lastFrame = now;
+  // El movimiento se calcula en pasos fijos de 33 ms (las animaciones están afinadas para ese ritmo)
+  // y se dibuja lo más seguido que dé la pantalla (~15 cuadros/s): así todo va a la velocidad correcta.
+  // ponytail: dibujar + enviar tardan ~65 ms; más cuadros pedirían dibujar en la orientación nativa del panel.
+  static uint32_t tSim;
+  if (now - tSim >= 33) {
     uint32_t t0 = micros();
-    animar(now); dibujar(now); cv->flush();
+    if (now - tSim > 200) tSim = now - 33;  // tras una pausa larga no intenta ponerse al día
+    while (now - tSim >= 33) { tSim += 33; animar(tSim); }
+    tAnim = micros() - t0;
+    dibujar(now); tDib = micros() - t0 - tAnim;
+    cv->flush(); tFlush = micros() - t0 - tAnim - tDib;
     frameUs = micros() - t0;
   }
 }
