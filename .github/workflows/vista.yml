@@ -20,12 +20,12 @@ jobs:
           # si algo falla, las últimas líneas salen como anotaciones (se ven sin entrar al registro)
           ( set -ex
             python3 -m pip install -q --break-system-packages pillow
-            g++ -O2 -std=c++17 -I herramientas/vista herramientas/vista/vista.cpp firmware/cubi/caras.cpp firmware/cubi/dibujo.cpp -o vista
-            python3 herramientas/vista/hoja.py ./vista vista canta_jazz canta_dj canta_piano canta_barras canta_pop canta_tropical canta_urbano canta_electro reposo escucha habla frenazo bache
+            g++ -O2 -std=c++17 -I herramientas/vista herramientas/vista/vista.cpp firmware/cubi/caras.cpp firmware/cubi/dibujo.cpp -o vista_pc
+            python3 herramientas/vista/hoja.py ./vista_pc salida canta_jazz canta_dj canta_piano canta_barras canta_pop canta_tropical canta_urbano canta_electro reposo escucha habla frenazo bache
           ) > log.txt 2>&1 || { grep -v "^+" log.txt | grep -m 12 . | tail -12 | while read -r l; do echo "::error::$l"; done; exit 1; }
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: vista
           name: Caras (vista previa)
           prerelease: true
-          files: vista/*
+          files: salida/*
