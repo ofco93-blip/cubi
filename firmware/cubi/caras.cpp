@@ -830,8 +830,8 @@ static void extrasBase(float t, const Entradas &e, bool delante) {
           auto en = [&](float a, float b, float &wx, float &wy) { wx = bx + (a * c - b * sn) * e2; wy = by + (a * sn + b * c) * e2; };
           saxofon(bx, by, ang, e2);
           float hx, hy;
-          en(30, 70, hx, hy); manito(hx - 6, hy, 24, -1.3f + 0.15f * g);
-          en(30, 126, hx, hy); manito(hx - 4, hy, 24, -1.4f);
+          en(22, 92, hx, hy); manito(hx, hy + 4, 20, -0.4f + 0.15f * g);   // las manitos en las llaves del cuerpo
+          en(26, 140, hx, hy); manito(hx, hy + 4, 20, -0.3f);
           float sx, sy; en(104, 98, sx, sy);
           for (int i = 0; i < 3; i++) {
             float q = fmodf(u * 0.45f + i / 3.f, 1.f);
