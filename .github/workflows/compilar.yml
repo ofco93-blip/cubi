@@ -8,11 +8,15 @@ on:
 permissions:
   contents: write
 
+# Un solo trabajo que publica directo en la versión: no usa el almacenamiento de artefactos de Actions.
 jobs:
-  app:
+  compilar:
     runs-on: ubuntu-latest
+    env:
+      URL_ESP32: https://espressif.github.io/arduino-esp32/package_esp32_index.json
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -20,37 +24,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - run: gradle -p android assembleRelease --no-daemon
-      - run: cp android/app/build/outputs/apk/release/app-release.apk Cubi.apk
-      - uses: actions/upload-artifact@v4
-        with:
-          name: app
-          path: Cubi.apk
+      - name: App Android
+        run: |
+          gradle -p android assembleRelease --no-daemon
+          cp android/app/build/outputs/apk/release/app-release.apk Cubi.apk
 
-  firmware:
-    runs-on: ubuntu-latest
-    env:
-      URL_ESP32: https://espressif.github.io/arduino-esp32/package_esp32_index.json
-    steps:
-      - uses: actions/checkout@v4
       - uses: arduino/setup-arduino-cli@v2
-      - run: |
+      - name: Firmware
+        run: |
           arduino-cli core update-index --additional-urls "$URL_ESP32"
           arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$URL_ESP32"
           arduino-cli lib install "GFX Library for Arduino@1.6.9" "arduinoFFT@2.0.4" "XPowersLib@0.3.3"
           arduino-cli compile --fqbn "esp32:esp32:waveshare_esp32_s3_touch_amoled_18:PSRAM=enabled,CDCOnBoot=cdc" --output-dir out firmware/cubi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: firmware
-          path: out/cubi.ino.bin
+          cp out/cubi.ino.bin cubi.ino.bin
 
-  publicar:
-    needs: [app, firmware]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: v2.0.${{ github.run_number }}

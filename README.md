@@ -8,15 +8,17 @@ Placa: Waveshare ESP32-S3-Touch-AMOLED-1.8 (V1 con SH8601 o V2 con CO5300, se de
 
 - **Canta**: el micrófono de la placa separa lo que parece voz (tonal, en 280–3000 Hz y que sube y baja como sílabas) y mueve la boca con el volumen. Si el tono es grave la boca se pone redonda; si es agudo, ancha. Si sostiene una nota fuerte, cierra los ojos.
 - **Siente la música**: sin voz, cierra los ojos felices y se mueve con el golpe del bajo. Suelta anillos, chispas y notas. Cada estilo (balada, tropical, reggaetón, electrónica, rock) tiene sus colores y su baile.
-- **Emociones**: normal, feliz, enojado, triste, sorpresa, enamorado, sueño, miedo y mareado. También reacciona al moverlo y al tocar la pantalla.
+- **Solo canta con música**: si alguien habla sin música, no mueve la boca.
+- **Reposo**: medio dormido, y de vez en cuando mira a los lados, guiña, bosteza, da un saltito o cabecea.
+- **Emociones**: normal, feliz, enojado, triste, sorpresa, enamorado, sueño, miedo y mareado. También reacciona al moverlo (frenón, acelerón, bache, vueltas) y al tocar la pantalla.
 
 ## App Android
 
 1. En la página del proyecto entra a **Releases**, abre la última versión y descarga **Cubi.apk** desde el celular.
 2. Ábrelo e instálalo (Android pide permitir "instalar apps de esta fuente" la primera vez).
-3. Conecta el celular a la red **Cubi** (clave `12345678`) o a la misma WiFi de la casa, y abre la app.
+3. Abre la app con el Bluetooth prendido: se conecta sola a Cubi y el celular sigue con su internet.
 
-En la pestaña **Música** se ve en vivo si está cantando y se ajusta la sensibilidad. En **Ajustes** se pone la WiFi de la casa y se actualiza el robot.
+En la pestaña **Música** se ve en vivo si está cantando y se ajusta la sensibilidad. En **Ajustes** se actualiza el robot (eso sí va por WiFi: red **Cubi**, clave `12345678`, o la WiFi de la casa si se la pusiste).
 
 ## Actualizar el robot
 

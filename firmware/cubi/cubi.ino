@@ -10,6 +10,9 @@
 #include <Preferences.h>
 #include <ESP_I2S.h>
 #include <arduinoFFT.h>
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLE2902.h>
 #define XPOWERS_CHIP_AXP2101
 #include <XPowersLib.h>
 #include "es8311.h"
@@ -20,7 +23,8 @@
 // ---------- Tipos (antes de cualquier función por los prototipos de Arduino) ----------
 struct C3 { float r, g, b; };
 enum Emo { NEUTRAL, FELIZ, ENOJADO, TRISTE, SORPRESA, ENAMORADO, SUENO, MIEDO, MAREADO, N_EMO };
-enum { CANTA = N_EMO, SIENTE, N_CARAS };  // caras de la música (no se piden desde la app)
+enum { CANTA = N_EMO, SIENTE, REPOSO, N_CARAS };  // caras de la música y del reposo (no se piden desde la app)
+enum { NINGUNA, MIRAR, GUINO, BOSTEZO, SALTITO, CABECEO, N_ANIM };  // animaciones al azar en reposo
 enum Modo { NORMAL, WHATSAPP, RING, ENLLAMADA };
 enum Estilo { NADA, VOZ, BALADA, TROPICAL, REGGAETON, ELECTRO, ROCK, N_EST };
 struct V { float x, y, z; };
@@ -32,10 +36,16 @@ struct Cara {
   float arco;                  // párpado de abajo en arco: ojos felices ^ ^ (0..1)
   float ceja, cejaAng, cejaY;  // cejas: cuánto se ven (0..1), inclinación (+ enojo, - preocupación), altura extra
   float boca;                  // boca quieta: 1 sonrisa, -1 triste, 2 "o", 0 sin boca
-  float rubor, dy;             // mejillas (0..1) y altura de los ojos
+  float dy;                    // altura de los ojos
   C3 c1, c2;                   // color del ojo de arriba hacia abajo
 };
-const int N_FLOAT = 12;  // floats al inicio de Cara (se animan en bloque)
+const int N_FLOAT = 11;  // floats al inicio de Cara (se animan en bloque)
+struct Params {  // argumentos de una orden (de la app por WiFi o Bluetooth)
+  String k[8], v[8]; int n = 0;
+  void add(const String &a, const String &b) { if (n < 8) { k[n] = a; v[n++] = b; } }
+  bool has(const char *x) const { for (int i = 0; i < n; i++) if (k[i] == x) return true; return false; }
+  String get(const char *x) const { for (int i = 0; i < n; i++) if (k[i] == x) return v[i]; return ""; }
+};
 
 // ---------- Pines ----------
 static const int P_SDA = 15, P_SCL = 14;
@@ -281,24 +291,29 @@ void audioInit() {
 // =====================================================================================
 const char *EMO_NOM[N_EMO] = { "neutral", "feliz", "enojado", "triste", "sorpresa", "enamorado", "sueno", "miedo", "mareado" };
 Cara PRESET[N_CARAS] = {
-  //  ew   eh   er   lid    ang   arco  ceja  cAng  cY  boca  rubor dy
-  {  92, 128,  40, 0.00,  0.00, 0.00, 0.0,  0.0,  0,  0,   0.0,   0, hx(0x7CF7FF), hx(0x2E8BFF) },  // neutral
-  {  96, 120,  44, 0.00,  0.00, 0.55, 0.0,  0.0,  0,  1,   0.7,  -4, hx(0xFFE66B), hx(0xFF9F1C) },  // feliz
-  {  98, 112,  30, 0.10,  0.80, 0.00, 1.0,  0.9,  0, -0.6, 0.0,   8, hx(0xFF6A3D), hx(0xC1121F) },  // enojado
-  {  88, 118,  40, 0.06, -0.60, 0.00, 0.8, -0.7,  0, -1,   0.0,  16, hx(0x9CC9FF), hx(0x4361EE) },  // triste
-  { 108, 150,  54, 0.00,  0.00, 0.00, 1.0,  0.0, 14,  2,   0.0, -10, hx(0xFFFFFF), hx(0x9BF6FF) },  // sorpresa
-  {  92, 124,  44, 0.00,  0.00, 0.35, 0.0,  0.0,  0,  1,   1.0,   0, hx(0xFF8FCF), hx(0xFF2E7E) },  // enamorado
-  {  92, 128,  40, 0.62,  0.00, 0.00, 0.0,  0.0,  0,  0,   0.0,  14, hx(0xC3B5FF), hx(0x6A4CFF) },  // sueño
-  {  76, 112,  36, 0.00, -0.30, 0.00, 1.0, -0.6, 10, -0.6, 0.0,   6, hx(0xEDEBFF), hx(0x9D8DF1) },  // miedo
-  {  92, 120,  46, 0.00,  0.00, 0.00, 0.0,  0.0,  0, -0.5, 0.0,   0, hx(0xC6FF6B), hx(0x2DC653) },  // mareado
-  {  96, 126,  44, 0.00,  0.00, 0.20, 0.7, -0.3,  6,  0,   0.5,  -6, hx(0xFFB86B), hx(0xFF4D8D) },  // canta
-  {  96, 120,  44, 0.00,  0.00, 0.90, 0.0,  0.0,  0,  1,   0.5,   0, hx(0x7CF7FF), hx(0x2E8BFF) },  // siente la música
+  //  ew   eh   er   lid    ang   arco  ceja  cAng  cY  boca  dy
+  {  92, 128,  40, 0.00,  0.00, 0.00, 0.0,  0.0,  0,  0,     0, hx(0x7CF7FF), hx(0x2E8BFF) },  // neutral
+  {  96, 120,  44, 0.00,  0.00, 0.55, 0.0,  0.0,  0,  1,    -4, hx(0xFFE66B), hx(0xFF9F1C) },  // feliz
+  {  98, 112,  30, 0.10,  0.80, 0.00, 1.0,  0.9,  0, -0.6,   8, hx(0xFF6A3D), hx(0xC1121F) },  // enojado
+  {  88, 118,  40, 0.06, -0.60, 0.00, 0.8, -0.7,  0, -1,    16, hx(0x9CC9FF), hx(0x4361EE) },  // triste
+  { 108, 150,  54, 0.00,  0.00, 0.00, 1.0,  0.0, 14,  2,   -10, hx(0xFFFFFF), hx(0x9BF6FF) },  // sorpresa
+  {  92, 124,  44, 0.00,  0.00, 0.35, 0.0,  0.0,  0,  1,     0, hx(0xFF8FCF), hx(0xFF2E7E) },  // enamorado
+  {  92, 128,  40, 0.62,  0.00, 0.00, 0.0,  0.0,  0,  0,    14, hx(0xC3B5FF), hx(0x6A4CFF) },  // sueño
+  {  76, 112,  36, 0.00, -0.30, 0.00, 1.0, -0.6, 10, -0.6,   6, hx(0xEDEBFF), hx(0x9D8DF1) },  // miedo
+  {  92, 120,  46, 0.00,  0.00, 0.00, 0.0,  0.0,  0, -0.5,   0, hx(0xC6FF6B), hx(0x2DC653) },  // mareado
+  {  96, 126,  44, 0.00,  0.00, 0.20, 0.7, -0.3,  6,  0,    -6, hx(0xFFB86B), hx(0xFF4D8D) },  // canta
+  {  96, 120,  44, 0.00,  0.00, 0.90, 0.0,  0.0,  0,  1,     0, hx(0x7CF7FF), hx(0x2E8BFF) },  // siente la música
+  {  94, 118,  42, 0.46,  0.00, 0.08, 0.0,  0.0,  0,  0,     8, hx(0x6FE3F0), hx(0x2E6BFF) },  // reposo: medio dormido
 };
-Cara cur = PRESET[NEUTRAL], tgt;
-int caraAct = NEUTRAL;
+const uint16_t DUR_ANIM[N_ANIM] = { 0, 2600, 1100, 2200, 1100, 2600 };
+Cara cur = PRESET[REPOSO], tgt;
+int caraAct = REPOSO;
 Emo emo = NEUTRAL, emoBase = NEUTRAL;
 uint32_t emoHasta = 0;
-void setEmo(Emo e, uint32_t ms) { if (e != emo) sonar(SONIDO_EMO[e]); emo = e; emoHasta = ms ? millis() + ms : 0; }
+bool emoForzada = false;  // pedida desde la app o tocando: le gana a la música; las del movimiento no
+uint8_t anim = NINGUNA; uint32_t animT0 = 0, animProx = 8000, animPaso = 0;
+float bostezo = 0, abreDer = 1;
+void setEmo(Emo e, uint32_t ms) { if (e != emo) sonar(SONIDO_EMO[e]); emo = e; emoHasta = ms ? millis() + ms : 0; emoForzada = false; }
 
 Modo modo = NORMAL;
 uint32_t modoDesde = 0, modoHasta = 0, proxRing = 0;
@@ -311,7 +326,9 @@ void evento(const String &t) {
   else if (t == "colgar") { setModo(NORMAL, 0); sonar(S_COLGAR); setEmo(FELIZ, 1200); }
 }
 
-float lx = 0, ly = 0, tlx = 0, tly = 0, bounce = 0, escala = 1, pulso = 0, eyeCy = H / 2, sqx = 1, sqy = 1;
+float lx = 0, ly = 0, vlx = 0, vly = 0, tlx = 0, tly = 0, bounce = 0, escala = 1, pulso = 0, eyeCy = H / 2, sqx = 1, sqy = 1;
+C3 fondoC = { 0, 0, 0 };  // color detrás de los ojos (para suavizar sus bordes)
+uint32_t frameUs = 0;
 float bocaV = 0, anchoV = 0.5f, hablaV = 0, fondo = 0, giro = 0, tono = 0;
 uint32_t nextSacc = 0, nextBlink = 0, blinkT0 = 0, lastMotion = 0, fuerteDesde = 0;
 uint32_t demoT0 = 0, demoHasta = 0, demoBeat = 0; bool demoCanto = false;
@@ -335,26 +352,59 @@ void barra(float x0, float y0, float x1, float y1, float t, uint16_t c) {
   cv->fillCircle(x0, y0, t / 2, c); cv->fillCircle(x1, y1, t / 2, c);
 }
 
-// Ojo: halo, cuerpo con degradado, brillo y párpados recortados en negro. lado: -1 izquierdo, +1 derecho.
-void ojo(float cx, float cy, int lado, float abre) {
-  float w = cur.ew * U * escala * sqx, h = cur.eh * U * escala * sqy * abre;
+// Ojo: halo, cuerpo con degradado, brillos y párpados. lado: -1 izquierdo, +1 derecho. k: tamaño extra por perspectiva.
+void ojo(float cx, float cy, int lado, float abre, float k) {
+  float w = cur.ew * U * escala * sqx * k * (1 + (1 - abre) * 0.12f), h = cur.eh * U * escala * sqy * k * abre;
   if (h < 8 * U) { barra(cx - w * 0.38f, cy, cx + w * 0.38f, cy, 8 * U, c565(cur.c1)); return; }
-  float r = min(cur.er * U * escala, min(w, h) / 2), top = cy - h / 2, bot = cy + h / 2, m = 9 * U;
-  cv->fillRoundRect(cx - w / 2 - m, top - m, w + 2 * m, h + 2 * m, r + m, tenue(cur.c2, 0.22f));
+  float r = min(cur.er * U * escala * k, min(w, h) / 2), m = 9 * U;
+  C3 halo = mix(fondoC, cur.c2, 0.22f);
+  formaOjo(cx, cy, w, h, r, lado, m, halo, fondoC, false);   // halo
+  formaOjo(cx, cy, w, h, r, lado, 0, halo, halo, true);      // ojo con degradado
+  float top = cy - h / 2;  // brillos, solo si quedan por debajo del párpado
+  float gx[2] = { cx - w * 0.22f, cx - w * 0.05f }, gy[2] = { top + h * 0.22f, top + h * 0.37f }, gr[2] = { w * 0.11f, w * 0.05f };
+  for (int i = 0; i < 2; i++)
+    if (cur.arco < 0.4f && gy[i] - gr[i] > yParpado(gx[i], cx, cy, w, h, lado)) cv->fillCircle(gx[i], gy[i], gr[i], 0xFFFF);
+}
+
+// Altura del párpado de arriba en x: baja recto (sueño) y se inclina (enojo: baja por dentro; tristeza: por fuera)
+float yParpado(float x, float cx, float cy, float w, float h, int lado) {
+  float base = cy - h / 2 + cur.lid * h, yi = base + max(0.f, cur.ang) * h * 0.5f, yo = base + max(0.f, -cur.ang) * h * 0.45f;
+  float xo = cx + lado * w / 2, xi = cx - lado * w / 2;
+  return yo + (yi - yo) * (x - xo) / (xi - xo);
+}
+
+// Línea horizontal con los bordes suavizados (mezcla el pixel del borde con el color de atrás)
+void tramo(float xs, float xe, int y, C3 c, C3 bg) {
+  int a = ceilf(xs), b = floorf(xe);
+  if (b < a) { cv->drawPixel(int(xs), y, c565(mix(bg, c, xe - xs))); return; }
+  if (b > a) cv->drawFastHLine(a, y, b - a, c565(c));
+  if (a - xs > 0.02f) cv->drawPixel(a - 1, y, c565(mix(bg, c, a - xs)));
+  if (xe - b > 0.02f) cv->drawPixel(b, y, c565(mix(bg, c, xe - b)));
+}
+
+// Rectángulo redondeado del ojo, agrandado e píxeles, recortado por los dos párpados (sin pintar encima del fondo).
+void formaOjo(float cx, float cy, float w, float h, float r, int lado, float e, C3 col, C3 bg, bool degradado) {
+  float top = cy - h / 2 - e, bot = cy + h / 2 + e, R = r + e, x0 = cx - w / 2 - e, x1 = cx + w / 2 + e;
+  float ey = cy + h / 2 + h * 0.25f, erx = w * 0.78f - e, ery = cur.arco * h * 1.05f - e;  // arco de abajo: ojos felices ^ ^
+  bool arco = cur.arco > 0.02f && ery > 1 && erx > 1;
+  float xo = cx + lado * w / 2, xi = cx - lado * w / 2;
+  float yo = yParpado(xo, cx, cy, w, h, lado) - e, pend = (yParpado(xi, cx, cy, w, h, lado) - e - yo) / (xi - xo);
   for (int y = ceilf(top); y <= bot; y++) {
     float d = 0, off = 0;
-    if (y < top + r) d = top + r - y; else if (y > bot - r) d = y - (bot - r);
-    if (d > 0) off = r - sqrtf(max(0.f, r * r - d * d));
-    cv->drawFastHLine(cx - w / 2 + off, y, w - 2 * off, c565(mix(cur.c1, cur.c2, (y - top) / h)));
+    if (y < top + R) d = top + R - y; else if (y > bot - R) d = y - (bot - R);
+    if (d > 0) off = R - sqrtf(max(0.f, R * R - d * d));
+    float xs = x0 + off, xe = x1 - off;
+    if (fabsf(pend) < 1e-4f) { if (y < yo) continue; }   // se ve solo lo que queda debajo del párpado
+    else if (pend > 0) xe = min(xe, xo + (y - yo) / pend); else xs = max(xs, xo + (y - yo) / pend);
+    if (xe <= xs) continue;
+    if (degradado) col = mix(cur.c1, cur.c2, constrain((y - top) / h, 0.f, 1.f));
+    float dy = (y - ey) / ery;
+    if (arco && fabsf(dy) < 1) {
+      float half = erx * sqrtf(1 - dy * dy), e1 = min(xe, cx - half), s2 = max(xs, cx + half);
+      if (e1 > xs) tramo(xs, e1, y, col, e1 < xe ? fondoC : bg);
+      if (xe > s2) tramo(s2, xe, y, col, s2 > xs ? fondoC : bg);
+    } else tramo(xs, xe, y, col, bg);
   }
-  cv->fillCircle(cx - w * 0.22f, top + h * 0.22f, w * 0.11f, 0xFFFF);
-  cv->fillCircle(cx - w * 0.05f, top + h * 0.37f, w * 0.05f, 0xFFFF);
-  // párpado de arriba: baja recto (sueño) y se inclina (enojo: baja por dentro; tristeza: por fuera)
-  float base = top + cur.lid * h, yi = base + max(0.f, cur.ang) * h * 0.5f, yo = base + max(0.f, -cur.ang) * h * 0.45f;
-  float xo = cx + lado * (w / 2 + m + 2), xi = cx - lado * (w / 2 + m + 2), yt = top - m - 2;
-  if (yo > top + 1 || yi > top + 1) { cv->fillTriangle(xo, yt, xi, yt, xi, yi, 0); cv->fillTriangle(xo, yt, xi, yi, xo, yo, 0); }
-  // párpado de abajo en arco: ojos felices ^ ^
-  if (cur.arco > 0.02f) cv->fillEllipse(cx, bot + h * 0.25f + m, w * 0.78f + m, cur.arco * h * 1.05f + m, 0);
 }
 
 void ceja(float cx, float top, int lado) {
@@ -392,10 +442,12 @@ void boca(float cx, float my) {
     float mw = (24 + 16 * anchoV + 6 * a) * U, mh = (8 + 44 * a * (1.1f - 0.35f * anchoV)) * U, t = 6 * U;
     cv->fillEllipse(cx, my, mw, mh, col);
     cv->fillEllipse(cx, my, mw - t, max(2.f, mh - t), oscuro);
-    if (mh > 20 * U) cv->fillEllipse(cx, my + (mh - t) * 0.55f, (mw - t) * 0.55f, (mh - t) * 0.3f, c565(hx(0xFF5C7A)));
     return;
   }
-  if (cur.boca > 1.5f) { cv->fillEllipse(cx, my, 15 * U, 19 * U, col); cv->fillEllipse(cx, my, 9 * U, 13 * U, oscuro); }
+  if (cur.boca > 1.5f || bostezo > 0.05f) {  // "o" (sorpresa) o bostezo
+    float b = bostezo;
+    cv->fillEllipse(cx, my, (15 + 10 * b) * U, (19 + 26 * b) * U, col); cv->fillEllipse(cx, my, (9 + 10 * b) * U, (13 + 26 * b) * U, oscuro);
+  }
   else if (cur.boca > 0.3f) cv->fillArc(cx, my - 30 * U, 34 * U, 26 * U, 35, 145, col);
   else if (cur.boca < -0.3f) cv->fillArc(cx, my + 30 * U, 34 * U, 26 * U, 215, 325, col);
 }
@@ -462,7 +514,8 @@ void animar(uint32_t now) {
   if (modoHasta && now > modoHasta) { modo = NORMAL; modoHasta = 0; }
   if (modo == RING && now > proxRing) { sonar(S_RING); proxRing = now + 4000; }
 
-  bool libre = modo == NORMAL && !emoHasta;
+  // la música manda, salvo una cara pedida desde la app (o tocando) y los avisos del celular
+  bool libre = modo == NORMAL && !(emoHasta && emoForzada);
   bool voz = aCanta; float bIn = aBoca, aIn = aAncho;
   est = libre ? estilo : NADA;
   if (now < demoHasta) {  // simulación para probar sin música (desde la app o por serie)
@@ -473,9 +526,9 @@ void animar(uint32_t now) {
     aIn = 0.5f + 0.5f * sinf(t * 1.3f);
     uint32_t b = (now - demoT0) / 476; if (b != demoBeat) { demoBeat = b; enGolpe(now); }
   }
-  if (!libre) voz = false;
   bool musica = est >= BALADA;
-  if (musica || voz) despertar(now);
+  if (!libre || !musica) voz = false;  // solo canta cuando hay música: si alguien habla, no mueve la boca
+  if (musica) despertar(now);
   if (beatCnt != beatVisto) { beatVisto = beatCnt; if (musica) enGolpe(now); }
   if (hiCnt != hiVisto) { hiVisto = hiCnt; if (musica) chispa(now); }
   estado = voz ? (musica ? 3 : 1) : (musica ? 2 : 0);
@@ -486,7 +539,29 @@ void animar(uint32_t now) {
   if (modo == RING) { c = SORPRESA; escala = 0.62f; cyBase = 92; tlx = 0; tly = 25; }
   if (modo == ENLLAMADA) { c = FELIZ; escala = 0.62f; cyBase = 92; tlx = 30 + 15 * sinf(now * 0.012f); tly = 22; }
   if (libre && musica) c = voz ? CANTA : (est == ROCK ? ENOJADO : SIENTE);
+
+  // reposo: medio dormido, y de vez en cuando una animación al azar
+  uint32_t ta = now - animT0;
+  bool reposo = libre && !musica && emo == NEUTRAL && !emoHasta;
+  if (!reposo || ta > DUR_ANIM[anim]) anim = NINGUNA;
+  if (reposo) {
+    c = REPOSO;
+    if (now > animProx) { anim = random(1, N_ANIM); animT0 = now; ta = 0; animPaso = 0; animProx = now + random(7000, 16000); }
+    if (anim == MIRAR || anim == GUINO) c = NEUTRAL;
+    if (anim == SALTITO) c = FELIZ;
+  }
   tgt = PRESET[c];
+  bostezo = 0; abreDer = 1;
+  switch (anim) {
+    case MIRAR: if (ta / 650 != animPaso) { animPaso = ta / 650; tlx = random(-55, 56); tly = random(-28, 20); } break;  // mira a todos lados
+    case GUINO: if (ta > 300 && ta < 650) abreDer = 0.05f; tgt.boca = 1; break;
+    case BOSTEZO: { float s = sinf(PI * ta / DUR_ANIM[BOSTEZO]); tgt.lid = 0.45f + 0.4f * s; tgt.boca = 2; bostezo = s; break; }
+    case SALTITO: if (ta / 380 != animPaso && ta < 800) { animPaso = ta / 380; bounce = -26 * U; sqy = 0.88f; sqx = 1.1f; } break;
+    case CABECEO:  // se va quedando dormido... y se despierta de golpe
+      if (ta < 1700) tgt.lid = 0.46f + 0.4f * ta / 1700.f;
+      else { tgt.lid = 0; if (!animPaso) { animPaso = 1; sqy = 1.15f; sqx = 0.9f; bounce = -14 * U; } }
+      break;
+  }
   if (musica) {
     if (est == TROPICAL) { tgt.c1 = hx(0xFFD23F); tgt.c2 = hx(0xFF6B00); }
     if (est == REGGAETON) { tgt.c1 = hx(0xFF4FD8); tgt.c2 = hx(0x7B2CFF); if (c == SIENTE) { tgt.arco = 0; tgt.lid = 0.36f; } }  // mirada "chimba"
@@ -498,7 +573,8 @@ void animar(uint32_t now) {
     if (bocaV > 0.65f) { if (!fuerteDesde) fuerteDesde = now; } else fuerteDesde = 0;
     if (fuerteDesde && now - fuerteDesde > 350) { tgt.arco = 0.85f; tgt.cejaY = 16; tgt.cejaAng = -0.5f; }
   }
-  if (voz || hablaV > 0.05f) cyBase -= 24 * U; else if (fabsf(tgt.boca) > 0.3f) cyBase -= 14 * U;
+  if (voz || hablaV > 0.05f) cyBase -= 24 * U; else if (fabsf(tgt.boca) > 0.3f && c != REPOSO) cyBase -= 14 * U;
+  if (c != caraAct) { sqy = 1.12f; sqx = 0.9f; }  // al cambiar de cara: estirón elástico
   caraAct = c;
 
   const float k = 0.22f;
@@ -508,25 +584,31 @@ void animar(uint32_t now) {
   cur.c1 = mix(cur.c1, tgt.c1, kc); cur.c2 = mix(cur.c2, tgt.c2, kc);
   eyeCy += (cyBase - eyeCy) * k;
   pulso *= 0.85f; escala *= 1 + pulso;
+  if (!musica) escala *= 1 + 0.012f * sinf(now * 0.0021f);  // respira
   bocaV += ((voz ? bIn : 0) - bocaV) * 0.6f;
   anchoV += (aIn - anchoV) * 0.3f;
   hablaV += ((voz ? 1.f : 0.f) - hablaV) * 0.25f;
   fondo = max(fondo * 0.86f, musica ? float(aBajoP) : 0.f);
-  sqx += (1 - sqx) * 0.18f; sqy += (1 - sqy) * 0.18f;
+  sqx += (1 - sqx) * 0.16f; sqy += (1 - sqy) * 0.16f;
   if (c == MAREADO) giro += 9;
 
   if (modo == NORMAL) {
     if (est == BALADA) { tlx = 25 * sinf(now * 0.0015f); tly = 0; }
     else if (est >= TROPICAL) tly = 0;  // el baile mueve la mirada en enGolpe()
     else if (fabsf(curvaLook) > 8) { tlx = curvaLook; tly = 0; }
-    else if (now > nextSacc) {
-      tlx = random(-45, 46); tly = random(-25, 26);
-      if (c == SUENO) tlx = tly = 0;
-      if (voz) tly = random(-12, 4);  // al hablar mira más al frente
-      nextSacc = now + random(1200, 4000);
+    else if (anim != MIRAR && now > nextSacc) {
+      float nx = random(-45, 46), ny = random(-25, 26);
+      if (c == REPOSO) { nx *= 0.5f; ny *= 0.4f; nextSacc = now + random(1800, 3000); }  // en reposo se mueve poco y despacio
+      if (c == SUENO) nx = ny = 0;
+      if (voz) ny = random(-12, 4);  // al hablar mira más al frente
+      if (fabsf(nx - tlx) > 55 && random(3) == 0) blinkT0 = now;  // en miradas largas a veces parpadea
+      tlx = nx; tly = ny;
+      if (c != REPOSO) nextSacc = now + random(1200, 4000);
     }
   }
-  lx += (tlx - lx) * 0.3f; ly += (tly - ly) * 0.3f;
+  // mirada con resorte: llega rápido y se pasa un poquito
+  vlx = (vlx + (tlx - lx) * 0.2f) * 0.6f; vly = (vly + (tly - ly) * 0.2f) * 0.6f;
+  lx += vlx; ly += vly;
   bounce *= 0.8f;
   if (now > nextBlink && c != SUENO) { blinkT0 = now; nextBlink = now + random(2000, 6000); }
 }
@@ -542,7 +624,11 @@ void dibujar(uint32_t now) {
   float sep = 100 * U * escala, cx = W / 2 + lx * U * escala + sx;
 
   // fondo: brillo que late con el bajo, anillos en cada golpe y chispas con los platillos
-  if (fondo > 0.02f) cv->fillCircle(W / 2, cy + 20 * U, (150 + 40 * fondo) * U, tenue(cur.c2, 0.05f + 0.13f * fondo));
+  fondoC = NEGRO;
+  if (fondo > 0.02f) {
+    fondoC = mix(NEGRO, cur.c2, 0.05f + 0.13f * fondo);
+    cv->fillCircle(W / 2, cy + 20 * U, (150 + 40 * fondo) * U, c565(fondoC));
+  }
   for (auto &a : anillos) if (a.t0) {
     float t = (now - a.t0) / 800.f;
     if (t >= 1) { a.t0 = 0; continue; }
@@ -567,12 +653,11 @@ void dibujar(uint32_t now) {
   } else if (caraAct == MAREADO) {
     espiral(cx - sep, cy, 52 * U, giro, c565(cur.c1)); espiral(cx + sep, cy, 52 * U, giro, c565(cur.c1));
   } else {
-    ojo(cx - sep, cy, -1, abre); ojo(cx + sep, cy, +1, abre);
+    // perspectiva: el ojo hacia donde mira se ve un poco más grande
+    ojo(cx - sep, cy, -1, abre, 1 - lx * 0.0022f); ojo(cx + sep, cy, +1, abre * abreDer, 1 + lx * 0.0022f);
   }
   float top = cy - cur.eh * U * escala / 2;
   ceja(cx - sep, top, -1); ceja(cx + sep, top, +1);
-  if (cur.rubor > 0.05f)
-    for (int l : { -1, 1 }) cv->fillEllipse(cx + l * (sep + 22 * U), cy + cur.eh * U * 0.5f + 14 * U, 26 * U, 11 * U, tenue(hx(0xFF5C8A), 0.45f * cur.rubor));
   boca(cx, cy + cur.eh * U * escala / 2 + 46 * U);
 
   if (caraAct == TRISTE) gota(cx - sep - 30 * U, cy + 60 * U + (now / 12) % 90, 9 * U, c565(hx(0x6FB7FF)));
@@ -669,7 +754,7 @@ void touchUpdate(uint32_t now) {
   uint8_t n;
   bool t = tpAddr && i2cR(tpAddr, 0x02, &n, 1) && (n & 0x0F) && (n & 0x0F) < 3;
   if (t && !tPrev) { tDown = now; nextDemo = now + 1500; despertar(now); }
-  if (t && now > nextDemo) { demoIdx = (demoIdx + 1) % N_EMO; setEmo(Emo(demoIdx), 3000); nextDemo = now + 1200; }
+  if (t && now > nextDemo) { demoIdx = (demoIdx + 1) % N_EMO; setEmo(Emo(demoIdx), 3000); emoForzada = true; nextDemo = now + 1200; }
   if (!t && tPrev && now - tDown < 600) {
     if (modo == RING || modo == WHATSAPP) setModo(NORMAL, 0);
     setEmo(FELIZ, 2000); sonar(S_RISA); bounce = -20;
@@ -720,57 +805,74 @@ void guardar() {
   prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan);
 }
 
+// Las órdenes llegan igual por WiFi (HTTP) o por Bluetooth: "ruta?clave=valor&...". Devuelve el texto o JSON de respuesta.
+String urlDec(const String &s) {
+  String o;
+  for (int i = 0; i < s.length(); i++) {
+    char c = s[i];
+    if (c == '+') o += ' ';
+    else if (c == '%' && i + 2 < s.length()) { o += char(strtol(s.substring(i + 1, i + 3).c_str(), nullptr, 16)); i += 2; }
+    else o += c;
+  }
+  return o;
+}
+
 uint32_t wifiTry = 0;
-void webInit() {
-  srv.enableCORS(true);  // la app carga su interfaz desde el celular y le pide datos al robot
-  srv.on("/", [] { srv.send_P(200, "text/html", PAGINA); });
-  srv.on("/e", [] {
-    String n = srv.arg("n");
-    for (int i = 0; i < N_EMO; i++) if (n == EMO_NOM[i]) { despertar(millis()); emoBase = NEUTRAL; demoHasta = 0; setEmo(Emo(i), 5000); return srv.send(200, "text/plain", "ok"); }
-    srv.send(400, "text/plain", "emocion desconocida");
-  });
-  srv.on("/evento", [] { despertar(millis()); evento(srv.arg("tipo")); srv.send(200, "text/plain", "ok"); });
-  srv.on("/sonar", [] {
-    String n = srv.arg("n");
-    for (auto &s : SONIDOS) if (n == s.n) { sonar(s.s); return srv.send(200, "text/plain", "ok"); }
-    srv.send(400, "text/plain", "sonido desconocido");
-  });
-  srv.on("/demo", [] { despertar(millis()); emoHasta = 0; demo(srv.arg("t") != "baile"); srv.send(200, "text/plain", "ok"); });
-  srv.on("/brillo", [] { brillo = constrain(srv.arg("v").toInt(), 0, 255); panel->setBrightness(brillo); srv.send(200, "text/plain", "ok"); });
-  srv.on("/ajuste", [] {
-    if (srv.hasArg("vol")) { volumen = constrain(srv.arg("vol").toInt(), 0, 100); if (es) es8311_voice_volume_set(es, volumen, NULL); sonar(S_WHATSAPP); }
-    if (srv.hasArg("son")) sonidoOn = srv.arg("son") == "1";
-    if (srv.hasArg("mus")) musicaOn = srv.arg("mus") == "1";
-    if (srv.hasArg("rot")) { rotacion = rotacion == 3 ? 1 : 3; cv->setRotation(rotacion); }
-    if (srv.hasArg("uv")) umbralVoz = constrain(srv.arg("uv").toFloat(), 0.05f, 0.95f);
-    if (srv.hasArg("gb")) ganBoca = constrain(srv.arg("gb").toFloat(), 0.3f, 3.f);
-    if (srv.hasArg("sk")) sensK = constrain(srv.arg("sk").toFloat(), 1.3f, 8.f);
-    if (srv.hasArg("mg")) { micGan = constrain(srv.arg("mg").toInt(), 0, 7); if (es) es8311_microphone_gain_set(es, (es8311_mic_gain_t)micGan); }
-    guardar(); srv.send(200, "text/plain", "ok");
-  });
-  srv.on("/wifi", [] {
-    String s = srv.arg("ssid");
-    if (!s.length()) return srv.send(400, "text/plain", "falta el nombre de la red");
-    prefs.putString("ssid", s); prefs.putString("pass", srv.arg("pass"));
-    srv.send(200, "text/plain", "ok");
+String atender(const String &ruta, const Params &p, int &cod) {
+  cod = 200;
+  if (ruta == "/e") {
+    String n = p.get("n");
+    for (int i = 0; i < N_EMO; i++) if (n == EMO_NOM[i]) { despertar(millis()); emoBase = NEUTRAL; demoHasta = 0; setEmo(Emo(i), 5000); emoForzada = true; return "ok"; }
+    cod = 400; return "emocion desconocida";
+  }
+  if (ruta == "/evento") { despertar(millis()); evento(p.get("tipo")); return "ok"; }
+  if (ruta == "/sonar") {
+    String n = p.get("n");
+    for (auto &s : SONIDOS) if (n == s.n) { sonar(s.s); return "ok"; }
+    cod = 400; return "sonido desconocido";
+  }
+  if (ruta == "/demo") { despertar(millis()); emoHasta = 0; demo(p.get("t") != "baile"); return "ok"; }
+  if (ruta == "/brillo") { brillo = constrain(p.get("v").toInt(), 0, 255); panel->setBrightness(brillo); return "ok"; }
+  if (ruta == "/ajuste") {
+    if (p.has("vol")) { volumen = constrain(p.get("vol").toInt(), 0, 100); if (es) es8311_voice_volume_set(es, volumen, NULL); sonar(S_WHATSAPP); }
+    if (p.has("son")) sonidoOn = p.get("son") == "1";
+    if (p.has("mus")) musicaOn = p.get("mus") == "1";
+    if (p.has("rot")) { rotacion = rotacion == 3 ? 1 : 3; cv->setRotation(rotacion); }
+    if (p.has("uv")) umbralVoz = constrain(p.get("uv").toFloat(), 0.05f, 0.95f);
+    if (p.has("gb")) ganBoca = constrain(p.get("gb").toFloat(), 0.3f, 3.f);
+    if (p.has("sk")) sensK = constrain(p.get("sk").toFloat(), 1.3f, 8.f);
+    if (p.has("mg")) { micGan = constrain(p.get("mg").toInt(), 0, 7); if (es) es8311_microphone_gain_set(es, (es8311_mic_gain_t)micGan); }
+    guardar(); return "ok";
+  }
+  if (ruta == "/wifi") {
+    String s = p.get("ssid");
+    if (!s.length()) { cod = 400; return "falta el nombre de la red"; }
+    prefs.putString("ssid", s); prefs.putString("pass", p.get("pass"));
     WiFi.disconnect(); wifiTry = 0;
-  });
-  srv.on("/estado", [] {
+    return "ok";
+  }
+  if (ruta == "/estado") {
     int bat = pmuOk && pmu.isBatteryConnect() ? pmu.getBatteryPercent() : -1;
     bool sta = WiFi.status() == WL_CONNECTED;
-    srv.send(200, "application/json", String("{\"emo\":\"") + EMO_NOM[emo] + "\",\"modo\":" + modo + ",\"estado\":" + estado +
+    return String("{\"emo\":\"") + EMO_NOM[emo] + "\",\"modo\":" + modo + ",\"estado\":" + estado +
       ",\"estilo\":\"" + EST_NOM[estilo] + "\",\"bpm\":" + int(aBpm) + ",\"bat\":" + bat + ",\"usb\":" + (pmuOk && pmu.isVbusIn() ? 1 : 0) +
       ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" +
       ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) + ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan +
-      ",\"red\":\"" + (sta ? WiFi.SSID() : String("")) + "\",\"ip\":\"" + (sta ? WiFi.localIP().toString() : String("")) + "\"}");
-  });
-  srv.on("/audio", [] {  // en vivo, para ver y calibrar el canto desde la app
+      ",\"red\":\"" + (sta ? WiFi.SSID() : String("")) + "\",\"ip\":\"" + (sta ? WiFi.localIP().toString() : String("")) + "\"}";
+  }
+  if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
     char b[300];
     snprintf(b, sizeof b, "{\"estado\":%u,\"estilo\":\"%s\",\"bpm\":%.0f,\"nivel\":%.2f,\"voz\":%.2f,\"canta\":%d,\"boca\":%.2f,\"ancho\":%.2f,"
       "\"bajo\":%.2f,\"rms\":%.0f,\"piso\":%.0f,\"golpes\":%lu}",
       estado, EST_NOM[estilo], aBpm, aNivel, aVoz, aCanta ? 1 : 0, aBoca, aAncho, aBajoP, aRms, aPiso, (unsigned long)beatCnt);
-    srv.send(200, "application/json", b);
-  });
+    return b;
+  }
+  cod = 404; return "no existe";
+}
+
+void webInit() {
+  srv.enableCORS(true);  // la app carga su interfaz desde el celular y le pide datos al robot
+  srv.on("/", [] { srv.send_P(200, "text/html", PAGINA); });
   srv.on("/update", HTTP_POST, [] {
     bool ok = !Update.hasError();
     srv.send(200, "text/plain", ok ? "Listo, reiniciando..." : "Fallo la actualizacion");
@@ -781,7 +883,81 @@ void webInit() {
     else if (u.status == UPLOAD_FILE_WRITE) Update.write(u.buf, u.currentSize);
     else if (u.status == UPLOAD_FILE_END) Update.end(true);
   });
+  srv.onNotFound([] {
+    Params p; int cod;
+    for (int i = 0; i < srv.args(); i++) p.add(srv.argName(i), srv.arg(i));
+    String r = atender(srv.uri(), p, cod);
+    srv.send(cod, r.startsWith("{") ? "application/json" : "text/plain", r);
+  });
   srv.begin();
+}
+
+// ---------- Bluetooth (BLE): la app se conecta sin quitarle el internet al celular ----------
+// Estilo "UART de Nordic": la app escribe "id|ruta?args" en RX y el robot responde "id|respuesta\n" por TX (en pedazos).
+#define BLE_SRV "6e400001-b5a3-f393-e0a9-e50e24dcca9e"
+#define BLE_RX  "6e400002-b5a3-f393-e0a9-e50e24dcca9e"
+#define BLE_TX  "6e400003-b5a3-f393-e0a9-e50e24dcca9e"
+struct OrdenBle { char t[240]; };
+QueueHandle_t bleCola;
+BLECharacteristic *bleTx;
+volatile bool bleOn = false;
+
+class BleRx : public BLECharacteristicCallbacks {
+  void onWrite(BLECharacteristic *c) override {  // corre en la tarea del Bluetooth: solo encola, loop() atiende
+    OrdenBle o{}; String v = c->getValue();
+    strlcpy(o.t, v.c_str(), sizeof o.t);
+    xQueueSend(bleCola, &o, 0);
+  }
+};
+class BleSrv : public BLEServerCallbacks {
+  void onConnect(BLEServer *) override { bleOn = true; }
+  void onDisconnect(BLEServer *s) override { bleOn = false; s->startAdvertising(); }
+};
+
+void bleInit() {
+  bleCola = xQueueCreate(8, sizeof(OrdenBle));
+  BLEDevice::init(AP_SSID);
+  BLEDevice::setMTU(247);
+  BLEServer *s = BLEDevice::createServer();
+  s->setCallbacks(new BleSrv());
+  BLEService *sv = s->createService(BLE_SRV);
+  BLECharacteristic *rx = sv->createCharacteristic(BLE_RX, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
+  rx->setCallbacks(new BleRx());
+  bleTx = sv->createCharacteristic(BLE_TX, BLECharacteristic::PROPERTY_NOTIFY);
+  bleTx->addDescriptor(new BLE2902());
+  sv->start();
+  BLEAdvertising *a = BLEDevice::getAdvertising();
+  a->addServiceUUID(BLE_SRV);
+  a->setScanResponse(true);
+  BLEDevice::startAdvertising();
+}
+
+void bleAtender() {
+  OrdenBle o;
+  while (xQueueReceive(bleCola, &o, 0)) {
+    String t = o.t;
+    int bar = t.indexOf('|'), q = t.indexOf('?');
+    String id = t.substring(0, bar), ruta = q < 0 ? t.substring(bar + 1) : t.substring(bar + 1, q);
+    Params p;
+    if (q >= 0) {
+      String qs = t.substring(q + 1);
+      while (qs.length()) {
+        int amp = qs.indexOf('&');
+        String par = amp < 0 ? qs : qs.substring(0, amp);
+        int eq = par.indexOf('=');
+        p.add(urlDec(eq < 0 ? par : par.substring(0, eq)), eq < 0 ? String() : urlDec(par.substring(eq + 1)));
+        qs = amp < 0 ? String() : qs.substring(amp + 1);
+      }
+    }
+    int cod; String r = atender(ruta, p, cod);
+    String msg = id + "|" + (cod == 200 ? "" : "!") + r + "\n";
+    for (int i = 0; bleOn && i < msg.length(); i += 180) {
+      String parte = msg.substring(i, i + 180);
+      bleTx->setValue((uint8_t *)parte.c_str(), parte.length());
+      bleTx->notify();
+      delay(4);
+    }
+  }
 }
 
 // La red guardada desde la app va primero; si no hay, alterna las dos de config.h.
@@ -806,8 +982,9 @@ void serialDebug() {
     if (ch == 'c') {
       uint16_t dim[2] = { 368, 448 };
       Serial.write("FB"); Serial.write((uint8_t *)dim, 4); Serial.write((uint8_t *)cv->getFramebuffer(), 368 * 448 * 2); Serial.flush();
-    } else if (ch >= '0' && ch <= '8') { emoBase = NEUTRAL; demoHasta = 0; setEmo(Emo(ch - '0'), 8000); }
+    } else if (ch >= '0' && ch <= '8') { emoBase = NEUTRAL; demoHasta = 0; setEmo(Emo(ch - '0'), 8000); emoForzada = true; }
     else if (ch == 's' || ch == 'm') { emoHasta = 0; demo(ch == 's'); }
+    else if (ch == 't') Serial.printf("cuadro %lu us\n", (unsigned long)frameUs);
   }
 }
 
@@ -849,16 +1026,23 @@ void setup() {
   MDNS.begin(NOMBRE_MDNS);
   MDNS.addService("http", "tcp", 80);
   webInit();
+  bleInit();
 }
 
 void loop() {
   uint32_t now = millis();
   srv.handleClient();
   serialDebug();
+  bleAtender();
   imuUpdate(now);
   touchUpdate(now);
   wifiCheck(now);
   energiaUpdate(now);
   static uint32_t lastFrame;
-  if (now - lastFrame >= 33) { lastFrame = now; animar(now); dibujar(now); cv->flush(); }
+  if (now - lastFrame >= 33) {  // 30 cuadros por segundo (las animaciones están afinadas para este ritmo)
+    lastFrame = now;
+    uint32_t t0 = micros();
+    animar(now); dibujar(now); cv->flush();
+    frameUs = micros() - t0;
+  }
 }

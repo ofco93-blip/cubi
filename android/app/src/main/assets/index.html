@@ -141,25 +141,25 @@ progress { width: 100%; accent-color: var(--accent); }
     <div class="row"><span>Sonidos del robot</span><label class="sw"><input type="checkbox" id="son"><i></i></label></div>
     <button class="btn" id="rot">Girar la pantalla 180°</button>
   </div>
-  <h2>WiFi de la casa</h2>
+  <h2>Bluetooth</h2>
   <div class="card">
-    <p class="note" id="redActual">El robot siempre crea su propia red “Cubi”. Además se puede conectar a la WiFi de la casa.</p>
-    <input type="text" id="ssid" placeholder="Nombre de la red" autocomplete="off" autocapitalize="off">
-    <input type="password" id="pass" placeholder="Clave">
-    <button class="btn main" id="guardarWifi">Guardar en el robot</button>
-  </div>
-  <h2>Conexión</h2>
-  <div class="card">
-    <input type="text" id="dir" placeholder="192.168.4.1" inputmode="decimal" autocapitalize="off">
-    <div class="grid2"><button class="btn" id="conectar">Conectar</button><button class="btn" id="buscar">Buscar en la WiFi</button></div>
-    <p class="note">Conectado a “Cubi” (clave 12345678) la dirección es 192.168.4.1. En la WiFi de la casa usa “Buscar”.</p>
+    <p class="note" id="bleNota">La app se conecta sola a Cubi por Bluetooth. El celular sigue con su internet.</p>
+    <button class="btn main" id="reconectar">Conectar por Bluetooth</button>
   </div>
   <h2>Actualizar el robot</h2>
   <div class="card">
-    <p class="note">Elige el archivo <b>cubi.ino.bin</b> que viene en cada versión del proyecto.</p>
+    <p class="note">Esto sí va por WiFi porque el archivo es grande. Conecta el celular un momento a la red <b>Cubi</b> (clave 12345678), o pon abajo la WiFi de la casa para no tener que cambiar de red.</p>
+    <p class="note">Elige el archivo <b>cubi.ino.bin</b> de la última versión del proyecto.</p>
     <input type="file" id="bin" accept=".bin">
     <progress id="prog" max="100" value="0" hidden></progress>
     <button class="btn main" id="subir">Subir al robot</button>
+  </div>
+  <h2>WiFi de la casa (opcional)</h2>
+  <div class="card">
+    <p class="note" id="redActual">Solo sirve para actualizar el robot sin cambiar de red.</p>
+    <input type="text" id="ssid" placeholder="Nombre de la red" autocomplete="off" autocapitalize="off">
+    <input type="password" id="pass" placeholder="Clave">
+    <button class="btn" id="guardarWifi">Guardar en el robot</button>
   </div>
   <p class="note" id="info" style="margin:18px 2px"></p>
 </section>
@@ -182,52 +182,52 @@ const SONIDOS = [['risa', 'Risa'], ['feliz', 'Feliz'], ['sorpresa', 'Sorpresa'],
   ['enamorado', 'Amor'], ['mareado', 'Mareado'], ['sueno', 'Sueño'], ['arranque', 'Arranque']];
 const ESTADOS = ['Silencio', 'Hablando', 'Sintiendo la música', 'Cantando'];
 
-let base = '';
-try { base = localStorage.getItem('robot') || ''; } catch (e) {}
-let vivo = false, tab = 'cara', ini = true;
+let vivo = false, tab = 'cara', ini = true, ipCasa = '';
 
 function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove('on'), 2600); }
 
-async function api(path, ms = 2500, url = base) {
-  const c = new AbortController(), t = setTimeout(() => c.abort(), ms);
-  try {
-    const r = await fetch(url + path, { signal: c.signal });
-    if (!r.ok) throw new Error(await r.text());
-    return (r.headers.get('content-type') || '').includes('json') ? r.json() : r.text();
-  } finally { clearTimeout(t); }
+// ---------- Bluetooth: la parte Android conecta; aquí se mandan "id|ruta" y llegan "id|respuesta" ----------
+const pend = {}; let sigId = 1;
+const TEXTO_BLE = {
+  buscando: 'Buscando a Cubi por Bluetooth…', conectando: 'Conectando…', conectado: 'Conectado por Bluetooth',
+  desconectado: 'Se desconectó · toca para reconectar', 'no-encontrado': 'No encontré a Cubi · toca para buscar',
+  apagado: 'Prende el Bluetooth del celular', 'sin-permiso': 'Falta permiso de Bluetooth · toca para pedirlo',
+};
+function bleEstado(s) {
+  vivo = s === 'conectado';
+  $('dot').classList.toggle('on', vivo);
+  $('conn').textContent = TEXTO_BLE[s] || s;
+  if (vivo) { ini = true; estado(); }
 }
-const mandar = p => api(p).catch(() => toast('No pude hablar con el robot'));
-
-function usar(url) {
-  base = url.replace(/\/$/, '');
-  try { localStorage.setItem('robot', base); } catch (e) {}
+function bleRespuesta(linea) {
+  const i = linea.indexOf('|'), p = pend[linea.slice(0, i)];
+  if (!p) return;
+  delete pend[linea.slice(0, i)];
+  const r = linea.slice(i + 1);
+  if (r.startsWith('!')) p.rej(new Error(r.slice(1)));
+  else p.res(r.startsWith('{') ? JSON.parse(r) : r);
 }
-
-// ---------- buscar al robot ----------
-async function probar(url, ms) { try { const j = await api('/estado', ms, url); return j && j.ver ? url : null; } catch (e) { return null; } }
-async function buscar(conRed) {
-  $('conn').textContent = 'Buscando al robot…';
-  const cand = [base, 'http://192.168.4.1', 'http://cubi.local'].filter(Boolean);
-  for (const u of cand) if (await probar(u, 1500)) { usar(u); return true; }
-  const sub = conRed && window.Android ? Android.subred() : '';
-  if (!sub) return false;
-  for (let i = 1; i < 255; i += 32) {
-    const lote = [];
-    for (let k = i; k < Math.min(i + 32, 255); k++) lote.push(probar('http://' + sub + k, 1200));
-    const ok = (await Promise.all(lote)).find(Boolean);
-    if (ok) { usar(ok); return true; }
-  }
-  return false;
+function api(path, ms = 3000) {
+  return new Promise((res, rej) => {
+    if (!vivo || !window.Android) return rej(new Error('Sin conexión con Cubi'));
+    const id = String(sigId++);
+    pend[id] = { res, rej };
+    Android.bleEnviar(id + '|' + path);
+    setTimeout(() => { if (pend[id]) { delete pend[id]; rej(new Error('Cubi no respondió')); } }, ms);
+  });
 }
+const mandar = p => api(p).catch(e => toast(e.message));
+function conectar() { if (window.Android) Android.bleBuscar(); else $('conn').textContent = 'Abre esto desde la app Cubi'; }
+$('conn').onclick = () => { if (!vivo) conectar(); };
+$('reconectar').onclick = conectar;
 
 // ---------- estado ----------
 function pintarEstado(j) {
-  vivo = true;
-  $('dot').classList.add('on');
-  $('conn').textContent = base.replace('http://', '') + (j.bat >= 0 ? ' · batería ' + j.bat + '%' : '');
   document.querySelectorAll('.face').forEach(b => b.classList.toggle('sel', b.dataset.n === j.emo));
+  $('conn').textContent = 'Conectado por Bluetooth' + (j.bat >= 0 ? ' · batería ' + j.bat + '%' : '');
+  ipCasa = j.ip || '';
   $('info').textContent = 'Cubi v' + j.ver + (j.ip ? ' · en la WiFi ' + j.red + ' como ' + j.ip : '');
-  $('redActual').textContent = j.red ? 'Conectado a la WiFi “' + j.red + '” (' + j.ip + ').' : 'El robot no está en la WiFi de la casa. Siempre crea su propia red “Cubi”.';
+  $('redActual').textContent = j.red ? 'Cubi está en la WiFi “' + j.red + '”: puedes actualizarlo desde esa red.' : 'Solo sirve para actualizar el robot sin cambiar de red.';
   if (ini) {
     ini = false;
     $('bri').value = j.bri; $('vol').value = j.vol; $('son').checked = !!j.son; $('mus').checked = !!j.mus;
@@ -237,14 +237,15 @@ function pintarEstado(j) {
   }
 }
 async function estado() {
-  if (!base) return;
-  try { pintarEstado(await api('/estado')); }
-  catch (e) { vivo = false; $('dot').classList.remove('on'); $('conn').textContent = 'Sin conexión · toca Ajustes › Buscar'; }
+  if (!vivo) return;
+  try { pintarEstado(await api('/estado')); } catch (e) {}
 }
 
 // ---------- música en vivo ----------
+let audioEnCurso = false;
 async function audio() {
-  if (tab !== 'musica' || !vivo) return;
+  if (tab !== 'musica' || !vivo || audioEnCurso) return;
+  audioEnCurso = true;
   try {
     const a = await api('/audio', 1000);
     const chip = $('chip');
@@ -257,6 +258,7 @@ async function audio() {
     m.style.height = (8 + a.boca * 70) + 'px';
     m.style.width = (44 + a.ancho * 40) + 'px';
   } catch (e) {}
+  audioEnCurso = false;
 }
 
 // ---------- ajustes ----------
@@ -291,17 +293,20 @@ $('guardarWifi').onclick = async () => {
     toast('Guardado. El robot se está conectando a “' + s + '”.');
   } catch (e) { toast('No pude guardar: ' + e.message); }
 };
-$('conectar').onclick = async () => {
-  let d = $('dir').value.trim();
-  if (!d) return toast('Escribe la dirección del robot');
-  if (!d.startsWith('http')) d = 'http://' + d;
-  if (await probar(d, 2500)) { usar(d); ini = true; estado(); toast('Conectado'); } else toast('No encontré el robot en ' + d);
-};
-$('buscar').onclick = async () => { if (await buscar(true)) { ini = true; estado(); toast('Robot encontrado'); } else toast('No lo encontré. ¿El celular está en la misma WiFi?'); };
+// Prueba primero la WiFi de la casa (si el robot está en ella) y si no, la red propia de Cubi.
+async function direccionWifi() {
+  for (const u of [ipCasa && 'http://' + ipCasa, 'http://192.168.4.1'].filter(Boolean)) {
+    const c = new AbortController(), t = setTimeout(() => c.abort(), 2000);
+    try { if ((await fetch(u + '/estado', { signal: c.signal })).ok) return u; } catch (e) {} finally { clearTimeout(t); }
+  }
+  return '';
+}
 
-$('subir').onclick = () => {
+$('subir').onclick = async () => {
   const f = $('bin').files[0];
   if (!f) return toast('Primero elige el archivo .bin');
+  const base = await direccionWifi();
+  if (!base) return toast('No veo a Cubi por WiFi. Conecta el celular a la red “Cubi” y vuelve a intentar.');
   const fd = new FormData(); fd.append('f', f, f.name);
   const x = new XMLHttpRequest(), p = $('prog');
   p.hidden = false; p.value = 0;
@@ -334,12 +339,9 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 });
 
 etiquetas();
-(async () => {
-  if (await buscar(true)) estado();
-  else { $('conn').textContent = 'Sin conexión · toca Ajustes › Buscar'; }
-  setInterval(estado, 2000);
-  setInterval(audio, 150);
-})();
+conectar();
+setInterval(estado, 2000);
+setInterval(audio, 150);
 </script>
 </body>
 </html>
