@@ -102,7 +102,7 @@ section[hidden] { display: none; }
     <p class="note">También con <b>doble toque</b> en la pantalla de Cubi. Mientras Gemini te contesta, Cubi mueve la boca.</p>
     <button class="btn" id="permisoGemini" hidden>Permitir que Cubi abra Gemini con la pantalla apagada</button>
   </div>
-  <h2>Cara</h2>
+  <h2>Reacciones</h2>
   <div class="grid" id="caras"></div>
   <h2>Avisos</h2>
   <div class="grid2">
@@ -129,6 +129,8 @@ section[hidden] { display: none; }
     <button class="btn main" data-demo="canto">Que cante</button>
     <button class="btn" data-demo="baile">Que baile</button>
   </div>
+  <h2>Bailes</h2>
+  <div class="grid2" id="bailes"></div>
   <h2>Ajustar el canto</h2>
   <div class="card">
     <div class="row"><span>Reaccionar a la música</span><label class="sw"><input type="checkbox" id="mus"><i></i></label></div>
@@ -188,10 +190,18 @@ section[hidden] { display: none; }
 
 <script>
 const $ = id => document.getElementById(id);
-const CARAS = [
-  ['neutral', 'Normal', '#7CF7FF'], ['feliz', 'Feliz', '#FFE66B'], ['enojado', 'Enojado', '#FF6A3D'],
-  ['triste', 'Triste', '#9CC9FF'], ['sorpresa', 'Sorpresa', '#FFFFFF'], ['enamorado', 'Enamorado', '#FF8FCF'],
-  ['sueno', 'Sueño', '#C3B5FF'], ['miedo', 'Miedo', '#EDEBFF'], ['mareado', 'Mareado', '#C6FF6B'],
+const CARAS = [  // reacciones de caricatura (las de Isa): [nombre en Cubi, texto, color]
+  ['saludo', 'Saludo', '#7CF7FF'], ['risa', 'Risa', '#FFE66B'], ['amor', 'Amor', '#FF8FCF'], ['sorpresa', 'Sorpresa', '#FFFFFF'],
+  ['guino', 'Guiño', '#7CF7FF'], ['curiosa', 'Curioso', '#9CC9FF'], ['caricia', 'Caricia', '#FFB86B'], ['mareo', 'Mareado', '#C6FF6B'],
+  ['frenazo', 'Frenazo', '#FF6A3D'], ['aceleron', 'Acelerón', '#FFD23F'], ['arranque', 'Arranque', '#7CF7FF'], ['bache', 'Hueco', '#C3B5FF'],
+  ['izq', 'Curva izq.', '#9CC9FF'], ['der', 'Curva der.', '#9CC9FF'], ['maps_izq', 'Maps izq.', '#6FE3F0'], ['maps_der', 'Maps der.', '#6FE3F0'],
+  ['llegamos', 'Llegamos', '#FFE66B'], ['sol', 'Sol', '#FFD23F'], ['lluvia', 'Lluvia', '#9CC9FF'], ['frio', 'Frío', '#EDEBFF'],
+  ['calor', 'Calor', '#FF6A3D'], ['bateria', 'Batería', '#C6FF6B'],
+];
+const BAILES = [  // [nombre en Cubi, texto, canta]
+  ['pop', 'Pop con micrófono', 1], ['urbano', 'Urbano con gorra', 1], ['tropical', 'Salsa con sombrero', 1], ['electro', 'Electrónica con luces', 0],
+  ['dj', 'DJ con audífonos', 0], ['kpop', 'K-pop', 1], ['corazon', 'Corazoncito', 1], ['groove', 'Groove', 0], ['rock', 'Rock', 1],
+  ['guitarra', 'Guitarra acústica', 0], ['disfruta', 'Suave', 1], ['jazz', 'Jazz con saxofón', 0], ['piano', 'Piano', 1], ['barras', 'Barritas', 0],
 ];
 const SONIDOS = [['risa', 'Risa'], ['feliz', 'Feliz'], ['sorpresa', 'Sorpresa'], ['enojado', 'Enojado'], ['triste', 'Triste'],
   ['enamorado', 'Amor'], ['mareado', 'Mareado'], ['sueno', 'Sueño'], ['arranque', 'Arranque']];
@@ -345,8 +355,14 @@ CARAS.forEach(([n, t, c]) => {
   const b = document.createElement('button');
   b.className = 'face'; b.dataset.n = n; b.style.setProperty('--c', c);
   b.innerHTML = '<span class="eyes"><i></i><i></i></span>' + t;
-  b.onclick = () => mandar('/e?n=' + n);
+  b.onclick = () => mandar('/r?n=' + n);
   $('caras').appendChild(b);
+});
+BAILES.forEach(([n, t, canta]) => {
+  const b = document.createElement('button');
+  b.className = 'btn'; b.textContent = t;
+  b.onclick = () => { mandar('/demo?t=' + (canta ? 'canto' : 'baile') + '&r=' + n); toast('Cubi baila: ' + t); };
+  $('bailes').appendChild(b);
 });
 SONIDOS.forEach(([n, t]) => {
   const b = document.createElement('button');

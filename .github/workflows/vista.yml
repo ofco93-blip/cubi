@@ -17,8 +17,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Dibujar
         run: |
-          pip install -q pillow
-          g++ -O2 -std=c++17 -I herramientas/vista herramientas/vista/vista.cpp firmware/cubi/caras.cpp firmware/cubi/dibujo.cpp -o vista
+          python3 -m pip install -q --break-system-packages pillow
+          g++ -O2 -std=c++17 -I herramientas/vista herramientas/vista/vista.cpp firmware/cubi/caras.cpp firmware/cubi/dibujo.cpp -o vista 2> err.txt             || { grep -m 10 "error" err.txt | while read -r l; do echo "::error::$l"; done; exit 1; }
           python3 herramientas/vista/hoja.py ./vista vista canta_jazz canta_dj canta_piano canta_barras canta_pop canta_tropical canta_urbano canta_electro reposo escucha habla frenazo bache
       - uses: softprops/action-gh-release@v2
         with:

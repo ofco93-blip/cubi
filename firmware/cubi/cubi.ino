@@ -1,5 +1,5 @@
 // Cubi v2 — Waveshare ESP32-S3-Touch-AMOLED-1.8 (V1 y V2)
-// Caras nuevas, canta con la música (lipsync por el micrófono), siente la música con efectos,
+// Caras con el motor de Isa (ojos cápsula, manitos y accesorios de cada ritmo), canta con la música (lipsync por el micrófono),
 // sonidos, energía y batería (AXP2101), reacciones al movimiento, app Android por Bluetooth y actualización por Bluetooth.
 #include <Arduino_GFX_Library.h>
 #include <Wire.h>
@@ -14,6 +14,7 @@
 #include <XPowersLib.h>
 #include "es8311.h"
 #include "config.h"
+#include "caras.h"
 
 #define VERSION "2.0"
 
@@ -314,7 +315,9 @@ Cara cur = PRESET[REPOSO], tgt;
 int caraAct = REPOSO;
 Emo emo = NEUTRAL, emoBase = NEUTRAL;
 uint32_t emoHasta = 0;
-bool emoForzada = false;  // pedida desde la app o tocando: le gana a la música; las del movimiento no
+bool emoForzada = false;
+bool hayMusica = false, cantando = false;  // lo que animar() decide y las caras usan
+uint32_t tGolpe = 0;  // pedida desde la app o tocando: le gana a la música; las del movimiento no
 uint8_t anim = NINGUNA; uint32_t animT0 = 0, animProx = 8000, animPaso = 0;
 float bostezo = 0, abreDer = 1;
 uint8_t asis = NO_ASIS; uint32_t asisHasta = 0, asisT0 = 0;
@@ -325,11 +328,28 @@ Modo modo = NORMAL;
 uint32_t modoDesde = 0, modoHasta = 0, proxRing = 0;
 void setModo(Modo m, uint32_t ms) { modo = m; modoDesde = millis(); modoHasta = ms ? millis() + ms : 0; }
 
+// Reacción de caricatura (caras.cpp) con su sonido
+const Nota *sonidoReac(caras::Reac r) {
+  switch (r) {
+    case caras::FRENAZO: return S_MIEDO;
+    case caras::ACELERON: case caras::ARRANQUE: case caras::SALUDO: return S_FELIZ;
+    case caras::BACHE: return S_BACHE;
+    case caras::MAREO: return S_MAREADO;
+    case caras::RISA: case caras::CARICIA: return S_RISA;
+    case caras::SORPRESA: case caras::CURIOSA: return S_SORPRESA;
+    case caras::AMOR: return S_ENAMORADO;
+    case caras::WHATSAPP: return S_WHATSAPP;
+    case caras::LLUVIA: case caras::FRIO: return S_TRISTE;
+    default: return nullptr;
+  }
+}
+void reac(caras::Reac r) { caras::reaccion(r); sonar(sonidoReac(r)); }
+
 void evento(const String &t) {
-  if (t == "whatsapp") { if (modo == NORMAL || modo == WHATSAPP) { setModo(WHATSAPP, 3500); sonar(S_WHATSAPP); } }
-  else if (t == "llamada") { setModo(RING, 60000); proxRing = 0; }
+  if (t == "whatsapp") { if (modo == NORMAL || modo == WHATSAPP) { setModo(WHATSAPP, 6000); reac(caras::WHATSAPP); } }
+  else if (t == "llamada") { setModo(RING, 60000); proxRing = 0; caras::reaccion(caras::LLAMADA); }
   else if (t == "encurso") setModo(ENLLAMADA, 2UL * 3600000UL);
-  else if (t == "colgar") { setModo(NORMAL, 0); sonar(S_COLGAR); setEmo(FELIZ, 1200); }
+  else if (t == "colgar") { setModo(NORMAL, 0); sonar(S_COLGAR); caras::reaccion(caras::RISA); }
 }
 
 float lx = 0, ly = 0, vlx = 0, vly = 0, tlx = 0, tly = 0, bounce = 0, escala = 1, pulso = 0, eyeCy = H / 2, sqx = 1, sqy = 1;
@@ -348,151 +368,9 @@ struct Chispa { float x, y; uint32_t t0; C3 c; } chispas[10];
 
 void demo(bool canto) { demoT0 = millis(); demoHasta = demoT0 + 9000; demoCanto = canto; demoBeat = 0; }
 
-// Barra gruesa con puntas redondas (cejas, ojos cerrados)
-void barra(float x0, float y0, float x1, float y1, float t, uint16_t c) {
-  float dx = x1 - x0, dy = y1 - y0, L = sqrtf(dx * dx + dy * dy);
-  if (L < 1) { cv->fillCircle(x0, y0, t / 2, c); return; }
-  float nx = -dy / L * t / 2, ny = dx / L * t / 2;
-  cv->fillTriangle(x0 + nx, y0 + ny, x1 + nx, y1 + ny, x1 - nx, y1 - ny, c);
-  cv->fillTriangle(x0 + nx, y0 + ny, x1 - nx, y1 - ny, x0 - nx, y0 - ny, c);
-  cv->fillCircle(x0, y0, t / 2, c); cv->fillCircle(x1, y1, t / 2, c);
-}
-
-// Ojo: halo, cuerpo con degradado, brillos y párpados. lado: -1 izquierdo, +1 derecho. k: tamaño extra por perspectiva.
-void ojo(float cx, float cy, int lado, float abre, float k) {
-  float w = cur.ew * U * escala * sqx * k * (1 + (1 - abre) * 0.12f), h = cur.eh * U * escala * sqy * k * abre;
-  if (h < 8 * U) { barra(cx - w * 0.38f, cy, cx + w * 0.38f, cy, 8 * U, c565(cur.c1)); return; }
-  float r = min(cur.er * U * escala * k, min(w, h) / 2), m = 9 * U;
-  C3 halo = mix(fondoC, cur.c2, 0.22f);
-  formaOjo(cx, cy, w, h, r, lado, m, halo, fondoC, false);   // halo
-  formaOjo(cx, cy, w, h, r, lado, 0, halo, halo, true);      // ojo con degradado
-  float top = cy - h / 2;  // brillos, solo si quedan por debajo del párpado
-  float gx[2] = { cx - w * 0.22f, cx - w * 0.05f }, gy[2] = { top + h * 0.22f, top + h * 0.37f }, gr[2] = { w * 0.11f, w * 0.05f };
-  for (int i = 0; i < 2; i++)
-    if (cur.arco < 0.4f && gy[i] - gr[i] > yParpado(gx[i], cx, cy, w, h, lado)) cv->fillCircle(gx[i], gy[i], gr[i], 0xFFFF);
-}
-
-// Altura del párpado de arriba en x: baja recto (sueño) y se inclina (enojo: baja por dentro; tristeza: por fuera)
-float yParpado(float x, float cx, float cy, float w, float h, int lado) {
-  float base = cy - h / 2 + cur.lid * h, yi = base + max(0.f, cur.ang) * h * 0.5f, yo = base + max(0.f, -cur.ang) * h * 0.45f;
-  float xo = cx + lado * w / 2, xi = cx - lado * w / 2;
-  return yo + (yi - yo) * (x - xo) / (xi - xo);
-}
-
-// Línea horizontal con los bordes suavizados (mezcla el pixel del borde con el color de atrás)
-void tramo(float xs, float xe, int y, C3 c, C3 bg) {
-  int a = ceilf(xs), b = floorf(xe);
-  if (b < a) { cv->drawPixel(int(xs), y, c565(mix(bg, c, xe - xs))); return; }
-  if (b > a) cv->drawFastHLine(a, y, b - a, c565(c));
-  if (a - xs > 0.02f) cv->drawPixel(a - 1, y, c565(mix(bg, c, a - xs)));
-  if (xe - b > 0.02f) cv->drawPixel(b, y, c565(mix(bg, c, xe - b)));
-}
-
-// Rectángulo redondeado del ojo, agrandado e píxeles, recortado por los dos párpados (sin pintar encima del fondo).
-void formaOjo(float cx, float cy, float w, float h, float r, int lado, float e, C3 col, C3 bg, bool degradado) {
-  float top = cy - h / 2 - e, bot = cy + h / 2 + e, R = r + e, x0 = cx - w / 2 - e, x1 = cx + w / 2 + e;
-  float ey = cy + h / 2 + h * 0.25f, erx = w * 0.78f - e, ery = cur.arco * h * 1.05f - e;  // arco de abajo: ojos felices ^ ^
-  bool arco = cur.arco > 0.02f && ery > 1 && erx > 1;
-  float xo = cx + lado * w / 2, xi = cx - lado * w / 2;
-  float yo = yParpado(xo, cx, cy, w, h, lado) - e, pend = (yParpado(xi, cx, cy, w, h, lado) - e - yo) / (xi - xo);
-  for (int y = ceilf(top); y <= bot; y++) {
-    float d = 0, off = 0;
-    if (y < top + R) d = top + R - y; else if (y > bot - R) d = y - (bot - R);
-    if (d > 0) off = R - sqrtf(max(0.f, R * R - d * d));
-    float xs = x0 + off, xe = x1 - off;
-    if (fabsf(pend) < 1e-4f) { if (y < yo) continue; }   // se ve solo lo que queda debajo del párpado
-    else if (pend > 0) xe = min(xe, xo + (y - yo) / pend); else xs = max(xs, xo + (y - yo) / pend);
-    if (xe <= xs) continue;
-    if (degradado) col = mix(cur.c1, cur.c2, constrain((y - top) / h, 0.f, 1.f));
-    float dy = (y - ey) / ery;
-    if (arco && fabsf(dy) < 1) {
-      float half = erx * sqrtf(1 - dy * dy), e1 = min(xe, cx - half), s2 = max(xs, cx + half);
-      if (e1 > xs) tramo(xs, e1, y, col, e1 < xe ? fondoC : bg);
-      if (xe > s2) tramo(s2, xe, y, col, s2 > xs ? fondoC : bg);
-    } else tramo(xs, xe, y, col, bg);
-  }
-}
-
-void ceja(float cx, float top, int lado) {
-  if (cur.ceja < 0.05f) return;
-  float bw = cur.ew * U * 0.85f, y = top - (26 + cur.cejaY) * U, k = cur.cejaAng * 15 * U;
-  barra(cx + lado * bw / 2, y - k, cx - lado * bw / 2, y + k, 12 * U, tenue(cur.c1, cur.ceja));
-}
-
-void corazon(float cx, float cy, float s, uint16_t c) {
-  cv->fillCircle(cx - s / 2, cy - s / 4, s / 2, c);
-  cv->fillCircle(cx + s / 2, cy - s / 4, s / 2, c);
-  cv->fillTriangle(cx - s, cy - s / 8, cx + s, cy - s / 8, cx, cy + s, c);
-}
-void espiral(float cx, float cy, float r, float rot, uint16_t c) {
-  for (int k = 0; k < 4; k++) { float rr = r * (1 - k * 0.24f); cv->fillArc(cx, cy, rr, rr - r * 0.12f, rot + k * 95, rot + k * 95 + 250, c); }
-}
-void gota(float cx, float cy, float s, uint16_t c) {
-  cv->fillCircle(cx, cy, s, c);
-  cv->fillTriangle(cx - s, cy - s * 0.2f, cx + s, cy - s * 0.2f, cx, cy - s * 2.2f, c);
-}
-void notaMusical(float x, float y, uint16_t c) {
-  cv->fillCircle(x, y, 9, c); cv->fillRect(x + 6, y - 34, 4, 34, c); cv->fillTriangle(x + 10, y - 34, x + 24, y - 24, x + 10, y - 20, c);
-}
-void estrella(float x, float y, float s, uint16_t c) {
-  cv->fillTriangle(x - s, y, x + s, y, x, y - s * 0.22f, c); cv->fillTriangle(x - s, y, x + s, y, x, y + s * 0.22f, c);
-  cv->fillTriangle(x, y - s, x, y + s, x - s * 0.22f, y, c); cv->fillTriangle(x, y - s, x, y + s, x + s * 0.22f, y, c);
-}
-
-// Boca: canta/habla con la voz (abre con el volumen, redonda u ancha según el tono); quieta según la emoción.
-void boca(float cx, float my) {
-  uint16_t col = c565(cur.c1), oscuro = c565(hx(0x2A0614));
-  if (hablaV > 0.05f) {
-    float a = bocaV;
-    if (a < 0.06f) { cv->fillArc(cx, my - 14 * U, 20 * U, 14 * U, 30, 150, col); return; }  // entre sílabas
-    float mw = (24 + 16 * anchoV + 6 * a) * U, mh = (8 + 44 * a * (1.1f - 0.35f * anchoV)) * U, t = 6 * U;
-    cv->fillEllipse(cx, my, mw, mh, col);
-    cv->fillEllipse(cx, my, mw - t, max(2.f, mh - t), oscuro);
-    return;
-  }
-  if (cur.boca > 1.5f || bostezo > 0.05f) {  // "o" (sorpresa) o bostezo
-    float b = bostezo;
-    cv->fillEllipse(cx, my, (15 + 10 * b) * U, (19 + 26 * b) * U, col); cv->fillEllipse(cx, my, (9 + 10 * b) * U, (13 + 26 * b) * U, oscuro);
-  }
-  else if (cur.boca > 0.3f) cv->fillArc(cx, my - 30 * U, 34 * U, 26 * U, 35, 145, col);
-  else if (cur.boca < -0.3f) cv->fillArc(cx, my + 30 * U, 34 * U, 26 * U, 215, 325, col);
-}
-
-void telefono(float cx, float cy, bool desc, uint32_t now) {
-  uint16_t rojo = c565(hx(0xE0413A)), crema = c565(hx(0xFFE9C7)), osc = c565(hx(0x8A1F1A));
-  cv->fillRoundRect(cx - 62, cy - 8, 124, 66, 18, rojo);
-  cv->fillCircle(cx, cy + 25, 25, crema);
-  for (int i = 0; i < 8; i++) { float a = i * 0.7f + 0.6f; cv->fillCircle(cx + cosf(a) * 16, cy + 25 + sinf(a) * 16, 4, osc); }
-  cv->fillCircle(cx, cy + 25, 6, osc);
-  if (!desc) {
-    float hop = (modo == RING) ? fabsf(sinf(now * 0.03f)) * 10 : 0;
-    cv->fillRoundRect(cx - 72, cy - 32 - hop, 144, 22, 11, rojo);
-    cv->fillRoundRect(cx - 80, cy - 40 - hop, 38, 30, 12, rojo);
-    cv->fillRoundRect(cx + 42, cy - 40 - hop, 38, 30, 12, rojo);
-  } else cv->fillRoundRect(cx - 40, cy - 18, 80, 12, 6, osc);
-}
-
-void cable(float x0, float y0, float x1, float y1, uint32_t now) {
-  uint16_t c = c565(hx(0xE0413A));
-  float dx = x1 - x0, dy = y1 - y0, L = sqrtf(dx * dx + dy * dy);
-  float nx = -dy / L, ny = dx / L, ph = now * 0.012f, px = x0, py = y0;
-  for (int i = 1; i <= 90; i++) {
-    float t = i / 90.f, sag = sinf(t * PI) * 30, amp = 9 * sinf(t * PI);
-    float x = x0 + dx * t + nx * amp * sinf(t * 38 + ph), y = y0 + dy * t + ny * amp * sinf(t * 38 + ph) + sag;
-    for (int k = -1; k <= 1; k++) cv->drawLine(px, py + k, x, y + k, c);
-    px = x; py = y;
-  }
-}
-
-void burbujaChat(float cx, float cy) {
-  uint16_t verde = c565(hx(0x25D366));
-  cv->fillCircle(cx, cy, 34, verde);
-  cv->fillTriangle(cx - 30, cy + 14, cx - 14, cy + 30, cx - 40, cy + 40, verde);
-  for (int i = -1; i <= 1; i++) cv->fillCircle(cx + i * 14, cy, 5, 0xFFFF);
-}
-
 // Golpe de la música: cada estilo baila distinto, y todos sueltan un anillo y una nota
 void enGolpe(uint32_t now) {
+  tGolpe = now;
   lado = -lado;
   switch (est) {
     case ROCK: bounce = -38 * U; break;                                 // cabeceo metalero
@@ -544,6 +422,7 @@ void animar(uint32_t now) {
   static uint32_t cantaHasta = 0;  // la cara de cantar aguanta 1,5 s entre frases: no salta canta/baila a cada respiro
   if (voz) cantaHasta = now + 1500;
   bool canta = voz || now < cantaHasta;
+  hayMusica = musica; cantando = canta;
   if (musica) despertar(now);
   if (beatCnt != beatVisto) { beatVisto = beatCnt; if (musica) enGolpe(now); }
   if (hiCnt != hiVisto) { hiVisto = hiCnt; if (musica) chispa(now); }
@@ -641,88 +520,69 @@ void animar(uint32_t now) {
   if (now > nextBlink && c != SUENO) { blinkT0 = now; nextBlink = now + random(2000, 6000); }
 }
 
-// Mientras se actualiza: anillo de progreso y porcentaje (sin cara, para que se note que no hay que apagarlo)
-void pantallaOta() {
-  float p = otaTotal ? float(otaHecho) / otaTotal : 1;
-  C3 c = hx(0x3CD6E8);
-  cv->fillArc(W / 2, H / 2, 120 * U, 106 * U, 0, 360, tenue(c, 0.2f));
-  if (p > 0.005f) cv->fillArc(W / 2, H / 2, 120 * U, 106 * U, -90, -90 + 360 * p, c565(c));
-  char t[8]; snprintf(t, sizeof t, "%d%%", int(p * 100));
-  cv->setTextColor(0xFFFF); cv->setTextSize(5);
-  cv->setCursor(W / 2 - strlen(t) * 15, H / 2 - 18); cv->print(t);
-  cv->setTextColor(c565(c)); cv->setTextSize(2);
-  cv->setCursor(W / 2 - 72, H / 2 + 30); cv->print("Actualizando");
+// =====================================================================================
+// CARAS EN PANTALLA: el motor de Isa (caras.cpp) con lo que Cubi siente
+// =====================================================================================
+uint16_t *tmpPanel = nullptr;
+int ritmoFijo = -1;  // un baile pedido desde la app para probarlo
+
+// Cada estilo que detecta el micrófono tiene su familia de bailes; cambia de baile con cada canción (o cada 45 s)
+uint8_t elegirRitmo(uint32_t now) {
+  using namespace caras;
+  static const uint8_t BAL[] = { R_DISFRUTA, R_PIANO, R_JAZZ, R_GUITARRA, R_CORAZON }, TRO[] = { R_TROPICAL, R_POP, R_GROOVE },
+    REG[] = { R_URBANO, R_KPOP, R_GROOVE }, ELE[] = { R_ELECTRO, R_DJ, R_BARRAS }, ROC[] = { R_ROCK, R_POP, R_BARRAS };
+  static uint8_t r = R_POP, estR = NADA; static uint32_t desde = 0;
+  if (ritmoFijo >= 0) return ritmoFijo;
+  if (est >= BALADA && (est != estR || now - desde > 45000)) {
+    const uint8_t *f = BAL; int n = 5;
+    if (est == TROPICAL) { f = TRO; n = 3; } else if (est == REGGAETON) { f = REG; n = 3; }
+    else if (est == ELECTRO) { f = ELE; n = 3; } else if (est == ROCK) { f = ROC; n = 3; }
+    int i = random(n);
+    if (f[i] == r) i = (i + 1) % n;  // que no repita el mismo baile
+    r = f[i]; estR = est; desde = now;
+  }
+  return r;
 }
 
-void dibujar(uint32_t now) {
-  cv->fillScreen(0x0000);
-  if (otaTotal || reinicioEn) { pantallaOta(); return; }
-  float abre = 1;
-  if (now - blinkT0 < 180) abre = max(0.f, 1 - sinf(PI * (now - blinkT0) / 180.f));
-  float sx = 0, sy = 0;
-  if (caraAct == ENOJADO && est != ROCK) { sx = random(-4, 5); sy = random(-3, 4); }
-  if (caraAct == MIEDO) sx = random(-2, 3);
-  float cy = eyeCy + cur.dy * U + ly * U * escala + bounce + sy;
-  float sep = 100 * U * escala, cx = W / 2 + lx * U * escala + sx;
+void pintar(uint32_t now) {
+  static uint32_t antes = now, proxGesto = 30000;
+  float t = now / 1000.f, dt = min(0.1f, (now - antes) / 1000.f);
+  antes = now;
+  if (now > demoHasta) ritmoFijo = -1;
+  caras::Base b = caras::REPOSO;
+  if (modo == ENLLAMADA) b = caras::TELEFONO;
+  else if (asis == HABLA) b = caras::HABLA;
+  else if (asis == ESCUCHA) b = caras::ESCUCHA;
+  else if (hayMusica) b = caras::CANTA;
+  else if (emoBase == SUENO) b = caras::DUERME;
+  caras::base(b);
+  caras::Entradas en;
+  en.boca = bocaV; en.canta = cantando; en.nivel = aNivel;
+  if (b == caras::CANTA) {
+    float bpm = now < demoHasta ? 126 : aBpm > 60 ? aBpm : 110;
+    en.bpm = bpm; en.pulso = fmodf((now - tGolpe) * bpm / 60000.f, 1.f); en.ritmo = elegirRitmo(now);
+  }
+  bool libreR = caras::reaccionActual() == caras::NINGUNA;
+  if (b == caras::REPOSO && libreR && now > proxGesto) {  // en reposo, de vez en cuando un guiño o cara de curiosa
+    reac(random(2) ? caras::GUINO : caras::CURIOSA); proxGesto = now + random(25000, 50000);
+  }
+  if (modo == RING && libreR) caras::reaccion(caras::LLAMADA);
 
-  // fondo: brillo que late con el bajo, anillos en cada golpe y chispas con los platillos
-  fondoC = NEGRO;
-  if (fondo > 0.02f) {
-    fondoC = mix(NEGRO, cur.c2, 0.05f + 0.13f * fondo);
-    cv->fillCircle(W / 2, cy + 20 * U, (150 + 40 * fondo) * U, c565(fondoC));
-  }
-  for (auto &a : anillos) if (a.t0) {
-    float t = (now - a.t0) / 800.f;
-    if (t >= 1) { a.t0 = 0; continue; }
-    float r = (100 + t * 320) * U; uint16_t col = tenue(a.c, 0.7f * (1 - t));
-    for (int d = 0; d < 4; d++) cv->drawCircle(W / 2, cy, r + d, col);
-  }
-  for (auto &ch : chispas) if (ch.t0) {
-    float t = (now - ch.t0) / 600.f;
-    if (t >= 1) { ch.t0 = 0; continue; }
-    estrella(ch.x, ch.y - t * 20 * U, 14 * U * (1 - t * 0.6f), tenue(ch.c, 1 - t));
-  }
-  for (auto &n : notas) if (n.t0) {
-    float t = (now - n.t0) / 1000.f;
-    if (t > 2.2f) { n.t0 = 0; continue; }
-    notaMusical(n.x + 12 * sinf(t * 4), n.y - t * 70 * n.v, tenue(n.c, 1 - t / 2.2f));
-  }
-
-  if (caraAct == ENAMORADO) {
-    float s = (46 + 6 * sinf(now * 0.012f)) * U * (1 + pulso);
-    uint16_t c = c565(mix(cur.c1, cur.c2, 0.5f));
-    corazon(cx - sep, cy, s, c); corazon(cx + sep, cy, s, c);
-  } else if (caraAct == MAREADO) {
-    espiral(cx - sep, cy, 52 * U, giro, c565(cur.c1)); espiral(cx + sep, cy, 52 * U, giro, c565(cur.c1));
-  } else {
-    // perspectiva: el ojo hacia donde mira se ve un poco más grande
-    ojo(cx - sep, cy, -1, abre, 1 - lx * 0.0022f); ojo(cx + sep, cy, +1, abre * abreDer, 1 + lx * 0.0022f);
-  }
-  float top = cy - cur.eh * U * escala / 2;
-  ceja(cx - sep, top, -1); ceja(cx + sep, top, +1);
-  boca(cx, cy + cur.eh * U * escala / 2 + 46 * U);
-
-  if (caraAct == TRISTE) gota(cx - sep - 30 * U, cy + 60 * U + (now / 12) % 90, 9 * U, c565(hx(0x6FB7FF)));
-  if (caraAct == SUENO) {
-    cv->setTextColor(c565(hx(0xB9A8FF))); cv->setTextSize(3);
-    int z = (now / 600) % 3;
-    for (int i = 0; i <= z; i++) { cv->setCursor(W / 2 + 120 + i * 22, 70 - i * 26); cv->print("z"); }
-  }
-  if (modo == WHATSAPP) burbujaChat(W - 70, 70 + 8 * sinf(now * 0.015f));
-  if (modo == RING) {
-    float sh = sinf(now * 0.09f) * 6;
-    telefono(W / 2 + sh, 250, false, now);
-    if ((now / 250) % 2) {
-      uint16_t c = c565(hx(0xFFD25A));
-      cv->fillArc(W / 2 - 95 + sh, 230, 26, 22, 140, 220, c);
-      cv->fillArc(W / 2 + 95 + sh, 230, 26, 22, -40, 40, c);
-    }
-  }
-  if (modo == ENLLAMADA) {
-    telefono(W / 2 - 80, 260, true, now);
-    float hx1 = W / 2 + 120, hy1 = 205 + 6 * sinf(now * 0.004f);
-    cable(W / 2 - 80 + 58, 270, hx1 - 10, hy1 + 18, now);
-    cv->fillRoundRect(hx1 - 18, hy1 - 50, 36, 110, 16, c565(hx(0xE0413A)));
+  uint16_t *fb = cv->getFramebuffer();
+  dib::fb = fb; dib::giro = rotacion == 3;
+  dib::empezar();
+  if (otaTotal || reinicioEn) caras::progreso(t, otaTotal ? float(otaHecho) / otaTotal : 1);
+  else caras::cuadro(t, dt, en);
+  static bool saludo = true;  // al prender saluda (después del primer cuadro: así arranca con el reloj de las caras al día)
+  if (saludo) { saludo = false; reac(caras::SALUDO); }
+  // solo se manda al panel lo que cambió (este cuadro y el anterior)
+  dib::Rect r = dib::terminar();
+  int w = r.x1 - r.x0, h = r.y1 - r.y0;
+  if (w <= 0 || h <= 0) return;
+  if (w == dib::RW) panel->draw16bitRGBBitmap(0, r.y0, fb + (uint32_t)r.y0 * dib::RW, dib::RW, h);
+  else {
+    for (int f = 0; f < h; f++) memcpy(tmpPanel + (uint32_t)f * w, fb + (uint32_t)(r.y0 + f) * dib::RW + r.x0, w * 2);
+    panel->draw16bitRGBBitmap(r.x0, r.y0, tmpPanel, w, h);
   }
 }
 
@@ -784,16 +644,23 @@ void imuUpdate(uint32_t now) {
   frenaDesde = lon < -UMBRAL_FRENO ? (frenaDesde ? frenaDesde : now) : 0;
   aceleraDesde = lon > UMBRAL_ACEL ? (aceleraDesde ? aceleraDesde : now) : 0;
   if (modo == NORMAL && !asis && now > cdEvento) {
-    if (frenaDesde && now - frenaDesde > 300) { setEmo(MIEDO, 1800); emoForzada = true; bounce = 18; cdEvento = now + 4000; }
-    else if (aceleraDesde && now - aceleraDesde > 300) { setEmo(FELIZ, 1500); emoForzada = true; cdEvento = now + 4000; }
-    else if (fabsf(vert) > UMBRAL_BACHE) {  // hueco: brinca siempre; la cara y el sonido solo si no hay música
-      bounce = -30; cdEvento = now + 1500;
-      if (estilo < BALADA) { setEmo(SORPRESA, 700); sonar(S_BACHE); }
-    }
+    static uint32_t ultimoEvento = 0;
+    if (frenaDesde && now - frenaDesde > 300) { reac(caras::FRENAZO); cdEvento = now + 4500; ultimoEvento = now; }
+    else if (aceleraDesde && now - aceleraDesde > 300) {  // arrancar después de un buen rato quieto: entra "a toda velocidad"
+      reac(now - ultimoEvento > 60000 ? caras::ARRANQUE : caras::ACELERON); cdEvento = now + 4000; ultimoEvento = now;
+    } else if (fabsf(vert) > UMBRAL_BACHE && estilo < BALADA) { reac(caras::BACHE); cdEvento = now + 3000; ultimoEvento = now; }  // con música no la corta
   }
+  // curva larga (sin música): mira y se inclina hacia la curva
+  static uint32_t curvaDesde = 0;
+  if (fabsf(yaw) > 20 && fabsf(yaw) < GIRO_MAREO) {
+    if (!curvaDesde) curvaDesde = now;
+    if (now - curvaDesde > 1200 && now > cdEvento && estilo < BALADA && !asis && modo == NORMAL && caras::reaccionActual() == caras::NINGUNA) {
+      reac(yaw > 0 ? caras::GIRO_IZQ : caras::GIRO_DER); cdEvento = now + 6000;
+    }
+  } else curvaDesde = 0;
   if (fabsf(yaw) > GIRO_MAREO) {
     if (!mareoDesde) mareoDesde = now;
-    if (now - mareoDesde > 1000 && modo == NORMAL && !asis && emo != MAREADO) { setEmo(MAREADO, 2500); emoForzada = true; }
+    if (now - mareoDesde > 1000 && modo == NORMAL && !asis && caras::reaccionActual() != caras::MAREO) reac(caras::MAREO);
   } else mareoDesde = 0;
 #if DEBUG_IMU
   static uint32_t dbg; if (now - dbg > 300) { dbg = now; Serial.printf("lon=%.2f vert=%.2f giro=%.0f\n", lon, vert, yaw); }
@@ -806,7 +673,7 @@ void touchUpdate(uint32_t now) {
   uint8_t n;
   bool t = tpAddr && i2cR(tpAddr, 0x02, &n, 1) && (n & 0x0F) && (n & 0x0F) < 3;
   if (t && !tPrev) { tDown = now; nextDemo = now + 1500; despertar(now); }
-  if (t && now > nextDemo) { demoIdx = (demoIdx + 1) % N_EMO; setEmo(Emo(demoIdx), 3000); emoForzada = true; nextDemo = now + 1200; }
+  if (t && now > nextDemo) { reac(caras::CARICIA); nextDemo = now + 3000; }  // dejar el dedo: caricia
   // toque corto: se ríe. Dos toques seguidos: llama al asistente del celular (Gemini).
   // El primer toque espera 350 ms para saber si viene el segundo.
   static uint32_t toque1 = 0;
@@ -817,7 +684,7 @@ void touchUpdate(uint32_t now) {
   if (toque1 && now - toque1 >= 350) {
     toque1 = 0;
     if (modo == RING || modo == WHATSAPP) setModo(NORMAL, 0);
-    setEmo(FELIZ, 2000); sonar(S_RISA); bounce = -20;
+    reac(emoBase == SUENO ? caras::SALUDO : caras::RISA);
   }
   tPrev = t;
 }
@@ -841,12 +708,14 @@ void energiaUpdate(uint32_t now) {
   if (!pmuOk || otaTotal || now - t < 1000) return;
   t = now;
   if (pmu.isVbusIn() || !pmu.isBatteryConnect()) { sinUsb = 0; return; }
+  static uint32_t avisoBat = 0;
+  if (pmu.getBatteryPercent() < 15 && (!avisoBat || now - avisoBat > 600000)) { avisoBat = now; reac(caras::BATERIA); }
   if (!sinUsb) sinUsb = now;
   bool vacia = pmu.getBatteryPercent() < 5;
   if (vacia || (APAGAR_SIN_USB_SEG && now - sinUsb > APAGAR_SIN_USB_SEG * 1000UL)) {
     // Se apaga del todo para cuidar la batería; el AXP2101 lo vuelve a prender al conectar el USB (o con el botón PWR).
     emoBase = SUENO; setEmo(SUENO, 0); sonar(S_SUENO);
-    for (uint32_t t0 = millis(); millis() - t0 < 2500;) { animar(millis()); dibujar(millis()); cv->flush(); delay(30); }
+    for (uint32_t t0 = millis(); millis() - t0 < 2500;) { animar(millis()); pintar(millis()); delay(30); }
     panel->setBrightness(0);
     pmu.shutdown();
   }
@@ -872,6 +741,11 @@ String urlDec(const String &s) {
 String atender(const String &ruta, const Params &p, int &cod) {
   cod = 200;
   if (otaTotal && !ruta.startsWith("/ota")) { cod = 409; return "actualizando"; }  // durante la actualización no se toca nada
+  if (ruta == "/r") {  // una reacción de caricatura por su nombre (saludo, frenazo, amor, lluvia...)
+    String n = p.get("n");
+    for (int i = 1; i < caras::N_REAC; i++) if (n == caras::NOMBRE_REAC[i]) { despertar(millis()); reac(caras::Reac(i)); return "ok"; }
+    cod = 400; return "reaccion desconocida";
+  }
   if (ruta == "/e") {
     String n = p.get("n");
     for (int i = 0; i < N_EMO; i++) if (n == EMO_NOM[i]) { despertar(millis()); emoBase = NEUTRAL; demoHasta = 0; setEmo(Emo(i), 5000); emoForzada = true; return "ok"; }
@@ -890,14 +764,19 @@ String atender(const String &ruta, const Params &p, int &cod) {
     else ponerAsistente(NO_ASIS, 0);
     return "ok";
   }
-  if (ruta == "/demo") { despertar(millis()); emoHasta = 0; demo(p.get("t") != "baile"); return "ok"; }
+  if (ruta == "/demo") {  // probar sin música; r = un baile (jazz, dj, piano...)
+    despertar(millis()); emoHasta = 0; demo(p.get("t") != "baile");
+    ritmoFijo = -1;
+    for (int i = 0; i < caras::N_RITMO; i++) if (p.get("r") == caras::NOMBRE_RITMO[i]) ritmoFijo = i;
+    return "ok";
+  }
   if (ruta == "/brillo") { brillo = constrain(p.get("v").toInt(), 0, 255); panel->setBrightness(brillo); return "ok"; }
   if (ruta == "/ajuste") {
     if (p.has("vol")) { volumen = constrain(p.get("vol").toInt(), 0, 100); if (es) es8311_voice_volume_set(es, volumen, NULL); sonar(S_WHATSAPP); }
     if (p.has("son")) sonidoOn = p.get("son") == "1";
     if (p.has("mus")) musicaOn = p.get("mus") == "1";
     if (p.has("adl")) adelante = -adelante;  // al frenar se pone feliz: se invierte
-    if (p.has("rot")) { rotacion = rotacion == 3 ? 1 : 3; cv->setRotation(rotacion); }
+    if (p.has("rot")) { rotacion = rotacion == 3 ? 1 : 3; cv->setRotation(rotacion); memset(cv->getFramebuffer(), 0, 368 * 448 * 2); dib::todo(); }
     if (p.has("uv")) umbralVoz = constrain(p.get("uv").toFloat(), 0.05f, 0.95f);
     if (p.has("gb")) ganBoca = constrain(p.get("gb").toFloat(), 0.3f, 3.f);
     if (p.has("sk")) sensK = constrain(p.get("sk").toFloat(), 1.3f, 8.f);
@@ -1088,6 +967,8 @@ void setup() {
   panel->endWrite();
   panel->setBrightness(brillo);
   cv->fillScreen(0); cv->flush();
+  tmpPanel = (uint16_t *)ps_malloc(368 * 448 * 2);
+  caras::iniciar(esp_random());
 
   imuInit();
   lastMotion = millis();
@@ -1113,8 +994,8 @@ void loop() {
     if (now - tSim > 200) tSim = now - 33;  // tras una pausa larga no intenta ponerse al día
     while (now - tSim >= 33) { tSim += 33; animar(tSim); }
     tAnim = micros() - t0;
-    dibujar(now); tDib = micros() - t0 - tAnim;
-    cv->flush(); tFlush = micros() - t0 - tAnim - tDib;
+    pintar(now); tDib = micros() - t0 - tAnim;  // dibuja y manda solo lo que cambió
+    tFlush = 0;
     frameUs = micros() - t0;
   }
 }
