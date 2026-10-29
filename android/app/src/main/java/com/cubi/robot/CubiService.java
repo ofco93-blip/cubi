@@ -900,7 +900,14 @@ public class CubiService extends Service {
                 for (int i = 0; i < 2; i++)
                     am.adjustStreamVolume(AudioManager.STREAM_MUSIC, accion.equals("volumen_subir") ? AudioManager.ADJUST_RAISE : AudioManager.ADJUST_LOWER, 0);
                 break;
-            case "musica_buscar": buscarYTocar(busqueda); break;
+            case "musica_buscar":  // con Spotify conectado (API, como Copi) la busca y le da play de verdad
+                if (!new SpotifyApi(this).conectado()) { buscarYTocar(busqueda); break; }
+                new Thread(() -> {
+                    String puso = new SpotifyApi(this).reproducir(busqueda);
+                    if (puso != null) js("toast(" + JSONObject.quote("Poniendo: " + puso) + ")");
+                    else ui.post(() -> buscarYTocar(busqueda));
+                }).start();
+                break;
         }
     }
 

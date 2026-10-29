@@ -52,6 +52,19 @@ public class MainActivity extends Activity {
         setContentView(web);
         if (tienePermisos()) arrancar();
         instalacion(getIntent());
+        spotifyVuelve(getIntent());
+    }
+
+    // vuelve del login de Spotify (cubi://spotify?code=...): cambia el código por la sesión
+    private void spotifyVuelve(Intent i) {
+        Uri u = i == null ? null : i.getData();
+        if (u == null || !"cubi".equals(u.getScheme()) || !"spotify".equals(u.getHost())) return;
+        String code = u.getQueryParameter("code");
+        if (code == null) { js("toast('Spotify no se conectó: " + (u.getQueryParameter("error") == null ? "" : u.getQueryParameter("error").replace("'", "")) + "')"); return; }
+        new Thread(() -> {
+            boolean ok = new SpotifyApi(this).recibirCodigo(code);
+            js(ok ? "toast('Spotify conectado: ya puedo poner canciones');spotifyEstado()" : "toast('No pude conectar Spotify')");
+        }).start();
     }
 
     @Override
@@ -74,6 +87,7 @@ public class MainActivity extends Activity {
     protected void onNewIntent(Intent i) {
         super.onNewIntent(i);
         instalacion(i);
+        spotifyVuelve(i);
     }
 
     @Override
@@ -286,6 +300,18 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String estadoLetra() {
             return CubiService.yo == null ? "" : CubiService.yo.estadoLetra;
+        }
+
+        @JavascriptInterface
+        public boolean spotifyConectado() {
+            return new SpotifyApi(MainActivity.this).conectado();
+        }
+
+        @JavascriptInterface
+        public void spotifyConectar() {
+            SpotifyApi s = new SpotifyApi(MainActivity.this);
+            if (s.conectado()) { s.desconectar(); js("toast('Spotify desconectado');spotifyEstado()"); return; }
+            try { s.conectar(); } catch (Exception e) { js("toast('No pude abrir el login de Spotify')"); }
         }
 
         @JavascriptInterface

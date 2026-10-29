@@ -124,6 +124,7 @@ section[hidden] { display: none; }
     <input type="range" id="tonoCubi" min="0.8" max="2" step="0.05" value="1.4" style="width:100%">
     <button class="btn" id="probarVoz">Probar voz</button>
     <button class="btn" id="bajarVoces">Bajar más voces</button>
+    <button class="btn" id="spotify">Conectar Spotify</button>
     <button class="btn" id="permisoMusica" hidden>Permitir que Cubi controle la música y cante con la letra</button>
     <p class="note">Abre los ajustes de voz del celular: elige “Servicios de voz de Google”, toca el engranaje → Instalar datos de voz → Español. Al volver, las voces nuevas aparecen aquí.</p>
     <button class="btn main" id="hablarCubi">Hablarle a Cubi</button>
@@ -460,6 +461,9 @@ function revisarPermisoGemini() {
   $('permisoGemini').hidden = Android.puedeAbrirSolo();
   $('permisoMusica').hidden = Android.puedeTocarMusica();
 }
+function spotifyEstado() { if (window.Android) $('spotify').textContent = Android.spotifyConectado() ? 'Spotify conectado (tocar para desconectar)' : 'Conectar Spotify (para que Cubi ponga canciones)'; }
+$('spotify').onclick = () => Android.spotifyConectar();
+setTimeout(spotifyEstado, 600);
 $('permisoMusica').onclick = () => { Android.pedirTocarMusica(); toast('Busca Cubi y actívalo'); };
 document.addEventListener('visibilitychange', () => { if (!document.hidden) revisarPermisoGemini(); });
 function otaCancelada() {}
