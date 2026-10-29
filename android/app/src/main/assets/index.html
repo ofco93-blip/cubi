@@ -154,6 +154,8 @@ section[hidden] { display: none; }
     <label class="sl"><div class="row"><span>Volumen</span><span id="vVol"></span></div><input type="range" id="vol" min="0" max="100"></label>
     <div class="row"><span>Sonidos del robot</span><label class="sw"><input type="checkbox" id="son"><i></i></label></div>
     <button class="btn" id="rot">Girar la pantalla 180°</button>
+    <label class="sl"><div class="row"><span>Qué tan duro hay que frenar para que se estrelle</span><span id="vFr"></span></div>
+      <input type="range" id="fr" min="15" max="90" step="1"></label>
     <button class="btn" id="adl">Al frenar se alegra en vez de asustarse: invertir</button>
   </div>
   <h2>Bluetooth</h2>
@@ -163,7 +165,7 @@ section[hidden] { display: none; }
   </div>
   <h2>Actualizaciones</h2>
   <div class="card">
-    <p class="note" id="verNota">Revisando si hay versión nueva…</p>
+    <p class="note" id="verNota" style="white-space:pre-line">Revisando si hay versión nueva…</p>
     <button class="btn main" id="actApp">Actualizar la app</button>
     <button class="btn main" id="actCubi">Actualizar a Cubi (firmware)</button>
     <p class="note">El firmware va por Bluetooth: tarda unos minutos y la app queda bloqueada hasta que termine.</p>
@@ -252,12 +254,14 @@ $('reconectar').onclick = conectar;
 function pintarEstado(j) {
   document.querySelectorAll('.face').forEach(b => b.classList.toggle('sel', b.dataset.n === j.emo));
   $('conn').textContent = 'Conectado por Bluetooth' + (j.bat >= 0 ? ' · batería ' + j.bat + '%' : '');
+  if (j.fw !== undefined) { vFw = j.fw; notaVersiones(); }
   $('info').textContent = 'Cubi v' + j.ver + (j.carga ? ' · cargando' : j.usb ? ' · conectado al USB' : ' · con batería');
   if (ini) {
     ini = false;
     $('bri').value = j.bri; $('vol').value = j.vol; $('son').checked = !!j.son; $('mus').checked = !!j.mus;
     $('uv').value = Math.round(j.uv * 100); $('gb').value = Math.round(j.gb * 100);
     $('sk').value = Math.round((8 - j.sk) / 6.7 * 100); $('mg').value = j.mg;
+    if (j.fr) $('fr').value = Math.round(j.fr * 100);
     etiquetas();
   }
 }
@@ -293,6 +297,7 @@ function etiquetas() {
   $('vGb').textContent = ($('gb').value / 100).toFixed(1) + '×';
   $('vSk').textContent = $('sk').value + '%';
   $('vMg').textContent = $('mg').value + ' de 7';
+  $('vFr').textContent = $('fr').value < 30 ? 'suave' : $('fr').value < 50 ? 'normal' : $('fr').value < 70 ? 'fuerte' : 'muy fuerte';
   $('vBri').textContent = Math.round($('bri').value / 2.55) + '%';
   $('vVol').textContent = $('vol').value + '%';
 }
@@ -306,6 +311,7 @@ $('bri').onchange = e => mandar('/brillo?v=' + e.target.value);
 $('vol').onchange = e => mandar('/ajuste?vol=' + e.target.value);
 $('son').onchange = e => mandar('/ajuste?son=' + (e.target.checked ? 1 : 0));
 $('rot').onclick = () => mandar('/ajuste?rot=1');
+$('fr').onchange = e => mandar('/ajuste?fr=' + (e.target.value / 100));
 $('adl').onclick = () => { mandar('/ajuste?adl=1'); toast('Listo: frenar y arrancar quedaron al revés'); };
 document.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => mandar('/evento?tipo=' + b.dataset.ev));
 document.querySelectorAll('[data-demo]').forEach(b => b.onclick = () => { mandar('/demo?t=' + b.dataset.demo); toast(b.dataset.demo === 'canto' ? 'Cubi está cantando…' : 'Cubi está bailando…'); });
@@ -338,9 +344,16 @@ $('actCubi').onclick = () => {
   Android.actualizarCubi();
 };
 $('actApp').onclick = () => Android.actualizarApp();
-function versionGithub(ultima, mia, error) {
-  $('verNota').textContent = ultima < 0 ? 'No pude revisar las versiones: ' + error
-    : ultima > mia ? 'Hay una versión nueva (' + ultima + '). Tienes la ' + mia + '.' : 'Tienes la última versión (' + mia + ').';
+// versiones: app (la de este celular), firmware (el que tiene Cubi) y la última publicada en GitHub
+let vUltima = -1, vApp = -1, vFw = -1, vError = '';
+function versionGithub(ultima, mia, error) { vUltima = ultima; vApp = mia; vError = error || ''; notaVersiones(); }
+function notaVersiones() {
+  const v = n => '2.0.' + n, l = [];
+  l.push('App: ' + (vApp > 0 ? v(vApp) : '…') + (vUltima > vApp && vApp > 0 ? ' → hay nueva (' + v(vUltima) + ')' : ''));
+  l.push('Firmware de Cubi: ' + (vFw < 0 ? 'conéctalo para verlo' : vFw === 0 ? 'compilado a mano'
+    : v(vFw) + (vUltima > vFw ? ' → hay nuevo (' + v(vUltima) + ')' : ' (el último)')));
+  if (vUltima < 0 && vError) l.push('No pude revisar GitHub: ' + vError);
+  $('verNota').textContent = l.join(String.fromCharCode(10));
 }
 
 // ---------- asistente ----------

@@ -16,7 +16,8 @@
 #include "config.h"
 #include "caras.h"
 
-#define VERSION "2.0"
+#include "version.h"  // VERSION_FW: el número de compilación de GitHub (0 = compilado a mano)
+#define VERSION "2.0." VERSION_FW_TXT
 
 // ---------- Tipos (antes de cualquier función por los prototipos de Arduino) ----------
 struct C3 { float r, g, b; };
@@ -67,7 +68,7 @@ es8311_handle_t es = nullptr;
 
 uint8_t rotacion = ROTACION_INICIAL, volumen = VOLUMEN_INICIAL, micGan = GANANCIA_MIC;
 bool sonidoOn = true, musicaOn = true;
-float umbralVoz = UMBRAL_VOZ, ganBoca = GANANCIA_BOCA, sensK = SONIDO_K;
+float umbralVoz = UMBRAL_VOZ, ganBoca = GANANCIA_BOCA, sensK = SONIDO_K, umbralFreno = UMBRAL_FRENO;
 volatile uint32_t otaTotal = 0, otaHecho = 0;  // actualización por Bluetooth en curso (bytes)
 volatile bool otaError = false;
 uint32_t reinicioEn = 0;
@@ -641,11 +642,13 @@ void imuUpdate(uint32_t now) {
 
   // Frenón y arranque: deben durar 0,3 s (un hueco no cuenta) y le ganan a la música un ratico.
   static uint32_t frenaDesde = 0, aceleraDesde = 0;
-  frenaDesde = lon < -UMBRAL_FRENO ? (frenaDesde ? frenaDesde : now) : 0;
+  frenaDesde = lon < -umbralFreno ? (frenaDesde ? frenaDesde : now) : 0;
   aceleraDesde = lon > UMBRAL_ACEL ? (aceleraDesde ? aceleraDesde : now) : 0;
   if (modo == NORMAL && !asis && now > cdEvento) {
     static uint32_t ultimoEvento = 0;
-    if (frenaDesde && now - frenaDesde > 300) { reac(caras::FRENAZO); cdEvento = now + 4500; ultimoEvento = now; }
+    // frenazo: medio segundo frenando duro, y no más de uno cada 20 s (el vidrio rajado cansa)
+    static uint32_t ultimoFrenazo = 0;
+    if (frenaDesde && now - frenaDesde > 500 && (!ultimoFrenazo || now - ultimoFrenazo > 20000)) { reac(caras::FRENAZO); cdEvento = now + 4500; ultimoEvento = ultimoFrenazo = now; }
     else if (aceleraDesde && now - aceleraDesde > 300) {  // arrancar después de un buen rato quieto: entra "a toda velocidad"
       reac(now - ultimoEvento > 60000 ? caras::ARRANQUE : caras::ACELERON); cdEvento = now + 4000; ultimoEvento = now;
     } else if (fabsf(vert) > UMBRAL_BACHE && estilo < BALADA) { reac(caras::BACHE); cdEvento = now + 3000; ultimoEvento = now; }  // con música no la corta
@@ -723,7 +726,7 @@ void energiaUpdate(uint32_t now) {
 
 void guardar() {
   prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn);
-  prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan); prefs.putChar("adl", adelante);
+  prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan); prefs.putChar("adl", adelante); prefs.putFloat("fr", umbralFreno);
 }
 
 // ---------- Órdenes de la app: "ruta?clave=valor&..." -> texto o JSON ----------
@@ -775,6 +778,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     if (p.has("vol")) { volumen = constrain(p.get("vol").toInt(), 0, 100); if (es) es8311_voice_volume_set(es, volumen, NULL); sonar(S_WHATSAPP); }
     if (p.has("son")) sonidoOn = p.get("son") == "1";
     if (p.has("mus")) musicaOn = p.get("mus") == "1";
+    if (p.has("fr")) umbralFreno = constrain(p.get("fr").toFloat(), 0.15f, 0.9f);
     if (p.has("adl")) adelante = -adelante;  // al frenar se pone feliz: se invierte
     if (p.has("rot")) { rotacion = rotacion == 3 ? 1 : 3; cv->setRotation(rotacion); memset(cv->getFramebuffer(), 0, 368 * 448 * 2); dib::todo(); }
     if (p.has("uv")) umbralVoz = constrain(p.get("uv").toFloat(), 0.05f, 0.95f);
@@ -789,7 +793,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
       ",\"estilo\":\"" + EST_NOM[estilo] + "\",\"bpm\":" + int(aBpm) + ",\"bat\":" + bat + ",\"usb\":" + (pmuOk && pmu.isVbusIn() ? 1 : 0) +
       ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn +
       ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
-      ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + "}";
+      ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"fw\":" + VERSION_FW + "}";
   }
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
     char b[300];
@@ -943,7 +947,7 @@ void setup() {
   rotacion = prefs.getUChar("rot", ROTACION_INICIAL); volumen = prefs.getUChar("vol", VOLUMEN_INICIAL);
   sonidoOn = prefs.getBool("son", true); musicaOn = prefs.getBool("mus", true);
   umbralVoz = prefs.getFloat("uv", UMBRAL_VOZ); ganBoca = prefs.getFloat("gb", GANANCIA_BOCA);
-  sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO);
+  sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = prefs.getFloat("fr", UMBRAL_FRENO);
 
   // Reset de pantalla y táctil por el expansor TCA9554 (pines 0..2), misma secuencia que el firmware de fábrica V2.
   // Con pulsos cortos (20 ms) el panel puede quedar trabado tras regrabar: ver github.com/waveshareteam/ESP32-S3-Touch-AMOLED-1.8/issues/12
