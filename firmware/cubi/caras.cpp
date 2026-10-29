@@ -695,8 +695,8 @@ static void guitarraLinea(float x, float y, float ang, float e, bool electrica, 
   }
 }
 // saxofón de línea, de pie: boquilla arriba, campana abajo que sube a la derecha
-static void saxoLinea(float x, float y, float e, float alfa) {
-  Marco m = marco(x, y, 0, e);
+static void saxoLinea(float x, float y, float ang, float e, float alfa) {
+  Marco m = marco(x, y, ang, e);
   auto tubo = [=](float a, float b) { return smin(dCapsula2(a, b, -6, -70, 5, 0, 22, 13), dCapsula2(a, b, 6, 36, 13, 34, 4, 19), 10); };
   pieza(m, -24, -80, 58, 54, solido(BL, alfa, 6), [=](float a, float b) { return fabsf(tubo(a, b)) - 2.6f; });
   pieza(m, -24, -92, -2, -64, solido(BL, alfa, 6), [=](float a, float b) { return dSegmento(a, b, -6, -70, -18, -86, 3); });    // boquilla
@@ -777,15 +777,15 @@ static void extrasMini(float u, const Entradas &e) {
         volumen(hx - 16, hy - 16, hx + 16, hy + 16, 0.95f, [=](float px, float py) { return dCirculo(px, py, hx, hy, 15); });
       }
       break;
-    case R_JAZZ: {                                      // saxofón con la manito, se mece con el golpe
-      const float sxx = W - 110 + 4 * vaiven, syy = H - 64, se = 0.95f;
+    case R_JAZZ: {                                      // saxofón con la manito: se mece de lado a lado con el golpe
+      const float sxx = W - 110 + 26 * vaiven, syy = H - 64 - 6 * fabsf(vaiven), ang = 0.2f * vaiven, se = 0.95f;
       float hx, hy;
-      saxoLinea(sxx, syy, se, 1);
-      aPantalla(marco(sxx, syy, 0, se), -4, -28, hx, hy); manoBlanca(hx, hy, -0.3f, 0.75f, false);
+      saxoLinea(sxx, syy, ang, se, 1);
+      aPantalla(marco(sxx, syy, ang, se), -4, -28, hx, hy); manoBlanca(hx, hy, -0.3f + ang, 0.75f, false);
       break;
     }
-    case R_DJ: case R_ELECTRO: case R_BARRAS: {         // disco con la manito que lo raya
-      float scratch = (n % 4 >= 2) ? sinf(f * PI * 2) : 0, x = CX + 10, y = H - 70;
+    case R_DJ: case R_ELECTRO: case R_BARRAS: {         // disco a la derecha (la boquita queda libre) y la manito que lo raya
+      float scratch = (n % 4 >= 2) ? sinf(f * PI * 2) : 0, x = CX + 122, y = H - 66;
       disco(x, y, 48, u * 4 + 0.9f * scratch, 1);
       manoBlanca(x - 44 + 10 * scratch, y - 30 + 6 * scratch, 0.45f, 1.15f, true);
       break;
