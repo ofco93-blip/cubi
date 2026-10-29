@@ -8,9 +8,9 @@ using namespace dib;
 const char *NOMBRE_BASE[N_BASE] = {"reposo", "escucha", "habla", "canta", "piensa", "duerme", "telefono"};
 const char *NOMBRE_REAC[N_REAC] = {"", "saludo", "bache", "frenazo", "aceleron", "arranque", "izq", "der", "caricia",
                                    "whatsapp", "llamada", "calor", "risa", "sorpresa", "amor", "mareo", "maps_izq", "maps_der",
-                                   "llegamos", "sol", "lluvia", "frio", "bateria", "guino", "curiosa"};
+                                   "llegamos", "sol", "lluvia", "frio", "bateria", "guino", "curiosa", "kamehameha"};
 static const float DURA[N_REAC] = {0, 2.6f, 2.4f, 4.0f, 2.8f, 2.8f, 2.4f, 2.4f, 2.6f, 6.0f, 6.0f, 7.5f, 2.0f, 2.0f, 4.0f,
-                                   3.2f, 3.0f, 3.0f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f};
+                                   3.2f, 3.0f, 3.0f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f, 5.0f};
 float duracion(Reac r) { return DURA[r]; }
 const char *NOMBRE_RITMO[N_RITMO] = {"pop", "urbano", "electro", "tropical", "kpop", "corazon", "groove", "guitarra", "disfruta", "rock",
                                      "jazz", "dj", "piano", "barras"};
@@ -1242,6 +1242,37 @@ static void solHistoria(float u) {
   }
 }
 
+// ---------------------------------------------------------------- kamehameha: carga una bola de energía entre las manos y la suelta
+static void kame(float u) {
+  ConColor cc;
+  const Col azul{110, 190, 255};
+  const float entra = tramo(u, 0.1f, 0.5f), fin = 1 - tramo(u, 4.4f, 5.0f);
+  const float carga = tramo(u, 0.4f, 2.6f), empuja = tramo(u, 2.6f, 2.75f), rayo = empuja * (1 - tramo(u, 3.9f, 4.4f));
+  const float bx = CX + 150 - 40 * empuja + 3 * carga * (1 - empuja) * sinf(u * 80), by = H - 92;
+  const float R = (6 + 28 * carga) * (1 + 0.08f * sinf(u * 37)) * (1 - 0.3f * rayo);
+  float fl = campana(u, 2.6f, 2.95f);                                 // destello al soltarla
+  if (fl > 0.01f) figura(0, 0, W, H, solido(azul, 0.3f * fl), [](float, float) { return -1.f; });
+  if (rayo > 0.01f) {                                                 // el rayo: halo azul ondulado y centro blanco
+    const float hh = 32 * rayo;
+    figura(0, by - hh - 26, bx, by + hh + 26, solido(azul, 0.9f * rayo, 22),
+           [=](float px, float py) { return fabsf(py - by) - hh - 5 * sinf(px * 0.09f + u * 50); });
+    figura(0, by - hh, bx, by + hh, solido(BLANCO, rayo),
+           [=](float px, float py) { return fabsf(py - by) - hh * 0.45f - 2 * sinf(px * 0.13f - u * 60); });
+  }
+  const float a = entra * fin;
+  if (carga > 0.01f && empuja < 1) for (int i = 0; i < 6; i++) {    // chispitas que se juntan en la bola
+    float q = fmodf(u * 1.5f + i / 6.f, 1.f), g = i * 1.047f + u * 5, d = 26 + 70 * (1 - q);
+    circulo(bx + cosf(g) * d, by + sinf(g) * d, 3, azul, a * carga * campana(q, 0, 1), 4);
+  }
+  if (R > 1) {
+    circulo(bx, by, R + 12, azul, 0.55f * a, 20);
+    circulo(bx, by, R, BLANCO, a, 8);
+  }
+  const float sep = R + 12 + 10 * (1 - entra);                        // las manos por fuera, apuntando hacia donde sale el rayo
+  manoBlanca(bx + 20 + 60 * (1 - entra), by - sep, PI + 0.35f, 0.95f, false, a);
+  manoBlanca(bx + 20 + 60 * (1 - entra), by + sep, PI - 0.35f, 0.95f, false, a);
+}
+
 // ---------------------------------------------------------------- reacciones (anticipación, acción, consecuencia, remate)
 static Rostro deReac(float u, const Entradas &e, float &vel) {
   Rostro r = neutro(AZUL);
@@ -1420,6 +1451,18 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       r.L.incl = -0.05f; mover(r, 0, -4 * campana(u, 0.1f, 1.0f));
       vel = 25;
       break;
+    case KAME: {                                                     // concentra energía en las manos, tiembla y la suelta
+      float conc = tramo(u, 0, 0.3f), carga = tramo(u, 0.4f, 2.6f), rayo = tramo(u, 2.62f, 2.8f) * (1 - tramo(u, 3.9f, 4.4f));
+      float orgullo = tramo(u, 4.2f, 4.5f) * (1 - tramo(u, 4.7f, 5.0f));
+      tapas(r, (0.3f * conc + 0.3f * rayo) * (1 - orgullo)); r.L.incl = r.R.incl = 0.2f * conc * (1 - orgullo);
+      if (u < 2.62f) mirar(r, 0.45f * conc, 0.45f * conc);           // mira la bola entre las manos
+      else mirar(r, -0.5f * rayo, 0.35f * rayo);                      // sigue al rayo
+      mover(r, 4 * carga * (1 - rayo) * sinf(u * 90) + 28 * rayo, -8 * conc * (1 - rayo));
+      feliz(r, orgullo);
+      r.boca = 0.8f * rayo; r.bAncho = 1.2f;
+      vel = 40;
+      break;
+    }
     case CURIOSA: {                                                  // ladea la cabeza y abre un ojo más que el otro
       float k = tramo(u, 0, 0.3f) * (1 - tramo(u, 2.0f, 2.4f));
       r.L.y += 14 * k; r.R.y -= 14 * k; r.R.w *= 1 + 0.12f * k; r.R.h *= 1 + 0.12f * k; r.L.h *= 1 - 0.1f * k;
@@ -1434,6 +1477,9 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
 
 static void extrasReac(float u, bool delante) {
   switch (laReac) {
+    case KAME:
+      if (delante) kame(u);
+      break;
     case SALUDO:
       if (delante && u > 0.6f) {
         for (int i = 0; i < 4; i++) chispa(CX + (i < 2 ? -1 : 1) * (170 + 20 * (i & 1)), 60 + 90 * (i & 1) + 10 * sinf(u * 5 + i), 16, campana(u, 0.6f + i * 0.1f, 2.4f));
