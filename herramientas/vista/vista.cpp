@@ -48,6 +48,7 @@ int main(int argc, char **argv) {
   for (int b = 0; b < N_BASE; b++) if (que == NOMBRE_BASE[b]) { base((Base)b); esBase = true; }
   const float FPS = 25, dt = 1 / FPS;
   if (!esBase) { base(REPOSO); for (int r = 1; r < N_REAC; r++) if (que == NOMBRE_REAC[r]) { cuadro(0, dt, Entradas()); reaccion((Reac)r); } }
+  if (que == "clima") { cuadro(0, dt, Entradas()); reaccion(SOL); mostrarGrados(28, duracion(SOL)); }   // "Cubi, ¿cómo está el clima?"
   static uint8_t rgb[dib::W * dib::H * 3];
   for (int i = 0; i < (int)(seg * FPS); i++) {
     float t = i * dt;

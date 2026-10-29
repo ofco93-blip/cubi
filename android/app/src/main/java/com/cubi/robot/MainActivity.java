@@ -271,6 +271,23 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String vocesCubi() {  // [{n: nombre, q: calidad, red: usa internet}], la elegida en "sel"
+            JSONArray a = new JSONArray();
+            if (CubiService.yo == null) return "{}";
+            try {
+                for (android.speech.tts.Voice v : CubiService.yo.vocesEs())
+                    a.put(new JSONObject().put("n", v.getName()).put("q", v.getQuality()).put("red", v.isNetworkConnectionRequired()));
+                return new JSONObject().put("voces", a).put("sel", getSharedPreferences("cubi", 0).getString("voz", ""))
+                        .put("tono", getSharedPreferences("cubi", 0).getFloat("tono", 1.4f)).toString();
+            } catch (Exception e) { return "{}"; }
+        }
+
+        @JavascriptInterface
+        public void vozCubi(String nombre, float tono) {
+            if (CubiService.yo != null) runOnUiThread(() -> { CubiService.yo.elegirVoz(nombre, tono); CubiService.yo.probarVoz(); });
+        }
+
+        @JavascriptInterface
         public void hablarCubi() {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
                 requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 6);

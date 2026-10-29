@@ -5,6 +5,7 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.SearchManager;
 import android.app.Service;
 import android.app.UiModeManager;
 import android.bluetooth.BluetoothAdapter;
@@ -47,6 +48,9 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.ParcelUuid;
+import android.provider.MediaStore;
+import android.speech.tts.Voice;
+import android.view.KeyEvent;
 
 import com.anthropic.client.AnthropicClient;
 import com.anthropic.client.okhttp.AnthropicOkHttpClient;
@@ -396,7 +400,8 @@ public class CubiService extends Service {
                 // códigos de la OMM: 0-1 despejado, 2-3 nubes, 45-48 niebla, 51-67 y 80-82 lluvia, 71-77 y 85-86 nieve, 95-99 tormenta
                 String e = cod <= 1 ? "despejado" : cod <= 3 ? "nubes" : cod <= 48 ? "niebla" : cod <= 67 ? "lluvia"
                     : cod <= 77 ? "nieve" : cod <= 82 ? "lluvia" : cod <= 86 ? "nieve" : "tormenta";
-                enviar("clima|/clima?t=" + t + "&e=" + e + "&d=" + dia);
+                climaOrden = "/clima?t=" + t + "&e=" + e + "&d=" + dia;
+                enviar("clima|" + climaOrden);
                 climaTexto = "Ahora: " + e + ", " + t + " grados";
                 js("climaTexto(" + JSONObject.quote(climaTexto) + ")");
             } catch (Exception ignored) {}
@@ -411,29 +416,40 @@ public class CubiService extends Service {
     // ---------- Cubi conversa: "Cubi" + lo que digas -> Claude Haiku -> lo dice en voz alta y hace un truco ----------
     static final String MODELO_CLAUDE = "claude-haiku-5-5";
     static final List<String> REACCIONES = Arrays.asList("kamehameha", "confeti", "risa", "sorpresa", "amor", "saludo", "guino",
-            "curiosa", "mareo", "calor", "frio", "sol", "lluvia", "llegamos");
+            "curiosa", "mareo", "llegamos");
     static final List<String> BAILES = Arrays.asList("rock", "pop", "tropical", "urbano", "electro", "jazz", "dj", "guitarra", "kpop", "piano");
-    static final String SISTEMA = "Eres Cubi, un robotito con ojos en una pantalla redonda que va en el tablero de un carro en Colombia. "
-            + "Eres el copiloto: chistoso, cariñoso y un poco pícaro. Hablas español colombiano casual.\n"
-            + "Lo que digas se lee en voz alta mientras manejan: contesta en 1 o 2 frases cortas (máximo 30 palabras), "
-            + "sin emojis, sin listas y sin markdown.\n"
-            + "Además de hablar haces UN truco en tu pantalla. En 'truco' pon exactamente uno de estos nombres, o 'ninguno':\n"
-            + "- kamehameha: cargas una bola de energía entre las manos y la sueltas en un rayo. Al hacerlo di algo como "
-            + "'¡Kaaa... meee... haaa... meee... HAAA!'.\n"
-            + "- confeti: miras al copiloto (a tu derecha), le apuntas con una pistola de juguete, le disparas confeti y te ríes. "
-            + "Úsalo cuando te pidan 'mata a', 'dispárale a' o 'acaba con' alguien: en este carro eso siempre es una broma entre ellos. "
-            + "Sigue la broma con algo teatral como '¿Unas últimas palabras, esposo?', llamando a la persona con la misma palabra "
-            + "que usaron, y termina con '¡Pum!' y una risa. Es solo confeti: nunca hables de hacer daño de verdad.\n"
-            + "- risa, sorpresa, amor, saludo, guino, curiosa, mareo, calor, frio, sol, lluvia, llegamos: caras y animaciones con esos nombres.\n"
-            + "- baile_rock, baile_pop, baile_tropical, baile_urbano, baile_electro, baile_jazz, baile_dj, baile_guitarra, "
-            + "baile_kpop, baile_piano: bailas unos segundos después de hablar.\n"
-            + "Si te piden algo que no está en la lista, elige el truco que más se parezca o 'ninguno' y contesta con gracia. "
+    static final String SISTEMA = "Eres Cubi, un robotito tierno que vive en una pantallita redonda en el tablero de un carro. "
+            + "Eres el copiloto: dulce, curioso, alegre y un poquito travieso, como un personaje de película animada. "
+            + "Hablas como un robot pequeño y adorable: frases cortas y claras, a veces dices 'bip bup' o 'procesando', "
+            + "y te emocionas fácil. Usa español latino neutro: nada de 'mijo', 'parce', groserías ni regionalismos.\n"
+            + "Tu voz sale por el celular mientras manejan: responde con 1 o 2 frases cortas (máximo 25 palabras), sin emojis, "
+            + "sin listas, sin markdown y sin letras repetidas como 'Kaaa' o 'jajajaja', porque la voz las lee mal.\n"
+            + "Puedes hacer cosas de verdad: si está en tu lista, hazla; nunca le pidas a la persona que lo haga ella.\n"
+            + "Campos de tu respuesta:\n"
+            + "- dice: lo que dices.\n"
+            + "- truco: una animación en tu pantalla, exactamente una de: ninguno, kamehameha, confeti, risa, sorpresa, amor, "
+            + "saludo, guino, curiosa, mareo, llegamos, baile_rock, baile_pop, baile_tropical, baile_urbano, baile_electro, "
+            + "baile_jazz, baile_dj, baile_guitarra, baile_kpop, baile_piano.\n"
+            + "  kamehameha: cargas una bola de energía y la sueltas en un rayo; di algo corto como '¡Kame hame HA!'.\n"
+            + "  confeti: cuando te pidan 'mata a', 'dispárale a' o 'acaba con' alguien. En este carro siempre es una broma entre "
+            + "ellos: miras al copiloto, le apuntas con una pistola de juguete y le disparas confeti. Di algo teatral y tierno "
+            + "como '¿Unas últimas palabras, esposo?', con la misma palabra que usaron para nombrar a la persona, y termina con "
+            + "'¡Pum!'. Nunca hables de hacer daño de verdad.\n"
+            + "  baile_*: bailas unos segundos después de hablar.\n"
+            + "- accion: algo que haces en el celular, exactamente una de: ninguna, clima, musica_play, musica_pausa, "
+            + "musica_siguiente, musica_anterior, musica_buscar, volumen_subir, volumen_bajar.\n"
+            + "  clima: cuando pregunten por el clima o la temperatura; en tu pantalla salen la animación del clima y los grados. "
+            + "Dilo en pocas palabras con el dato entre corchetes.\n"
+            + "  musica_play: poner o seguir la música. musica_buscar: cuando pidan algo concreto (canción, artista o género).\n"
+            + "- busqueda: solo con musica_buscar, qué buscar (por ejemplo 'salsa' o 'Bad Bunny'); si no, vacío.\n"
             + "Cada mensaje trae entre corchetes la hora, el clima y si suena música: úsalo solo si viene al caso.";
 
     // la respuesta de Haiku (structured output): lo que dice y el truco
     public static class Respuesta {
         public String dice;
         public String truco;
+        public String accion;
+        public String busqueda;
     }
 
     private TextToSpeech voz;
@@ -442,7 +458,8 @@ public class CubiService extends Service {
     private AnthropicClient claude;
     private final List<String[]> charlaHist = new ArrayList<>();  // {lo que uno dijo, lo que Cubi contestó}
     private volatile long charlaHasta, charlaUltima;               // mientras dura la charla Cubi no vuelve al reposo
-    private String trucoPend = "";
+    private String trucoPend = "", accionPend = "", busquedaPend = "";
+    String climaOrden = "";  // lo último que se le contó a Cubi del clima (para mostrarlo cuando se lo preguntan)
 
     String claveClaude() { return getSharedPreferences("cubi", 0).getString("claude", ""); }
 
@@ -454,15 +471,47 @@ public class CubiService extends Service {
     private void iniciarVoz() {
         voz = new TextToSpeech(this, st -> {
             if (st != TextToSpeech.SUCCESS) { voz = null; return; }
-            if (voz.setLanguage(new Locale("es", "CO")) < 0) voz.setLanguage(new Locale("es"));
+            if (voz.setLanguage(new Locale("es", "US")) < 0) voz.setLanguage(new Locale("es"));
+            ponerVoz();
             voz.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
             voz.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-                @Override public void onStart(String id) { ui.post(() -> hacerTruco(true)); }
+                @Override public void onStart(String id) {}
                 @Override public void onDone(String id) { ui.post(() -> { hacerTruco(false); terminarCharla(); }); }
                 @Override public void onError(String id) { ui.post(() -> { hacerTruco(false); terminarCharla(); }); }
             });
         });
+    }
+
+    // voces en español del celular, la mejor primero (las de internet suelen sonar más naturales)
+    List<Voice> vocesEs() {
+        List<Voice> l = new ArrayList<>();
+        if (voz == null || voz.getVoices() == null) return l;
+        for (Voice v : voz.getVoices())
+            if (v.getLocale().getLanguage().equals("es") && !v.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)) l.add(v);
+        l.sort((a, b) -> a.getQuality() != b.getQuality() ? b.getQuality() - a.getQuality()
+                : Boolean.compare(b.isNetworkConnectionRequired(), a.isNetworkConnectionRequired()));
+        return l;
+    }
+
+    void ponerVoz() {
+        if (voz == null) return;
+        String elegida = getSharedPreferences("cubi", 0).getString("voz", "");
+        List<Voice> l = vocesEs();
+        Voice v = l.isEmpty() ? null : l.get(0);
+        for (Voice x : l) if (x.getName().equals(elegida)) v = x;
+        if (v != null) voz.setVoice(v);
+        voz.setPitch(getSharedPreferences("cubi", 0).getFloat("tono", 1.4f));
+        voz.setSpeechRate(1.05f);
+    }
+
+    void elegirVoz(String nombre, float tono) {
+        getSharedPreferences("cubi", 0).edit().putString("voz", nombre).putFloat("tono", tono).apply();
+        ponerVoz();
+    }
+
+    void probarVoz() {
+        if (voz != null) voz.speak("¡Hola! Soy Cubi, tu copiloto. Bip bup.", TextToSpeech.QUEUE_FLUSH, null, "prueba");
     }
 
     // baja la música mientras Cubi escucha y habla (el reproductor la baja solo y la sube al soltar el foco)
@@ -527,7 +576,7 @@ public class CubiService extends Service {
         charlaHasta = System.currentTimeMillis() + 30000;
         js("toast(" + JSONObject.quote("Le dijiste: " + texto) + ")");
         new Thread(() -> {
-            String dice, truco = "ninguno";
+            String dice, truco = "ninguno", accion = "", busqueda = "";
             try {
                 if (claude == null) claude = AnthropicOkHttpClient.builder().apiKey(claveClaude()).build();
                 if (System.currentTimeMillis() - charlaUltima > 180000) charlaHist.clear();  // después de 3 min empieza de cero
@@ -536,10 +585,12 @@ public class CubiService extends Service {
                 String pregunta = contexto() + texto;
                 Respuesta r = claude.messages().create(b.addUserMessage(pregunta).outputConfig(Respuesta.class).build())
                         .content().stream().flatMap(c -> c.text().stream()).map(t -> t.text()).findFirst().orElse(null);
-                if (r == null || r.dice == null || r.dice.isEmpty()) dice = "Uy, con eso no te puedo ayudar.";
+                if (r == null || r.dice == null || r.dice.isEmpty()) dice = "Bip. Eso no lo puedo hacer.";
                 else {
                     dice = r.dice;
                     if (r.truco != null) truco = r.truco;
+                    accion = r.accion == null ? "" : r.accion;
+                    busqueda = r.busqueda == null ? "" : r.busqueda;
                     charlaHist.add(new String[]{pregunta, dice});
                     while (charlaHist.size() > 6) charlaHist.remove(0);
                 }
@@ -557,26 +608,67 @@ public class CubiService extends Service {
                 js("toast(" + JSONObject.quote("Cubi: " + e) + ")");
             }
             charlaUltima = System.currentTimeMillis();
-            String d = dice, t = truco;
-            ui.post(() -> decir(d, t));
+            String d = dice, t = truco, ac = accion, bq = busqueda;
+            ui.post(() -> decir(d, t, ac, bq));
         }).start();
     }
 
-    private void decir(String texto, String truco) {
+    private void decir(String texto, String truco, String accion, String busqueda) {
         charlaHasta = System.currentTimeMillis() + 30000;
-        trucoPend = truco;
+        trucoPend = truco; accionPend = accion; busquedaPend = busqueda;
+        hacerTruco(true);  // las animaciones arrancan junto con la voz
         if (voz == null || voz.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "cubi") != TextToSpeech.SUCCESS) {
-            hacerTruco(true);
             hacerTruco(false);
             terminarCharla();
         }
     }
 
     // las reacciones arrancan con la voz (el kamehameha se dice mientras carga); los bailes, cuando termina de hablar
+    // y la música, después de hablar (para no taparse)
     private void hacerTruco(boolean empieza) {
-        String t = trucoPend;
+        String t = trucoPend, ac = accionPend;
         if (empieza && REACCIONES.contains(t)) { trucoPend = ""; enviar("asis|/r?n=" + t); }
+        if (empieza && ac.equals("clima")) {
+            accionPend = "";
+            if (!climaOrden.isEmpty()) enviar("asis|" + climaOrden + "&ver=1");
+            else js("toast('Activa Clima en la app para que Cubi lo muestre')");
+        }
         if (!empieza && t.startsWith("baile_") && BAILES.contains(t.substring(6))) { trucoPend = ""; enviar("asis|/demo?t=baile&r=" + t.substring(6)); }
+        if (!empieza && (ac.startsWith("musica") || ac.startsWith("volumen"))) {
+            accionPend = "";
+            String q = busquedaPend;
+            ui.postDelayed(() -> musica(ac, q), 400);  // después de soltar el foco: la música vuelve a su volumen
+        }
+    }
+
+    private void teclaMedia(int k) {
+        AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+        am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, k));
+        am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_UP, k));
+    }
+
+    private void musica(String accion, String busqueda) {
+        AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+        switch (accion) {
+            case "musica_play": teclaMedia(KeyEvent.KEYCODE_MEDIA_PLAY); break;
+            case "musica_pausa": teclaMedia(KeyEvent.KEYCODE_MEDIA_PAUSE); break;
+            case "musica_siguiente": teclaMedia(KeyEvent.KEYCODE_MEDIA_NEXT); break;
+            case "musica_anterior": teclaMedia(KeyEvent.KEYCODE_MEDIA_PREVIOUS); break;
+            case "volumen_subir": case "volumen_bajar":
+                for (int i = 0; i < 2; i++)
+                    am.adjustStreamVolume(AudioManager.STREAM_MUSIC, accion.equals("volumen_subir") ? AudioManager.ADJUST_RAISE : AudioManager.ADJUST_LOWER, 0);
+                break;
+            case "musica_buscar": {  // Spotify o YouTube Music buscan y ponen lo que se pidió
+                Intent i = new Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
+                        .putExtra(SearchManager.QUERY, busqueda)
+                        .putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                for (String app : new String[]{"com.spotify.music", "com.google.android.apps.youtube.music"})
+                    if (getPackageManager().getLaunchIntentForPackage(app) != null) { i.setPackage(app); break; }
+                try { startActivity(i); } catch (Exception e) { teclaMedia(KeyEvent.KEYCODE_MEDIA_PLAY); }
+                break;
+            }
+        }
     }
 
     private void terminarCharla() {
@@ -690,6 +782,7 @@ public class CubiService extends Service {
     // ---------- "Hola Cubi": el celular escucha sin internet (Vosk, modelo español de ~40 MB) y abre Gemini ----------
     static final String MODELO = "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip";
     // el modelo no conoce "Cubi": lo oye como cuba, cubo, cubil… Basta una palabra cortica así (sirve también "Hola Cubi")
+    static final String GRAMATICA = "[\"cubi\", \"cuba\", \"cubo\", \"cubil\", \"hola cuba\", \"hola cubo\", \"oye cuba\", \"[unk]\"]";
     static final Pattern HOLA = Pattern.compile("\\b(cu|ku)[bv]\\w{0,2}\\b");
     private volatile boolean oidoQuiere;
     private volatile Thread oido;
@@ -755,7 +848,7 @@ public class CubiService extends Service {
         if (oido != null) return;
         Thread t = new Thread(() -> {
             AudioRecord r = null;
-            try (org.vosk.Recognizer rec = new org.vosk.Recognizer(modelo, 16000)) {
+            try (org.vosk.Recognizer rec = new org.vosk.Recognizer(modelo, 16000, GRAMATICA)) {
                 int tam = Math.max(AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), 8192);
                 r = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, tam);
                 miSesion = r.getAudioSessionId();

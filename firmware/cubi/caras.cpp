@@ -44,6 +44,8 @@ void paquete(uint8_t p) { elPaquete = p < N_PAQ ? p : CUBI_AZUL; }
 static Base laBase = REPOSO;
 static Reac laReac = NINGUNA;
 static float reacDesde = -1, tAhora = 0, baseDesde = 0, curvaAhora = 0;
+static int gradosN = 0; static float gradosDesde = -1, gradosHasta = -1;
+void mostrarGrados(int g, float seg) { gradosN = g; gradosDesde = tAhora; gradosHasta = tAhora + seg; }
 
 // ---------------------------------------------------------------- azar
 static uint32_t semilla = 12345;
@@ -1730,6 +1732,13 @@ void cuadro(float t, float dt, const Entradas &e) {
   }
   boca(ahora);
   if (laReac != NINGUNA) extrasReac(u, true); else extrasBase(t, e, true);
+  if (t < gradosHasta) {                                          // "24°" arriba, entra y sale suave
+    float a = fminf(lim((t - gradosDesde) / 0.3f, 0, 1), lim((gradosHasta - t) / 0.4f, 0, 1));
+    char b[8]; snprintf(b, sizeof b, "%d", gradosN);
+    const float tam = 52, x = CX - 8, ancho = anchoTexto(b, tam), gx = x + ancho / 2 + 12, gy = 30;
+    texto(b, x, 46, tam, BLANCO, a);
+    figura(gx - 10, gy - 10, gx + 10, gy + 10, solido(BLANCO, a), [=](float px, float py) { return fabsf(dCirculo(px, py, gx, gy, 6.5f)) - 2.6f; });
+  }
   dib::blanco = false;
 }
 

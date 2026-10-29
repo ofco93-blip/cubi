@@ -114,6 +114,9 @@ const Nota S_SUENO[] = { { 90, 60, 700, 2, 70 }, { 0, 0, 300, 0, 0 }, { 70, 50, 
 const Nota S_MIEDO[] = { { 900, 300, 320, 5, 190 }, { 0, 0, 0, 0, 0 } };
 const Nota S_MAREADO[] = { { 500, 900, 200, 5, 160 }, { 900, 500, 200, 5, 160 }, { 500, 900, 200, 5, 160 }, { 0, 0, 0, 0, 0 } };
 const Nota S_BACHE[] = { { 250, 700, 110, 5, 190 }, { 0, 0, 0, 0, 0 } };
+const Nota S_KAME[] = { { 0, 0, 400, 0, 0 }, { 180, 900, 2200, 5, 150 }, { 900, 120, 900, 2, 220 }, { 0, 0, 0, 0, 0 } };
+const Nota S_PUM[] = { { 0, 0, 3000, 0, 0 }, { 1400, 150, 140, 2, 230 }, { 0, 0, 120, 0, 0 }, { 600, 900, 60, 0, 190 }, { 0, 0, 30, 0, 0 },
+                       { 700, 1000, 60, 0, 190 }, { 0, 0, 30, 0, 0 }, { 800, 1250, 90, 0, 200 }, { 0, 0, 0, 0, 0 } };
 const Nota S_ESCUCHA[] = { { 700, 700, 70, 0, 170 }, { 0, 0, 30, 0, 0 }, { 1050, 1050, 110, 0, 190 }, { 0, 0, 0, 0, 0 } };
 const Nota *SONIDO_EMO[N_EMO] = { nullptr, S_FELIZ, S_ENOJADO, S_TRISTE, S_SORPRESA, S_ENAMORADO, S_SUENO, S_MIEDO, S_MAREADO };
 struct SonNom { const char *n; const Nota *s; };
@@ -367,6 +370,8 @@ const Nota *sonidoReac(caras::Reac r) {
     case caras::AMOR: return S_ENAMORADO;
     case caras::WHATSAPP: return S_WHATSAPP;
     case caras::LLUVIA: case caras::FRIO: return S_TRISTE;
+    case caras::KAME: return S_KAME;
+    case caras::PUM: return S_PUM;
     default: return nullptr;
   }
 }
@@ -911,7 +916,11 @@ String atender(const String &ruta, const Params &p, int &cod) {
     else if (t >= 30) r = caras::CALOR;
     else if (e == "despejado" && dia) r = caras::SOL;
     static caras::Reac antes = caras::N_REAC;
-    if ((r != antes || r == caras::LLUVIA) && r != caras::NINGUNA && modo == NORMAL && !asis) reac(r);   // mientras llueva, cada vez
+    if (p.get("ver") == "1") {                     // se lo preguntaron a Cubi: animación del clima y los grados en pantalla
+      despertar(millis());
+      if (r == caras::NINGUNA) r = caras::CURIOSA;  // nublado y templado: se asoma a mirar
+      reac(r); caras::mostrarGrados(t, caras::duracion(r));
+    } else if ((r != antes || r == caras::LLUVIA) && r != caras::NINGUNA && modo == NORMAL && !asis) reac(r);   // mientras llueva, cada vez
     antes = r; climaT = t; climaE = e;
     return "ok";
   }

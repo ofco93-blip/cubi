@@ -27,6 +27,10 @@
     <queries>
         <intent><action android:name="android.speech.RecognitionService" /></intent>
         <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
+        <!-- "Cubi, pon salsa": busca y pone música en Spotify o YouTube Music -->
+        <intent><action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" /></intent>
+        <package android:name="com.spotify.music" />
+        <package android:name="com.google.android.apps.youtube.music" />
     </queries>
 
     <application
