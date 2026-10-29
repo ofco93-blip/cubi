@@ -657,8 +657,11 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
   tAntes = tAhora;
   const bool fuerte = e.canta && (e.boca > 0.78f || e.voz > 0.85f);
   gritoZona += ((fuerte ? 1.f : 0.f) - gritoZona) * lim(dt * (fuerte ? 4 : 1.2f), 0, 1);
-  const float meta = e.canta ? gritoZona * tramo(e.boca, 0.4f, 1.0f) : 0;   // cuánto abre ahora, según la sílaba
-  gritoAhora += (meta - gritoAhora) * lim(dt * 16, 0, 1);
+  // cuánto abre ahora: dos golpecitos de boca por cada golpe de la música, mezclados con lo que oye; nunca baja de un
+  // tercio del tamaño grande, así abre y cierra mucho sin salirse del rango grande
+  const float silaba = 0.5f - 0.5f * cosf(e.pulso * 4 * PI);
+  const float meta = e.canta ? gritoZona * (0.3f + 0.7f * (0.55f * silaba + 0.45f * tramo(e.boca, 0.4f, 1.0f))) : 0;
+  gritoAhora += (meta - gritoAhora) * lim(dt * 14, 0, 1);
   if (gritoAhora > 0.01f) {                            // la boca gigante empuja los ojos arriba y a los lados (caricatura)
     const float G = gritoAhora;
     escalar(r, 1 - 0.5f * G, 1 - 0.6f * G); feliz(r, fmaxf(r.L.feliz, G));
