@@ -2,7 +2,7 @@ name: Compilar
 
 on:
   push:
-    branches: [main]
+    branches: [main, "prueba-*"]   # en las ramas de prueba solo compila (para revisar antes); publica solo desde main
   workflow_dispatch:
 
 permissions:
@@ -47,6 +47,7 @@ jobs:
           cp out/cubi.ino.bin cubi.ino.bin
 
       - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
         with:
           tag_name: v2.0.${{ github.run_number }}
           name: Cubi v2.0.${{ github.run_number }}
