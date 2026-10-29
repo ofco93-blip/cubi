@@ -632,8 +632,10 @@ void imuUpdate(uint32_t now) {
   V f{ -g.z * g.x, -g.z * g.y, 1 - g.z * g.z };
   float fn = sqrtf(dot(f, f));
   float l = fn > 0.3f ? dot(hz, f) / fn * adelante : 0;
-  lon += (l - lon) * 0.1f;
-  vert = v;
+  // la vibración (motor, carretera, su propio parlante) sube y baja muy rápido: se promedia ~0,4 s y se va;
+  // un frenón de verdad dura más que eso
+  lon += (l - lon) * 0.025f;
+  vert += (v - vert) * 0.3f;
   yaw = dot(gyr, g) * GIRO_SIGNO;
   curvaLook = constrain(-yaw * 1.5f, -60.f, 60.f);
 
@@ -644,7 +646,10 @@ void imuUpdate(uint32_t now) {
   static uint32_t frenaDesde = 0, aceleraDesde = 0;
   frenaDesde = lon < -umbralFreno ? (frenaDesde ? frenaDesde : now) : 0;
   aceleraDesde = lon > UMBRAL_ACEL ? (aceleraDesde ? aceleraDesde : now) : 0;
-  if (modo == NORMAL && !asis && now > cdEvento) {
+  // mientras suena su parlante (y un ratico después) la caja vibra: no cuenta como movimiento
+  static uint32_t parlanteHasta = 0;
+  if (sonando) parlanteHasta = now + 700;
+  if (modo == NORMAL && !asis && now > cdEvento && now > parlanteHasta) {
     static uint32_t ultimoEvento = 0;
     // frenazo: medio segundo frenando duro, y no más de uno cada 20 s (el vidrio rajado cansa)
     static uint32_t ultimoFrenazo = 0;
