@@ -57,7 +57,10 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (CubiService.yo != null) CubiService.yo.oyente = this::js;
+        if (CubiService.yo != null) {
+            CubiService.yo.oyente = this::js;
+            if (CubiService.yo.holaActivo()) CubiService.yo.primerPlano();  // con la app a la vista recupera el micrófono
+        }
     }
 
     @Override
@@ -109,6 +112,12 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] p, int[] r) {
+        if (code == 4) {  // micrófono para "Hola Cubi"
+            boolean si = r.length > 0 && r[0] == PackageManager.PERMISSION_GRANTED;
+            if (si && CubiService.yo != null) CubiService.yo.hola(true);
+            else js("holaEstado(false)");
+            return;
+        }
         if (code != 2) return;
         boolean ok = true;
         for (int i = 0; i < p.length; i++)
@@ -251,6 +260,19 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void pedirAbrirSolo() {
             startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:" + getPackageName())));
+        }
+
+        @JavascriptInterface
+        public void holaCubi(boolean si) {
+            if (CubiService.yo == null) return;
+            if (si && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 4);
+            else CubiService.yo.hola(si);
+        }
+
+        @JavascriptInterface
+        public boolean holaActivo() {
+            return CubiService.yo != null && CubiService.yo.holaActivo();
         }
 
         @JavascriptInterface

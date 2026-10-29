@@ -26,7 +26,11 @@ import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.media.AudioAttributes;
 import android.media.AudioManager;
+import android.media.AudioFormat;
 import android.media.AudioPlaybackConfiguration;
+import android.media.AudioRecord;
+import android.media.AudioRecordingConfiguration;
+import android.media.MediaRecorder;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -35,11 +39,18 @@ import android.os.ParcelUuid;
 
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.UUID;
+import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 // Mantiene la conexión Bluetooth con Cubi aunque la pantalla del celular esté apagada.
 // La interfaz (MainActivity) se engancha cuando está abierta; sin ella, Cubi sigue funcionando
@@ -91,15 +102,32 @@ public class CubiService extends Service {
         Intent abrir = new Intent(this, MainActivity.class);
         PendingIntent pi = PendingIntent.getActivity(this, 0, abrir, PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder nb = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, "cubi") : new Notification.Builder(this);
-        Notification n = nb.setContentTitle("Cubi")
+        aviso = nb.setContentTitle("Cubi")
                 .setContentText("Conectado por Bluetooth: doble toque en Cubi abre Gemini")
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentIntent(pi)
                 .setOngoing(true)
                 .build();
-        if (Build.VERSION.SDK_INT >= 29) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
-        else startForeground(1, n);
+        oidoQuiere = getSharedPreferences("cubi", 0).getBoolean("hola", false);
+        primerPlano();
         escucharAsistente();
+        if (oidoQuiere) prepararOido();
+    }
+
+    private Notification aviso;
+
+    // Con "Hola Cubi" el servicio también usa el micrófono. Android solo lo deja pedir con la app a la vista:
+    // si arrancó solo (en segundo plano) sigue sin micrófono hasta que se abra la app.
+    void primerPlano() {
+        if (Build.VERSION.SDK_INT < 29) { startForeground(1, aviso); return; }
+        int tipo = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
+        if (oidoQuiere && Build.VERSION.SDK_INT >= 30 && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == 0)
+            tipo |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+        try {
+            startForeground(1, aviso, tipo);
+        } catch (Exception e) {
+            startForeground(1, aviso, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
+        }
     }
 
     @Override
@@ -114,6 +142,7 @@ public class CubiService extends Service {
     @Override
     public void onDestroy() {
         if (gatt != null) gatt.close();
+        oido = null;
         yo = null;
         super.onDestroy();
     }
@@ -355,7 +384,10 @@ public class CubiService extends Service {
         AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
         long ahora = System.currentTimeMillis();
         boolean ventana = ahora - asisDesde < 120000;
-        boolean graba = !am.getActiveRecordingConfigurations().isEmpty() && am.getMode() != AudioManager.MODE_IN_CALL;
+        boolean graba = false;  // la grabación de "Hola Cubi" (la nuestra) no cuenta
+        for (AudioRecordingConfiguration c : am.getActiveRecordingConfigurations())
+            if (c.getClientAudioSessionId() != miSesion) graba = true;
+        graba &= am.getMode() != AudioManager.MODE_IN_CALL;
         boolean suenaAsis = false, suenaNav = false, suenaVoz = false;
         if (Build.VERSION.SDK_INT >= 26) for (AudioPlaybackConfiguration c : am.getActivePlaybackConfigurations()) {
             int u = c.getAudioAttributes().getUsage();
@@ -383,6 +415,118 @@ public class CubiService extends Service {
         }
         // los callbacks no avisan cuando pasa el tiempo: mientras algo esté en juego se vuelve a mirar
         if (!asisEstado.isEmpty() || hablaDesde != 0 || ahora < pitidoHasta || ventana) ui.postDelayed(revisar, 400);
+        // "Hola Cubi" escucha solo cuando nadie más usa el micrófono ni hay llamada
+        boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva;
+        if (oidoQuiere && modelo != null && libre) arrancarOido();
+        else pararOido();
+    }
+
+    // ---------- "Hola Cubi": el celular escucha sin internet (Vosk, modelo español de ~40 MB) y abre Gemini ----------
+    static final String MODELO = "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip";
+    // el modelo no conoce "Cubi": lo oye como cuba, cubo, cubil… Basta "hola" seguido de algo así
+    static final Pattern HOLA = Pattern.compile("\\bh?ola\\s+(cu|ku|qu|co)[bpv]\\w*");
+    private volatile boolean oidoQuiere;
+    private volatile Thread oido;
+    private volatile int miSesion = -1;
+    private volatile org.vosk.Model modelo;
+    private boolean bajando;
+    private long ultimoHola;
+
+    void hola(boolean si) {
+        getSharedPreferences("cubi", 0).edit().putBoolean("hola", si).apply();
+        oidoQuiere = si;
+        primerPlano();
+        if (si) prepararOido();
+        else pararOido();
+    }
+
+    boolean holaActivo() { return oidoQuiere; }
+
+    // La primera vez baja el modelo; después solo lo carga (tarda unos segundos)
+    private void prepararOido() {
+        if (modelo != null || bajando) return;
+        bajando = true;
+        new Thread(() -> {
+            File dir = new File(getFilesDir(), "vosk-es");
+            try {
+                if (!new File(dir, "listo").exists()) {
+                    js("toast('Bajando el oído de Cubi (40 MB), solo esta vez…')");
+                    bajarModelo(dir);
+                }
+                modelo = new org.vosk.Model(dir.getAbsolutePath());
+                js("toast('Listo: di “Hola Cubi”')");
+                ui.post(this::revisarAsistente);
+            } catch (Exception e) {
+                js("toast(" + JSONObject.quote("No pude preparar “Hola Cubi”: " + e.getMessage()) + ")");
+            }
+            bajando = false;
+        }).start();
+    }
+
+    private void bajarModelo(File dir) throws Exception {
+        String raiz = dir.getCanonicalPath() + File.separator;
+        try (InputStream in = new URL(MODELO).openStream(); ZipInputStream z = new ZipInputStream(in)) {
+            ZipEntry e;
+            byte[] b = new byte[65536];
+            while ((e = z.getNextEntry()) != null) {
+                String nombre = e.getName();
+                int barra = nombre.indexOf('/');
+                if (barra < 0 || barra == nombre.length() - 1) continue;  // se quita la carpeta de arriba del zip
+                File f = new File(dir, nombre.substring(barra + 1));
+                if (!f.getCanonicalPath().startsWith(raiz)) throw new Exception("archivo raro en el modelo");
+                if (e.isDirectory()) { f.mkdirs(); continue; }
+                f.getParentFile().mkdirs();
+                try (FileOutputStream o = new FileOutputStream(f)) {
+                    int n;
+                    while ((n = z.read(b)) > 0) o.write(b, 0, n);
+                }
+            }
+        }
+        new File(dir, "listo").createNewFile();
+    }
+
+    private void arrancarOido() {
+        if (oido != null) return;
+        Thread t = new Thread(() -> {
+            AudioRecord r = null;
+            try (org.vosk.Recognizer rec = new org.vosk.Recognizer(modelo, 16000)) {
+                int tam = Math.max(AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), 8192);
+                r = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, tam);
+                miSesion = r.getAudioSessionId();
+                r.startRecording();
+                short[] b = new short[2048];
+                while (oido == Thread.currentThread()) {
+                    int n = r.read(b, 0, b.length);
+                    if (n < 0) break;
+                    String texto = rec.acceptWaveForm(b, n) ? rec.getResult() : rec.getPartialResult();
+                    if (HOLA.matcher(texto).find()) {
+                        rec.reset();
+                        ui.post(this::oyoHola);
+                    }
+                }
+            } catch (Exception ignored) {  // sin permiso o sin micrófono: se reintenta en la próxima revisión
+            } finally {
+                if (r != null) r.release();
+                if (oido == Thread.currentThread()) { oido = null; miSesion = -1; }
+            }
+        });
+        oido = t;
+        t.start();
+    }
+
+    private void pararOido() {
+        if (oido == null) return;
+        oido = null;
+        miSesion = -1;
+    }
+
+    private void oyoHola() {
+        long ahora = System.currentTimeMillis();
+        if (ahora - ultimoHola < 4000) return;
+        ultimoHola = ahora;
+        pararOido();  // el micrófono es para Gemini
+        enviar("asis|/asistente?estado=escucha");
+        abrirAsistente();
     }
 
     // ---------- actualización por Bluetooth ----------

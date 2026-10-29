@@ -13,6 +13,7 @@ android {
         // cada compilación en GitHub sube el número, así la app nueva se instala encima de la vieja
         versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int)
         versionName "2.0." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }  // solo celulares: el oído de "Hola Cubi" pesa por cada tipo
     }
 
     // Llave fija para que las actualizaciones se instalen sin desinstalar. Vive en los secretos de GitHub
@@ -44,4 +45,10 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+dependencies {
+    // "Hola Cubi": reconocimiento de voz sin internet en el celular
+    implementation 'com.alphacephei:vosk-android:0.3.47@aar'
+    implementation 'net.java.dev.jna:jna:5.13.0@aar'
 }

@@ -35,6 +35,7 @@ input, select { font: inherit; }
 .btn { background: var(--panel2); border-radius: 12px; padding: 12px 14px; font-weight: 600; }
 .btn.main { background: var(--accent); color: var(--accent-ink); }
 .btn:active { transform: scale(.97); }
+.btn:disabled { opacity: .4; transform: none; }
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 label.sl { display: grid; gap: 6px; }
@@ -100,6 +101,8 @@ section[hidden] { display: none; }
   <div class="card">
     <button class="btn main" id="gemini">Hablar con Gemini</button>
     <p class="note">También con <b>doble toque</b> en la pantalla de Cubi. Mientras Gemini te contesta, Cubi mueve la boca.</p>
+    <div class="row"><span>Responder a “Hola Cubi”</span><label class="sw"><input type="checkbox" id="hola"><i></i></label></div>
+    <p class="note">El celular escucha sin internet y nada sale de él. Gasta algo más de batería; Android muestra el puntito verde del micrófono.</p>
     <button class="btn" id="permisoGemini" hidden>Permitir que Cubi abra Gemini con la pantalla apagada</button>
   </div>
   <h2>Reacciones</h2>
@@ -354,11 +357,17 @@ function notaVersiones() {
     : v(vFw) + (vUltima > vFw ? ' → hay nuevo (' + v(vUltima) + ')' : ' (el último)')));
   if (vUltima < 0 && vError) l.push('No pude revisar GitHub: ' + vError);
   $('verNota').textContent = l.join(String.fromCharCode(10));
+  // ya al día: el botón se apaga (si no se pudo revisar GitHub queda prendido)
+  const appAlDia = vApp > 0 && vUltima >= 0 && vApp >= vUltima, fwAlDia = vFw > 0 && vUltima >= 0 && vFw >= vUltima;
+  $('actApp').disabled = appAlDia; $('actApp').textContent = appAlDia ? 'La app ya está al día' : 'Actualizar la app';
+  $('actCubi').disabled = fwAlDia; $('actCubi').textContent = fwAlDia ? 'Cubi ya está al día' : 'Actualizar a Cubi (firmware)';
 }
 
 // ---------- asistente ----------
 $('gemini').onclick = () => { if (window.Android) Android.abrirAsistente(); };
 $('permisoGemini').onclick = () => Android.pedirAbrirSolo();
+$('hola').onchange = e => Android.holaCubi(e.target.checked);
+function holaEstado(si) { $('hola').checked = si; }
 function revisarPermisoGemini() { if (window.Android) $('permisoGemini').hidden = Android.puedeAbrirSolo(); }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) revisarPermisoGemini(); });
 function otaCancelada() {}
@@ -394,6 +403,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 etiquetas();
 conectar();
 revisarPermisoGemini();
+if (window.Android) setTimeout(() => holaEstado(Android.holaActivo()), 500);
 if (window.Android) Android.buscarVersion();
 setInterval(estado, 2000);
 setInterval(audio, 150);

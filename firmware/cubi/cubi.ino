@@ -545,6 +545,60 @@ uint8_t elegirRitmo(uint32_t now) {
   return r;
 }
 
+// ---------- Panel que baja desde arriba: batería, Bluetooth, versión y botones ----------
+extern volatile bool bleOn;
+bool panelAbierto = false;
+uint32_t panelHasta = 0;
+const float PANEL_BY = 300;                       // fila de botones (en lo que se ve, 448 x 368)
+float panelBx(int i) { return dib::W / 2 + (i - 1) * 146; }
+
+void dibujarPanel(uint32_t now) {
+  using namespace dib;
+  static uint32_t tLee = 0; static int bat = -1; static bool carga = false, usb = false;
+  if (pmuOk && (!tLee || now - tLee > 1000)) { tLee = now; bat = pmu.getBatteryPercent(); carga = pmu.isCharging(); usb = pmu.isVbusIn(); }
+  const Col gris{170, 180, 200}, celeste{120, 190, 255};
+  // pila: contorno, puntita y relleno según la carga
+  const float bx = W / 2 - 40, by = 70, nivel = bat < 0 ? 0 : bat / 100.f;
+  Col c = bat > 50 ? Col{90, 220, 120} : bat > 20 ? Col{255, 200, 60} : Col{255, 90, 80};
+  figura(bx - 70, by - 36, bx + 80, by + 36, solido(Col{200, 205, 220}), [=](float px, float py) {
+    return fminf(fabsf(dCaja(px, py, bx, by, 64, 32, 12)) - 3.5f, dCaja(px, py, bx + 70, by, 6, 12, 3));
+  });
+  float w = 112 * nivel;
+  if (w > 2) figura(bx - 56, by - 22, bx - 56 + w, by + 22, solido(c), [=](float px, float py) { return dCaja(px, py, bx - 56 + w / 2, by, w / 2, 22, 7); });
+  char s[16];
+  if (bat < 0) snprintf(s, sizeof(s), "?"); else snprintf(s, sizeof(s), "%d%%", bat);
+  texto(s, bx + 150, by, 44, BLANCO);
+  texto(usb ? (carga ? "Cargando" : "Conectado al USB") : "Con batería", W / 2, by + 62, 24, gris);
+  texto(bleOn ? "Celular conectado" : "Sin celular", W / 2, 172, 24, bleOn ? celeste : gris);
+  texto("Cubi v" VERSION, W / 2, 206, 18, Col{110, 120, 140});
+  // botones
+  const char *nombre[3] = {"Sonido", "Brillo", "Gemini"};
+  char valor[3][12];
+  snprintf(valor[0], 12, sonidoOn ? "sí" : "no");
+  snprintf(valor[1], 12, "%d%%", brillo * 100 / 255);
+  snprintf(valor[2], 12, "hablar");
+  for (int i = 0; i < 3; i++) {
+    float x = panelBx(i);
+    figura(x - 66, PANEL_BY - 42, x + 66, PANEL_BY + 42, solido(Col{40, 46, 64}), [=](float px, float py) { return dCaja(px, py, x, PANEL_BY, 64, 40, 18); });
+    texto(nombre[i], x, PANEL_BY - 13, 22, BLANCO);
+    texto(valor[i], x, PANEL_BY + 17, 20, celeste);
+  }
+  texto("Desliza hacia arriba para cerrar", W / 2, H - 14, 14, Col{90, 100, 120});
+}
+
+// toque con el panel abierto: un botón o, fuera de ellos, cerrar
+void tocarPanel(int x, int y, uint32_t now) {
+  panelHasta = now + 8000;
+  for (int i = 0; i < 3; i++) {
+    if (abs(x - (int)panelBx(i)) > 68 || abs(y - (int)PANEL_BY) > 46) continue;
+    if (i == 0) { sonidoOn = !sonidoOn; guardar(); sonar(S_ESCUCHA); }
+    else if (i == 1) { brillo = brillo < 100 ? 150 : brillo < 200 ? 255 : 60; panel->setBrightness(brillo); }
+    else { panelAbierto = false; llamarAsistente(); }
+    return;
+  }
+  panelAbierto = false;
+}
+
 void pintar(uint32_t now) {
   static uint32_t antes = now, proxGesto = 30000;
   float t = now / 1000.f, dt = min(0.1f, (now - antes) / 1000.f);
@@ -572,7 +626,9 @@ void pintar(uint32_t now) {
   uint16_t *fb = cv->getFramebuffer();
   dib::fb = fb; dib::giro = rotacion == 3;
   dib::empezar();
+  if (panelAbierto && now > panelHasta) panelAbierto = false;
   if (otaTotal || reinicioEn) caras::progreso(t, otaTotal ? float(otaHecho) / otaTotal : 1);
+  else if (panelAbierto) dibujarPanel(now);
   else caras::cuadro(t, dt, en);
   static bool saludo = true;  // al prender saluda (después del primer cuadro: así arranca con el reloj de las caras al día)
   if (saludo) { saludo = false; reac(caras::SALUDO); }
@@ -678,10 +734,25 @@ void imuUpdate(uint32_t now) {
 // ---------- Táctil ----------
 uint32_t tDown = 0, nextDemo = 0; bool tPrev = false; int demoIdx = 0;
 void touchUpdate(uint32_t now) {
-  uint8_t n;
-  bool t = tpAddr && i2cR(tpAddr, 0x02, &n, 1) && (n & 0x0F) && (n & 0x0F) < 3;
-  if (t && !tPrev) { tDown = now; nextDemo = now + 1500; despertar(now); }
-  if (t && now > nextDemo) { reac(caras::CARICIA); nextDemo = now + 3000; }  // dejar el dedo: caricia
+  uint8_t b[5];
+  bool t = tpAddr && i2cR(tpAddr, 0x02, b, 5) && (b[0] & 0x0F) && (b[0] & 0x0F) < 3;
+  // dónde: el táctil da el punto en el panel vertical (368 x 448); se pasa a lo que se ve (acostado, 448 x 368)
+  static int x0, y0, x, y; static bool arrastre;
+  if (t) {
+    int px = ((b[1] & 0x0F) << 8) | b[2], py = ((b[3] & 0x0F) << 8) | b[4];
+    x = rotacion == 3 ? 447 - py : py; y = rotacion == 3 ? px : 367 - px;
+  }
+  if (t && !tPrev) { tDown = now; nextDemo = now + 1500; despertar(now); x0 = x; y0 = y; arrastre = false; }
+  if (t && (abs(x - x0) > 40 || abs(y - y0) > 40)) arrastre = true;
+  if (t && now > nextDemo && !arrastre && !panelAbierto) { reac(caras::CARICIA); nextDemo = now + 3000; }  // dejar el dedo: caricia
+  // deslizar desde arriba hacia abajo abre el panel; hacia arriba lo cierra
+  if (!t && tPrev && arrastre) {
+    if (!panelAbierto && y0 < 120 && y - y0 > 90) { panelAbierto = true; panelHasta = now + 8000; }
+    else if (panelAbierto && y0 - y > 90) panelAbierto = false;
+    tPrev = t;
+    return;
+  }
+  if (!t && tPrev && panelAbierto) { tocarPanel(x0, y0, now); tPrev = t; return; }
   // toque corto: se ríe. Dos toques seguidos: llama al asistente del celular (Gemini).
   // El primer toque espera 350 ms para saber si viene el segundo.
   static uint32_t toque1 = 0;
