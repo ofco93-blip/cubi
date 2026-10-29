@@ -1481,8 +1481,8 @@ static void solHistoria(float u) {
   solDestello(u, tramo(u, 0.1f, 0.5f) * fin * (u < 3.6f ? 1 : 0.6f));
   if (u > 1.5f && u < 3.9f) {                                         // 2) manito de visera sobre los ojos
     const float entra = tramo(u, 1.5f, 1.95f) * (1 - tramo(u, 3.45f, 3.85f));
-    const float y = fminf(ahora.L.y - ahora.L.h / 2, ahora.R.y - ahora.R.h / 2) - 14;
-    manoBlanca(W + 60 - (W + 60 - (ahora.R.x - 6)) * entra, y - 30 * (1 - entra) + 3 * sinf(u * 3), PI + 0.08f, 1.35f, false);
+    const float y = fminf(ahora.L.y - ahora.L.h / 2, ahora.R.y - ahora.R.h / 2) - 4, x = ahora.R.x + 12;
+    manoBlanca(W + 90 - (W + 90 - x) * entra, y - 30 * (1 - entra) + 3 * sinf(u * 3), PI + 0.1f, 2.1f, false);
   }
   if (u > 3.4f) {                                                     // 3) caen las gafas, rebotan, brillan y se quedan
     const float p = tramo(u, 3.4f, 3.95f);
