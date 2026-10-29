@@ -763,13 +763,13 @@ public class CubiService extends Service {
     private boolean tocarEnSesion(String q) {
         if (!puedeTocarMusica()) return false;
         try {
-            for (MediaController c : getSystemService(MediaSessionManager.class).getActiveSessions(new ComponentName(this, Oyente.class))) {
-                String app = c.getPackageName();
-                if (app.equals("com.spotify.music") || app.equals("com.google.android.apps.youtube.music")) {
-                    c.getTransportControls().playFromSearch(q, new Bundle());
-                    return true;
-                }
-            }
+            List<MediaController> l = getSystemService(MediaSessionManager.class).getActiveSessions(new ComponentName(this, Oyente.class));
+            for (String app : new String[]{"com.spotify.music", "com.google.android.apps.youtube.music"})  // primero Spotify
+                for (MediaController c : l)
+                    if (c.getPackageName().equals(app)) {
+                        c.getTransportControls().playFromSearch(q, new Bundle());
+                        return true;
+                    }
         } catch (SecurityException ignored) {
         }
         return false;
@@ -792,19 +792,40 @@ public class CubiService extends Service {
                 for (int i = 0; i < 2; i++)
                     am.adjustStreamVolume(AudioManager.STREAM_MUSIC, accion.equals("volumen_subir") ? AudioManager.ADJUST_RAISE : AudioManager.ADJUST_LOWER, 0);
                 break;
-            case "musica_buscar": {  // Spotify o YouTube Music buscan y ponen lo que se pidió
-                if (tocarEnSesion(busqueda)) break;  // ya estaba abierta: le pide que busque y reproduzca
-                ui.postDelayed(() -> tocarEnSesion(busqueda), 4000);  // la abre con la búsqueda y luego le pide reproducir
-                Intent i = new Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
-                        .putExtra(SearchManager.QUERY, busqueda)
-                        .putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                for (String app : new String[]{"com.spotify.music", "com.google.android.apps.youtube.music"})
-                    if (getPackageManager().getLaunchIntentForPackage(app) != null) { i.setPackage(app); break; }
-                try { startActivity(i); } catch (Exception e) { teclaMedia(KeyEvent.KEYCODE_MEDIA_PLAY); }
-                break;
-            }
+            case "musica_buscar": buscarYTocar(busqueda); break;
         }
+    }
+
+    // Spotify solo obedece "busca y pon" con su reproductor despierto. Si está dormido se despierta con la tecla de play
+    // (arranca lo último que sonaba) y enseguida se le pide la búsqueda; si no aparece, se abre Spotify y se sigue intentando.
+    private void buscarYTocar(String q) {
+        if (!puedeTocarMusica()) {
+            js("toast('Falta el permiso: en la app toca “Permitir que Cubi controle la música”')");
+            abrirBusqueda(q);
+            return;
+        }
+        if (tocarEnSesion(q)) { js("toast(" + JSONObject.quote("Poniendo: " + q) + ")"); return; }
+        teclaMedia(KeyEvent.KEYCODE_MEDIA_PLAY);
+        reintentarTocar(q, 0);
+    }
+
+    private void reintentarTocar(String q, int n) {
+        ui.postDelayed(() -> {
+            if (tocarEnSesion(q)) { js("toast(" + JSONObject.quote("Poniendo: " + q) + ")"); return; }
+            if (n == 2) abrirBusqueda(q);  // a los 4,5 s sin reproductor: abre Spotify con la búsqueda
+            if (n < 8) reintentarTocar(q, n + 1);
+            else js("toast('Spotify no me hizo caso: dale play tú')");
+        }, 1500);
+    }
+
+    private void abrirBusqueda(String q) {
+        Intent i = new Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
+                .putExtra(SearchManager.QUERY, q)
+                .putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        for (String app : new String[]{"com.spotify.music", "com.google.android.apps.youtube.music"})
+            if (getPackageManager().getLaunchIntentForPackage(app) != null) { i.setPackage(app); break; }
+        try { startActivity(i); } catch (Exception e) { teclaMedia(KeyEvent.KEYCODE_MEDIA_PLAY); }
     }
 
     private void terminarCharla() {
