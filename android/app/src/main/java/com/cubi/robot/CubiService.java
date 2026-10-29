@@ -811,13 +811,19 @@ public class CubiService extends Service {
                 cancionId = id;
                 cancionTexto = titulo + (artista != null ? " de " + artista : "");
                 letraT = null;
+                ritmoCancion = ""; introPiano = false; ritmoMandado = "";
                 estadoLetra = cancionTexto + ": buscando la letra…";
                 pedirInstrumento(titulo, artista == null ? "" : artista, id);
                 bajarLetra(titulo, artista == null ? "" : artista, m.getLong(MediaMetadata.METADATA_KEY_DURATION), id);
             }
             long[] t = letraT; boolean[] v = letraVoz;
+            long pos = st.getPosition() + (long) ((ahora - st.getLastPositionUpdateTime()) * st.getPlaybackSpeed());
+            // instrumento: el piano mientras dura la intro de piano (hasta la primera línea de la letra, o 15 s sin letra),
+            // después el de la canción
+            long finIntro = t != null && t.length > 0 ? t[0] : 15000;
+            String quiere = introPiano && pos < finIntro ? "piano" : ritmoCancion;
+            if (!quiere.isEmpty() && !quiere.equals(ritmoMandado)) { ritmoMandado = quiere; enviar("asis|/musica?ritmo=" + quiere); }
             if (t != null && st.getState() == PlaybackState.STATE_PLAYING) {
-                long pos = st.getPosition() + (long) ((ahora - st.getLastPositionUpdateTime()) * st.getPlaybackSpeed());
                 int i = -1;
                 for (int k = 0; k < t.length && t[k] <= pos + 150; k++) i = k;  // 150 ms antes: lo que tarda en llegar a Cubi
                 int s = i >= 0 && v[i] && pos - t[i] < 7000 ? 1 : 0;           // una línea sin la siguiente dura 7 s máximo
@@ -832,7 +838,12 @@ public class CubiService extends Service {
     // (pop → canta con micrófono; la batería solo cuando de verdad manda la percusión)
     public static class Instrumento {
         public String instrumento;
+        public Boolean empiezaPiano;
     }
+
+    private volatile String ritmoCancion = "";   // el instrumento de la canción (por su género)
+    private volatile boolean introPiano;         // la canción empieza solo con piano
+    private String ritmoMandado = "";
 
     static final String[][] INSTRUMENTOS = {{"pop", "kpop"}, {"electronica", "dj"}, {"urbano", "dj"}, {"rock", "rock"},
             {"acustica", "guitarra"}, {"tropical", "tropical"}, {"jazz", "jazz"}, {"piano", "piano"}, {"percusion", "pop"}};
@@ -849,12 +860,14 @@ public class CubiService extends Service {
                                 + "rock (rock, metal, punk), acustica (folk, cantautor, country, acústico), tropical (salsa, cumbia, "
                                 + "merengue, bachata, vallenato), jazz (jazz, blues, soul con vientos), piano (baladas de piano, "
                                 + "clásica), percusion (solo si la batería o los tambores son lo principal, como un solo de batería). "
-                                + "Si dudas, pop.");
+                                + "Si dudas, pop. En 'empiezaPiano' pon true solo si la canción arranca con un piano solo "
+                                + "antes de que entre la voz o el resto de la banda.");
                 Instrumento r = claude.messages().create(b.outputConfig(Instrumento.class).build())
                         .content().stream().flatMap(c -> c.text().stream()).map(t -> t.text()).findFirst().orElse(null);
                 if (r == null || r.instrumento == null || !id.equals(cancionId)) return;
                 for (String[] par : INSTRUMENTOS)
-                    if (par[0].equals(r.instrumento.trim().toLowerCase(Locale.ROOT))) enviar("asis|/musica?ritmo=" + par[1]);
+                    if (par[0].equals(r.instrumento.trim().toLowerCase(Locale.ROOT))) ritmoCancion = par[1];
+                introPiano = Boolean.TRUE.equals(r.empiezaPiano);
             } catch (Exception ignored) {  // sin internet: el micrófono elige
             }
         }).start();
@@ -1105,7 +1118,7 @@ public class CubiService extends Service {
         // Con el permiso de música se mira el estado de Spotify (o la app de música) directamente: así funciona igual
         // cuando suena por Android Auto, donde el celular no siempre reporta audio propio. Sin permiso, el audio del celular.
         boolean play = puedeTocarMusica() ? suenaAppDeMusica() : suenaMedia && am.isMusicActive();
-        if (play != musicaPlay) { musicaPlay = play; enviar("musica|/musica?play=" + (play ? 1 : 0)); }
+        if (play != musicaPlay) { musicaPlay = play; ritmoMandado = ""; enviar("musica|/musica?play=" + (play ? 1 : 0)); }  // al volver, se manda otra vez el instrumento
         if (musicaPlay && !siguiendo) seguirLetra();
         // los callbacks no avisan cuando pasa el tiempo: mientras algo esté en juego se vuelve a mirar
         if (!asisEstado.isEmpty() || hablaDesde != 0 || ahora < pitidoHasta || ventana || musicaPlay || ahora < charlaHasta) ui.postDelayed(revisar, 400);

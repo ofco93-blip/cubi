@@ -790,16 +790,27 @@ static void extrasMini(float u, const Entradas &e) {
   if (gritoZona > 0.5f) return;                         // en la parte fuerte el instrumento se esconde
   int n = (int)pulsosVistos;
   float g = expf(-e.pulso * 6), f = n + e.pulso, vaiven = sinf(f * PI);
+  // velocidad por niveles según qué tan fuerte suena: suave 1 toque por golpe, normal 2, fuerte 4 (con un margen para
+  // que no salte de un nivel a otro a cada rato)
+  static float nivelS = 0.5f;
+  static int veces = 2;
+  nivelS += (e.nivel - nivelS) * 0.03f;
+  if (veces == 1 && nivelS > 0.4f) veces = 2;
+  else if (veces == 2 && nivelS < 0.3f) veces = 1;
+  else if (veces == 2 && nivelS > 0.75f) veces = 4;
+  else if (veces == 4 && nivelS < 0.65f) veces = 2;
+  const float fv = e.pulso * veces, gv = expf(-fmodf(fv, 1.f) * 6);   // cada toque, a esa velocidad
+  const int nv = n * veces + (int)fv;                                  // cuántos toques van
   switch (e.ritmo) {
-    case R_ROCK: case R_GROOVE: {                       // guitarra eléctrica: la manito rasguea en cada golpe
-      float gx = CX - 62, gy = H - 48, ang = -0.3f - 0.08f * g, hx, hy;   // más acostada: el mástil pasa debajo de la boquita
-      guitarraLinea(gx, gy, ang, 1, true, 4 * g, 1);
-      aPantalla(marco(gx, gy, ang, 1), 0, -14 + 26 * (1 - g), hx, hy);
+    case R_ROCK: case R_GROOVE: {                       // guitarra eléctrica: la manito rasguea a la velocidad del nivel
+      float gx = CX - 62, gy = H - 48, ang = -0.3f - 0.08f * gv, hx, hy;   // más acostada: el mástil pasa debajo de la boquita
+      guitarraLinea(gx, gy, ang, 1, true, 4 * gv, 1);
+      aPantalla(marco(gx, gy, ang, 1), 0, -14 + 26 * (1 - gv), hx, hy);
       manoBlanca(hx, hy, ang + 1.9f, 0.85f, false);
       break;
     }
-    case R_GUITARRA: case R_DISFRUTA: {                 // guitarra acústica: rasguea dos veces por golpe
-      float rasga = expf(-fmodf(e.pulso * 2, 1.f) * 6), gx = CX - 70, gy = H - 50, ang = -0.28f, hx, hy;
+    case R_GUITARRA: case R_DISFRUTA: {                 // guitarra acústica: rasguea a la velocidad del nivel
+      float rasga = gv, gx = CX - 70, gy = H - 50, ang = -0.28f, hx, hy;
       guitarraLinea(gx, gy, ang, 1.05f, false, 3 * rasga, 1);
       aPantalla(marco(gx, gy, ang, 1.05f), 22, -16 + 26 * (1 - rasga), hx, hy);
       manoBlanca(hx, hy, ang + 1.9f, 0.85f, false);
@@ -807,7 +818,7 @@ static void extrasMini(float u, const Entradas &e) {
     }
     case R_TROPICAL:                                    // maracas a los lados: se sacuden en el 2 y el 4
       for (int s2 = -1; s2 <= 1; s2 += 2) {
-        float sh = n % 2 ? g : 0.25f * g, x = CX + s2 * 172, y = EY + 70;
+        float sh = (nv + (s2 > 0)) % 2 ? gv : 0.25f * gv, x = CX + s2 * 172, y = EY + 70;   // se turnan, a la velocidad del nivel
         float ang = s2 * 0.35f + 0.5f * sh * sinf(u * 40), hx = x + sinf(ang) * 38, hy = y - cosf(ang) * 38;
         linea(x, y, hx, hy, 4, BL, 0.95f);
         volumen(hx - 16, hy - 16, hx + 16, hy + 16, 0.95f, [=](float px, float py) { return dCirculo(px, py, hx, hy, 15); });
@@ -821,16 +832,16 @@ static void extrasMini(float u, const Entradas &e) {
       break;
     }
     case R_DJ: case R_ELECTRO: case R_BARRAS: {         // disco a la derecha (la boquita queda libre) y la manito que lo raya
-      float scratch = (n % 4 >= 2) ? sinf(f * PI * 2) : 0, x = CX + 122, y = H - 66;
+      float scratch = (n % 4 >= 2) ? sinf(f * PI * veces) : 0, x = CX + 122, y = H - 66;   // raya más rápido en lo fuerte
       disco(x, y, 48, u * 4 + 0.9f * scratch, 1);
       manoBlanca(x - 44 + 10 * scratch, y - 30 + 6 * scratch, 0.45f, 1.15f, true);
       break;
     }
     case R_PIANO: case R_CORAZON: {                     // teclas que tocan una melodía: la que suena se ilumina
       static const uint8_t MEL[8] = {0, 2, 4, 5, 4, 2, 1, 3};
-      int t = MEL[n % 8] + ((n / 8) % 2) * 3;
+      int t = MEL[nv % 8] + ((nv / 8) % 2) * 3;          // más notas por golpe en lo fuerte
       for (int i = 0; i < 9; i++) {
-        float x = CX + (i - 4) * 34, y = H - 40, a = i == t ? 0.4f + 0.6f * g : 0.3f;
+        float x = CX + (i - 4) * 34, y = H - 40, a = i == t ? 0.4f + 0.6f * gv : 0.3f;
         figura(x - 15, y - 26, x + 15, y + 26, solido(BL, a, i == t ? 8 : 0), [=](float px, float py) { return dCaja(px, py, x, y, 13, 24, 13); });
       }
       break;
@@ -843,7 +854,7 @@ static void extrasMini(float u, const Entradas &e) {
       manoBlanca(hx, hy, ang - PI / 2, 0.85f, false);
       break;
     }
-    default: bateria(n, g, 1); break;                   // pop y urbano: batería
+    default: bateria(nv, gv, 1); break;                 // batería: más golpes por compás en lo fuerte
   }
 }
 
