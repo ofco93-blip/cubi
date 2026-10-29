@@ -61,6 +61,7 @@ int main(int argc, char **argv) {
       e.canta = voz && fmodf(t, 4) < 2.5f; e.boca = e.canta ? 0.35f + 0.45f * fabsf(sinf(t * 5.3f)) : 0;
       e.nivel = 0.5f + 0.4f * fabsf(sinf(t * 1.7f));
     }
+    if (que == "confeti" && i == (int)(1.5f * FPS)) cuentaPum();
     dib::empezar(); if (que == "actualizando") progreso(t, t / seg); else cuadro(t, dt, e); dib::terminar();
     for (int y = 0; y < dib::H; y++) for (int x = 0; x < dib::W; x++) {
       uint16_t p = mem[dib::idx(x, y)]; uint8_t *q = rgb + (y * dib::W + x) * 3;

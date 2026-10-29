@@ -439,11 +439,12 @@ public class CubiService extends Service {
             + "- truco: una animación en tu pantalla, exactamente una de: ninguno, kamehameha, confeti, risa, sorpresa, amor, "
             + "saludo, guino, curiosa, mareo, llegamos, baile_rock, baile_pop, baile_tropical, baile_urbano, baile_electro, "
             + "baile_jazz, baile_dj, baile_guitarra, baile_kpop, baile_piano.\n"
-            + "  kamehameha: cargas una bola de energía y la sueltas en un rayo; di algo corto como '¡Kame hame HA!'.\n"
+            + "  kamehameha: cargas una bola de energía y la lanzas hacia adelante; di algo corto como '¡Kame hame HA!'.\n"
             + "  confeti: cuando te pidan 'mata a', 'dispárale a' o 'acaba con' alguien. En este carro siempre es una broma entre "
-            + "ellos: miras al copiloto, le apuntas con una pistola de juguete y le disparas confeti. Di algo teatral y tierno "
-            + "como '¿Unas últimas palabras, esposo?', con la misma palabra que usaron para nombrar a la persona, y termina con "
-            + "'¡Pum!'. Nunca hables de hacer daño de verdad.\n"
+            + "ellos: le apuntas de frente con una pistola de juguete y le disparas confeti. Solo di algo teatral y tierno como "
+            + "'¡Prepárate, esposo!' o '¿Unas últimas palabras, esposo?', con la misma palabra que usaron para nombrar a la "
+            + "persona. No cuentes ni digas '¡Pum!': la cuenta 3, 2, 1 y el disparo los hago yo justo después. "
+            + "Nunca hables de hacer daño de verdad.\n"
             + "  baile_*: bailas unos segundos después de hablar.\n"
             + "- accion: algo que haces en el celular, exactamente una de: ninguna, clima, musica_play, musica_pausa, "
             + "musica_siguiente, musica_anterior, musica_buscar, volumen_subir, volumen_bajar.\n"
@@ -451,6 +452,8 @@ public class CubiService extends Service {
             + "Dilo en pocas palabras con el dato entre corchetes.\n"
             + "  musica_play: poner o seguir la música. musica_buscar: cuando pidan algo concreto (canción, artista o género).\n"
             + "- busqueda: solo con musica_buscar, qué buscar (por ejemplo 'salsa' o 'Bad Bunny'); si no, vacío.\n"
+            + "- sigue: true si terminaste con una pregunta o esperas que la persona te conteste (te quedas escuchando sin que "
+            + "vuelva a decir 'Hola Cubi'); false si no hace falta respuesta.\n"
             + "Cada mensaje trae entre corchetes la hora, el clima y si suena música: úsalo solo si viene al caso.";
 
     // la respuesta de Haiku (structured output): lo que dice y el truco
@@ -459,6 +462,7 @@ public class CubiService extends Service {
         public String truco;
         public String accion;
         public String busqueda;
+        public Boolean sigue;
     }
 
     private TextToSpeech voz;
@@ -468,6 +472,8 @@ public class CubiService extends Service {
     private final List<String[]> charlaHist = new ArrayList<>();  // {lo que uno dijo, lo que Cubi contestó}
     private volatile long charlaHasta, charlaUltima;               // mientras dura la charla Cubi no vuelve al reposo
     private String trucoPend = "", accionPend = "", busquedaPend = "";
+    private boolean sigueCharla, confetiPend;
+    private int turnos;  // respuestas seguidas sin "Hola Cubi" (máximo 4)
     String climaOrden = "";  // lo último que se le contó a Cubi del clima (para mostrarlo cuando se lo preguntan)
 
     String claveClaude() { return getSharedPreferences("cubi", 0).getString("claude", ""); }
@@ -486,8 +492,8 @@ public class CubiService extends Service {
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
             voz.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                 @Override public void onStart(String id) {}
-                @Override public void onDone(String id) { ui.post(() -> { hacerTruco(false); terminarCharla(); }); }
-                @Override public void onError(String id) { ui.post(() -> { hacerTruco(false); terminarCharla(); }); }
+                @Override public void onDone(String id) { if ("cubi".equals(id)) ui.post(CubiService.this::finTurno); }
+                @Override public void onError(String id) { if ("cubi".equals(id)) ui.post(CubiService.this::finTurno); }
             });
         });
     }
@@ -547,6 +553,11 @@ public class CubiService extends Service {
 
     // oye lo que uno le dice (reconocimiento de voz de Google) y se lo pasa a Haiku
     void charla() {
+        turnos = 0;
+        escuchar();
+    }
+
+    private void escuchar() {
         long ahora = System.currentTimeMillis();
         asisDesde = ahora;
         charlaHasta = ahora + 15000;
@@ -593,6 +604,7 @@ public class CubiService extends Service {
         js("toast(" + JSONObject.quote("Le dijiste: " + texto) + ")");
         new Thread(() -> {
             String dice, truco = "ninguno", accion = "", busqueda = "";
+            boolean sigue = false;
             try {
                 if (claude == null) claude = AnthropicOkHttpClient.builder().apiKey(claveClaude()).build();
                 if (System.currentTimeMillis() - charlaUltima > 180000) charlaHist.clear();  // después de 3 min empieza de cero
@@ -607,6 +619,7 @@ public class CubiService extends Service {
                     if (r.truco != null) truco = r.truco;
                     accion = r.accion == null ? "" : r.accion;
                     busqueda = r.busqueda == null ? "" : r.busqueda;
+                    sigue = Boolean.TRUE.equals(r.sigue);
                     charlaHist.add(new String[]{pregunta, dice});
                     while (charlaHist.size() > 6) charlaHist.remove(0);
                 }
@@ -625,18 +638,37 @@ public class CubiService extends Service {
             }
             charlaUltima = System.currentTimeMillis();
             String d = dice, t = truco, ac = accion, bq = busqueda;
-            ui.post(() -> decir(d, t, ac, bq));
+            boolean sg = sigue;
+            ui.post(() -> decir(d, t, ac, bq, sg));
         }).start();
     }
 
-    private void decir(String texto, String truco, String accion, String busqueda) {
+    private void decir(String texto, String truco, String accion, String busqueda, boolean sigue) {
         charlaHasta = System.currentTimeMillis() + 30000;
         trucoPend = truco; accionPend = accion; busquedaPend = busqueda;
-        hacerTruco(true);  // las animaciones arrancan junto con la voz
-        if (voz == null || voz.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "cubi") != TextToSpeech.SUCCESS) {
-            hacerTruco(false);
-            terminarCharla();
+        sigueCharla = sigue; confetiPend = "confeti".equals(truco);
+        hacerTruco(true);  // las animaciones arrancan junto con la voz (la pistola apunta mientras dice "¡Prepárate!")
+        if (voz == null || voz.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "cubi") != TextToSpeech.SUCCESS) finTurno();
+    }
+
+    // terminó de hablar: la pistola cuenta y dispara; si Cubi preguntó algo, se queda escuchando la respuesta
+    private void finTurno() {
+        if (confetiPend) { confetiPend = false; cuentaRegresiva(); return; }
+        hacerTruco(false);
+        if (sigueCharla && turnos < 4) { sigueCharla = false; turnos++; escuchar(); return; }
+        terminarCharla();
+    }
+
+    // "3, 2, 1, ¡pum!": Cubi muestra los números y dispara al mismo tiempo que la voz los dice
+    private void cuentaRegresiva() {
+        charlaHasta = System.currentTimeMillis() + 8000;
+        enviar("asis|/pum");
+        String[] c = {"Tres", "Dos", "Uno", "¡Pum!"};
+        for (int i = 0; i < c.length; i++) {
+            String w = c[i];
+            ui.postDelayed(() -> { if (voz != null) voz.speak(w, TextToSpeech.QUEUE_FLUSH, null, "cuenta"); }, i * 1000L);
         }
+        ui.postDelayed(() -> { hacerTruco(false); terminarCharla(); }, 5600);
     }
 
     // las reacciones arrancan con la voz (el kamehameha se dice mientras carga); los bailes, cuando termina de hablar

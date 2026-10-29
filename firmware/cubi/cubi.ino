@@ -115,7 +115,9 @@ const Nota S_MIEDO[] = { { 900, 300, 320, 5, 190 }, { 0, 0, 0, 0, 0 } };
 const Nota S_MAREADO[] = { { 500, 900, 200, 5, 160 }, { 900, 500, 200, 5, 160 }, { 500, 900, 200, 5, 160 }, { 0, 0, 0, 0, 0 } };
 const Nota S_BACHE[] = { { 250, 700, 110, 5, 190 }, { 0, 0, 0, 0, 0 } };
 const Nota S_KAME[] = { { 0, 0, 400, 0, 0 }, { 180, 900, 2200, 5, 150 }, { 900, 120, 900, 2, 220 }, { 0, 0, 0, 0, 0 } };
-const Nota S_PUM[] = { { 0, 0, 3000, 0, 0 }, { 1400, 150, 140, 2, 230 }, { 0, 0, 120, 0, 0 }, { 600, 900, 60, 0, 190 }, { 0, 0, 30, 0, 0 },
+const Nota S_PUM[] = { { 320, 220, 70, 1, 150 }, { 0, 0, 60, 0, 0 }, { 260, 180, 70, 1, 150 }, { 0, 0, 0, 0, 0 } };  // clic-clac: la carga
+const Nota S_CUENTA[] = { { 880, 880, 120, 0, 200 }, { 0, 0, 880, 0, 0 }, { 880, 880, 120, 0, 200 }, { 0, 0, 880, 0, 0 },
+                          { 1320, 1320, 160, 0, 210 }, { 0, 0, 840, 0, 0 }, { 1400, 150, 140, 2, 230 }, { 0, 0, 120, 0, 0 }, { 600, 900, 60, 0, 190 }, { 0, 0, 30, 0, 0 },
                        { 700, 1000, 60, 0, 190 }, { 0, 0, 30, 0, 0 }, { 800, 1250, 90, 0, 200 }, { 0, 0, 0, 0, 0 } };
 const Nota S_ESCUCHA[] = { { 700, 700, 70, 0, 170 }, { 0, 0, 30, 0, 0 }, { 1050, 1050, 110, 0, 190 }, { 0, 0, 0, 0, 0 } };
 const Nota *SONIDO_EMO[N_EMO] = { nullptr, S_FELIZ, S_ENOJADO, S_TRISTE, S_SORPRESA, S_ENAMORADO, S_SUENO, S_MIEDO, S_MAREADO };
@@ -924,6 +926,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     for (int i = 0; i < caras::N_RITMO; i++) if (p.get("r") == caras::NOMBRE_RITMO[i]) ritmoFijo = i;
     return "ok";
   }
+  if (ruta == "/pum") { despertar(millis()); caras::cuentaPum(); sonar(S_CUENTA); return "ok"; }   // 3, 2, 1, ¡pum! y risa
   if (ruta == "/musica") {  // el celular avisa play o pausa (con play baila de una) y, por la letra, si el artista canta
     if (p.has("play")) { celPlay = p.get("play") == "1"; if (!celPlay) { estilo = NADA; celVozHasta = 0; } }
     if (p.has("voz")) { celVoz = p.get("voz") == "1"; celVozHasta = millis() + 6000; }

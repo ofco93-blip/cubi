@@ -11,7 +11,8 @@ enum Reac : uint8_t {
 };
 extern const char *NOMBRE_BASE[N_BASE];
 extern const char *NOMBRE_REAC[N_REAC];
-void mostrarGrados(int g, float seg);   // los grados del clima arriba en la pantalla, por unos segundos
+void mostrarGrados(int g, float seg);
+void cuentaPum();                       // la pistola de confeti empieza la cuenta 3 2 1 (cuando el celular termina de hablar)   // los grados del clima arriba en la pantalla, por unos segundos
 
 // ritmos de la música (cada uno con su baile y su instrumento)
 enum Ritmo : uint8_t { R_POP, R_URBANO, R_ELECTRO, R_TROPICAL, R_KPOP, R_CORAZON, R_GROOVE, R_GUITARRA, R_DISFRUTA, R_ROCK,
