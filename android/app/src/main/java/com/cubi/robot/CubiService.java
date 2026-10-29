@@ -740,6 +740,7 @@ public class CubiService extends Service {
                 cancionTexto = titulo + (artista != null ? " de " + artista : "");
                 letraT = null;
                 estadoLetra = cancionTexto + ": buscando la letra…";
+                pedirInstrumento(titulo, artista == null ? "" : artista, id);
                 bajarLetra(titulo, artista == null ? "" : artista, m.getLong(MediaMetadata.METADATA_KEY_DURATION), id);
             }
             long[] t = letraT; boolean[] v = letraVoz;
@@ -753,6 +754,35 @@ public class CubiService extends Service {
             }
         }
         ui.postDelayed(seguirLetraR, 250);
+    }
+
+    // Haiku conoce casi todas las canciones: le pregunta qué instrumento se destaca y Cubi toca ese
+    public static class Instrumento {
+        public String instrumento;
+    }
+
+    static final String[][] INSTRUMENTOS = {{"electrica", "rock"}, {"acustica", "guitarra"}, {"bateria", "pop"}, {"saxo", "jazz"},
+            {"piano", "piano"}, {"dj", "dj"}, {"maracas", "tropical"}, {"microfono", "kpop"}};
+
+    private void pedirInstrumento(String titulo, String artista, String id) {
+        if (claveClaude().isEmpty()) return;  // sin clave: el micrófono adivina el estilo como antes
+        new Thread(() -> {
+            try {
+                if (claude == null) claude = AnthropicOkHttpClient.builder().apiKey(claveClaude()).build();
+                MessageCreateParams.Builder b = MessageCreateParams.builder().model(MODELO_CLAUDE).maxTokens(256L)
+                        .addUserMessage("Canción: \"" + titulo + "\" de " + artista + ". ¿Qué instrumento se destaca más en ella? "
+                                + "Responde exactamente uno: electrica (guitarra eléctrica, rock), acustica (guitarra acústica), "
+                                + "bateria (batería, pop, reggaetón, urbano), saxo (jazz, vientos), piano (baladas de piano), "
+                                + "dj (electrónica), maracas (salsa, cumbia, merengue, percusión latina), "
+                                + "microfono (cuando lo que más se nota es la voz).");
+                Instrumento r = claude.messages().create(b.outputConfig(Instrumento.class).build())
+                        .content().stream().flatMap(c -> c.text().stream()).map(t -> t.text()).findFirst().orElse(null);
+                if (r == null || r.instrumento == null || !id.equals(cancionId)) return;
+                for (String[] par : INSTRUMENTOS)
+                    if (par[0].equals(r.instrumento.trim().toLowerCase(Locale.ROOT))) enviar("asis|/musica?ritmo=" + par[1]);
+            } catch (Exception ignored) {  // sin internet: el micrófono elige
+            }
+        }).start();
     }
 
     // busca la canción en LRCLIB y se queda con la letra sincronizada de la versión de duración más parecida

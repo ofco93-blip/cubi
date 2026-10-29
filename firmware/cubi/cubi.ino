@@ -204,7 +204,11 @@ void analizarVoz(bool hay) {
   vMod += (fabsf(db - vPrev) - vMod) * 0.15f; vPrev = db;  // sube y baja como sílabas
   float fracN = constrain((frac - 0.30f) / 0.40f, 0.f, 1.f), tonN = constrain((0.62f - plano) / 0.32f, 0.f, 1.f);
   float modN = constrain((vMod - 0.6f) / 2.4f, 0.f, 1.f);
-  vozS += ((hay ? (0.5f * fracN + 0.5f * tonN) * modN : 0) - vozS) * 0.25f;  // ~120 ms
+  static float rs = 0, base = 0.3f;
+  rs += (frac - rs) * 0.3f;
+  base += (rs - base) * (rs < base ? 0.05f : 0.003f);  // baja rápido, sube en ~10 s: lo que suena sin voz
+  float vozMus = hay && estilo >= BALADA ? constrain((rs - base) / fmaxf(0.06f, base * 0.5f), 0.f, 1.f) * (0.5f + 0.5f * modN) : 0;
+  vozS += ((hay ? fmaxf((0.5f * fracN + 0.5f * tonN) * modN, vozMus) : 0) - vozS) * 0.25f;  // ~120 ms
   if (!canta && vozS > umbralVoz) { if (++sube >= 2) canta = true; } else sube = 0;  // 64 ms seguidos para arrancar
   if (canta && vozS < umbralVoz * 0.7f) canta = false;
 
@@ -347,7 +351,8 @@ bool emoForzada = false;
 bool hayMusica = false, cantando = false;  // lo que animar() decide y las caras usan
 extern volatile bool bleOn;
 bool celPlay = false; uint8_t estPlay = TROPICAL;
-bool celVoz = false; uint32_t celVozHasta = 0;  // el celular sabe por la letra cuándo canta el artista (caduca si deja de avisar)  // el celular avisa play/pausa; estPlay = el último estilo que se oyó
+bool celVoz = false; uint32_t celVozHasta = 0;
+int celRitmo = -1;  // el instrumento que se destaca en la canción (lo dice Haiku por el título): se toca ese  // el celular sabe por la letra cuándo canta el artista (caduca si deja de avisar)  // el celular avisa play/pausa; estPlay = el último estilo que se oyó
 uint32_t tGolpe = 0;  // pedida desde la app o tocando: le gana a la música; las del movimiento no
 uint8_t anim = NINGUNA; uint32_t animT0 = 0, animProx = 8000, animPaso = 0;
 float bostezo = 0, abreDer = 1;
@@ -581,6 +586,7 @@ uint8_t elegirRitmo(uint32_t now) {
     REG[] = { R_URBANO, R_KPOP, R_DJ }, ELE[] = { R_ELECTRO, R_DJ, R_BARRAS }, ROC[] = { R_ROCK, R_POP, R_GROOVE };
   static uint8_t r = R_POP, estR = NADA;
   if (ritmoFijo >= 0) return ritmoFijo;
+  if (celRitmo >= 0 && celPlay) return celRitmo;
   if (est < BALADA) estR = NADA;
   if (est >= BALADA && est != estR) {
     const uint8_t *f = BAL; int n = 5;
@@ -921,6 +927,8 @@ String atender(const String &ruta, const Params &p, int &cod) {
   if (ruta == "/musica") {  // el celular avisa play o pausa (con play baila de una) y, por la letra, si el artista canta
     if (p.has("play")) { celPlay = p.get("play") == "1"; if (!celPlay) { estilo = NADA; celVozHasta = 0; } }
     if (p.has("voz")) { celVoz = p.get("voz") == "1"; celVozHasta = millis() + 6000; }
+    if (p.has("ritmo")) { celRitmo = -1; for (int i = 0; i < caras::N_RITMO; i++) if (p.get("ritmo") == caras::NOMBRE_RITMO[i]) celRitmo = i; }
+    if (p.has("play") && !celPlay) celRitmo = -1;
     return "ok";
   }
   if (ruta == "/clima") {  // el celular cuenta el clima (cada 20 min): reacciona cuando cambia
