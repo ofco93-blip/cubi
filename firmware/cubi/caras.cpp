@@ -60,8 +60,8 @@ static Rostro neutro(int tono = AZUL) {
   r.R = {CX + EX, EY, EW, EH, 0, 0, 0, 1};
   r.a = TONOS[tono].a; r.b = TONOS[tono].b;
   r.boca = 0; r.bx = CX; r.by = MY; r.bAncho = 1; r.mejillas = 0; r.corazon = 0;
-  if (elPaquete == MINIMALISTA) {  // ojitos de píldora, más chicos y juntos (estilo EVA); la boca más cerca
-    r.L.x = CX - EX * 0.72f; r.R.x = CX + EX * 0.72f; r.L.w = r.R.w = EW * 0.62f; r.L.h = r.R.h = EH * 0.7f;
+  if (elPaquete == MINIMALISTA) {  // ojitos de domo, más chicos y separados (como el robot del tablero)
+    r.L.x = CX - EX * 0.85f; r.R.x = CX + EX * 0.85f; r.L.w = r.R.w = EW * 0.78f; r.L.h = r.R.h = EH * 0.52f;
     r.by = MY - 34;
   }
   return r;
@@ -131,6 +131,10 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
   }
   figura(x - hw, y - hh, x + hw, y + hh, tonoP(r, y - hh, y + hh, 14, o.alfa), [=](float px, float py) {
     float d = dCaja(px, py, x, y, hw, hh, rad);
+    if (mini && hh > hw) {   // domo: redondo arriba, casi plano abajo
+      float cyT = y - hh + hw;
+      d = fminf(dCirculo(px, py, x, cyT, hw), dCaja(px, py, x, (cyT + y + hh) / 2, hw, (y + hh - cyT) / 2, fminf(14.f, hw)));
+    }
     if (top > 0.005f || o.incl != 0) d = fmaxf(d, (y0 + tn * (px - x) - py) * co);
     if (fz > 0.01f) d = fmaxf(d, -dElipse(px, py, x, cy, crx, cry));
     return d;
@@ -148,10 +152,11 @@ static void boca(const Rostro &r) {
   if (op < 0.05f) return;
   float w = (26 + 14 * op) * r.bAncho, h = 16 + 62 * op;
   float x = r.bx, y = r.by;
-  if (elPaquete == MINIMALISTA) {  // ondita de sonido: 5 barritas que bailan con la voz
+  if (elPaquete == MINIMALISTA) {  // ondita de sonido chiquita abajo a la derecha: 5 barritas que bailan con la voz
+    x += 96; y += 26;
     for (int i = 0; i < 5; i++) {
       float f = (i == 2 ? 1 : i == 1 || i == 3 ? 0.7f : 0.42f) * (0.7f + 0.3f * sinf(tAhora * 13 + i * 1.9f));
-      float hb = 9 + 54 * op * f, xb = x + (i - 2) * 15 * fminf(r.bAncho, 1.4f);
+      float hb = 8 + 40 * op * f, xb = x + (i - 2) * 13 * fminf(r.bAncho, 1.4f);
       figura(xb - 5, y - hb / 2, xb + 5, y + hb / 2, tonoP(r, y - hb / 2, y + hb / 2, 8),
              [=](float px, float py) { return dCaja(px, py, xb, y, 4.5f, hb / 2, 4.5f); });
     }
@@ -817,7 +822,7 @@ static void extrasMini(float u, const Entradas &e) {
       float c = fmodf(f, 2) / 2, al = c < 0.88f ? 1 : 0;
       for (int k2 = 1; k2 <= 2; k2++) for (int s = -1; s <= 1; s += 2) {
         const Ojo &o = s < 0 ? oL : oR;
-        float x = o.x - 24 * k2, y0 = o.y - o.h / 2 + o.tapa * o.h, rad = fminf(o.w, o.h) * 0.5f;
+        float x = o.x - 34 * k2, y0 = o.y - o.h / 2 + o.tapa * o.h, rad = fminf(o.w, o.h) * 0.5f;
         figura(x - o.w / 2, y0, x + o.w / 2, o.y + o.h / 2, solido(BL, al * 0.28f / k2), [=](float px, float py) {
           return fmaxf(dCaja(px, py, x, o.y, o.w / 2, o.h / 2, rad), y0 - py);
         });
@@ -1649,6 +1654,10 @@ void cuadro(float t, float dt, const Entradas &e) {
   if (laReac != NINGUNA) extrasReac(u, false); else extrasBase(t, e, false);
   ojo(ahora, ahora.L, -1);
   ojo(ahora, ahora.R, 1);
+  if (elPaquete == MINIMALISTA) for (int s = -1; s <= 1; s += 2) {   // los puntitos a los lados de los ojos
+    const Ojo &o = s < 0 ? ahora.L : ahora.R;
+    circulo(o.x + s * (o.w / 2 + 24), o.y + o.h * 0.08f, 6, BL, 0.9f, 6);
+  }
   boca(ahora);
   if (laReac != NINGUNA) extrasReac(u, true); else extrasBase(t, e, true);
   dib::blanco = false;
