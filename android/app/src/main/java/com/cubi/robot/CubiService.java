@@ -254,6 +254,7 @@ public class CubiService extends Service {
                 }
                 avisar("conectado");
                 ui.post(CubiService.this::clima);
+                ui.post(() -> { musicaPlay = false; revisarAsistente(); });  // al reconectar le cuenta si hay música
                 siguiente();
             }
 
@@ -386,6 +387,7 @@ public class CubiService extends Service {
 
     private long asisDesde;
     private String asisEstado = "";
+    private boolean musicaPlay;  // lo último que se le dijo a Cubi: suena música en el celular
 
     // Abre el asistente del celular (Gemini), como "Hey Google". Con la pantalla apagada necesita el permiso
     // "Mostrar sobre otras apps". En Samsung el comando de voz genérico abre Bixby: primero se le pide a Google.
@@ -446,12 +448,13 @@ public class CubiService extends Service {
         for (AudioRecordingConfiguration c : am.getActiveRecordingConfigurations())
             if (c.getClientAudioSessionId() != miSesion) graba = true;
         graba &= am.getMode() != AudioManager.MODE_IN_CALL;
-        boolean suenaAsis = false, suenaNav = false, suenaVoz = false;
+        boolean suenaAsis = false, suenaNav = false, suenaVoz = false, suenaMedia = false;
         if (Build.VERSION.SDK_INT >= 26) for (AudioPlaybackConfiguration c : am.getActivePlaybackConfigurations()) {
             int u = c.getAudioAttributes().getUsage();
             if (u == AudioAttributes.USAGE_ASSISTANT) suenaAsis = true;
             else if (u == AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE) suenaNav = true;
             else if (u == AudioAttributes.USAGE_VOICE_COMMUNICATION || u == AudioAttributes.USAGE_ASSISTANCE_ACCESSIBILITY) suenaVoz = true;
+            else if (u == AudioAttributes.USAGE_MEDIA) suenaMedia = true;
         }
         // la voz "tipo llamada" solo es Gemini hablando si nadie graba: si graban, manda la oreja
         boolean hablaOtro = suenaAsis || suenaNav || (ventana && !graba && suenaVoz);
@@ -471,8 +474,11 @@ public class CubiService extends Service {
             asisEstado = nuevo;
             ultimoEnvio = ahora;
         }
+        // música en play (Spotify, YouTube...): Cubi baila de una y deja de bailar apenas se pausa
+        boolean play = suenaMedia && am.isMusicActive();
+        if (play != musicaPlay) { musicaPlay = play; enviar("musica|/musica?play=" + (play ? 1 : 0)); }
         // los callbacks no avisan cuando pasa el tiempo: mientras algo esté en juego se vuelve a mirar
-        if (!asisEstado.isEmpty() || hablaDesde != 0 || ahora < pitidoHasta || ventana) ui.postDelayed(revisar, 400);
+        if (!asisEstado.isEmpty() || hablaDesde != 0 || ahora < pitidoHasta || ventana || musicaPlay) ui.postDelayed(revisar, 400);
         // "Hola Cubi" escucha solo cuando nadie más usa el micrófono ni hay llamada
         boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva;
         if (oidoQuiere && modelo != null && libre) arrancarOido();

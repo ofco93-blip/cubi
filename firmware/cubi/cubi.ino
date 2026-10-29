@@ -342,6 +342,8 @@ Emo emo = NEUTRAL, emoBase = NEUTRAL;
 uint32_t emoHasta = 0;
 bool emoForzada = false;
 bool hayMusica = false, cantando = false;  // lo que animar() decide y las caras usan
+extern volatile bool bleOn;
+bool celPlay = false; uint8_t estPlay = TROPICAL;  // el celular avisa play/pausa; estPlay = el último estilo que se oyó
 uint32_t tGolpe = 0;  // pedida desde la app o tocando: le gana a la música; las del movimiento no
 uint8_t anim = NINGUNA; uint32_t animT0 = 0, animProx = 8000, animPaso = 0;
 float bostezo = 0, abreDer = 1;
@@ -427,6 +429,8 @@ void animar(uint32_t now) {
   bool libre = modo == NORMAL && !(emoHasta && emoForzada);
   bool voz = aCanta; float bIn = aBoca, aIn = aAncho;
   est = libre ? estilo : NADA;
+  if (estilo >= BALADA) estPlay = estilo;
+  if (libre && celPlay && bleOn && est < BALADA) est = estPlay;  // el celular está en play: baila de una, sin esperar 4 s
   if (now < demoHasta) {  // simulación para probar sin música (desde la app o por serie)
     float t = (now - demoT0) / 1000.f;
     est = TROPICAL; libre = true;
@@ -559,20 +563,21 @@ void animar(uint32_t now) {
 uint16_t *tmpPanel = nullptr;
 int ritmoFijo = -1;  // un baile pedido desde la app para probarlo
 
-// Cada estilo que detecta el micrófono tiene su familia de bailes; cambia de baile con cada canción (o cada 45 s)
+// Cada estilo que detecta el micrófono tiene su familia de bailes; elige uno al empezar la música y no lo cambia a mitad
 uint8_t elegirRitmo(uint32_t now) {
   using namespace caras;
-  static const uint8_t BAL[] = { R_DISFRUTA, R_PIANO, R_JAZZ, R_GUITARRA, R_CORAZON }, TRO[] = { R_TROPICAL, R_POP, R_GROOVE },
-    REG[] = { R_URBANO, R_KPOP, R_GROOVE }, ELE[] = { R_ELECTRO, R_DJ, R_BARRAS }, ROC[] = { R_ROCK, R_POP, R_BARRAS };
-  static uint8_t r = R_POP, estR = NADA; static uint32_t desde = 0;
+  static const uint8_t BAL[] = { R_DISFRUTA, R_PIANO, R_JAZZ, R_GUITARRA, R_CORAZON }, TRO[] = { R_TROPICAL, R_POP, R_GUITARRA },
+    REG[] = { R_URBANO, R_KPOP, R_DJ }, ELE[] = { R_ELECTRO, R_DJ, R_BARRAS }, ROC[] = { R_ROCK, R_POP, R_GROOVE };
+  static uint8_t r = R_POP, estR = NADA;
   if (ritmoFijo >= 0) return ritmoFijo;
-  if (est >= BALADA && (est != estR || now - desde > 45000)) {
+  if (est < BALADA) estR = NADA;
+  if (est >= BALADA && est != estR) {
     const uint8_t *f = BAL; int n = 5;
     if (est == TROPICAL) { f = TRO; n = 3; } else if (est == REGGAETON) { f = REG; n = 3; }
     else if (est == ELECTRO) { f = ELE; n = 3; } else if (est == ROCK) { f = ROC; n = 3; }
     int i = random(n);
     if (f[i] == r) i = (i + 1) % n;  // que no repita el mismo baile
-    r = f[i]; estR = est; desde = now;
+    r = f[i]; estR = est;
   }
   return r;
 }
@@ -891,6 +896,11 @@ String atender(const String &ruta, const Params &p, int &cod) {
     despertar(millis()); emoHasta = 0; demo(p.get("t") != "baile");
     ritmoFijo = -1;
     for (int i = 0; i < caras::N_RITMO; i++) if (p.get("r") == caras::NOMBRE_RITMO[i]) ritmoFijo = i;
+    return "ok";
+  }
+  if (ruta == "/musica") {  // el celular avisa play o pausa: con play baila de una; con pausa deja de bailar
+    celPlay = p.get("play") == "1";
+    if (!celPlay) estilo = NADA;
     return "ok";
   }
   if (ruta == "/clima") {  // el celular cuenta el clima (cada 20 min): reacciona cuando cambia
