@@ -778,7 +778,7 @@ static void extrasMini(float u, const Entradas &e) {
       }
       break;
     case R_JAZZ: {                                      // saxofón con la manito: se mece de lado a lado con el golpe
-      const float sxx = W - 110 + 26 * vaiven, syy = H - 64 - 6 * fabsf(vaiven), ang = 0.2f * vaiven, se = 0.95f;
+      const float sxx = W - 110 + 26 * vaiven, syy = H - 50 - 6 * fabsf(vaiven), ang = 0.2f * vaiven, se = 0.95f;
       float hx, hy;
       saxoLinea(sxx, syy, ang, se, 1);
       aPantalla(marco(sxx, syy, ang, se), -4, -28, hx, hy); manoBlanca(hx, hy, -0.3f + ang, 0.75f, false);
