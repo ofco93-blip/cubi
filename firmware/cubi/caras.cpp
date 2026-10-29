@@ -189,8 +189,10 @@ static void boca(const Rostro &r) {
   if (op < 0.05f) return;
   float w = (26 + 14 * op) * r.bAncho, h = 16 + 62 * op;
   float x = r.bx, y = r.by;
-  if (elPaquete == MINIMALISTA && laReac != NINGUNA) return;   // las reacciones no llevan boca
+  // minimalista: boca solo al hablar y al cantar (ni en reacciones ni en reposo)
+  if (elPaquete == MINIMALISTA && (laReac != NINGUNA || (laBase != CANTA && laBase != HABLA && laBase != TELEFONO))) return;
   if (elPaquete == MINIMALISTA && laBase == CANTA) {             // canta: una boquita que abre y cierra con la voz
+    if (op < 0.12f) return;                                      // entre sílabas se cierra del todo
     float bw = 11 * r.bAncho + 4, bh = 5 + 22 * op;
     figura(x - bw - 2, y - bh - 2, x + bw + 2, y + bh + 2, solido(BLANCO, 1, 10),
            [=](float px, float py) { return dCaja(px, py, x, y + 6, bw, bh, fminf(bw, bh)); });
@@ -1072,9 +1074,9 @@ static void extrasMini(float u, const Entradas &e) {
         for (int i = 0; i < 3; i++) circulo(o.x + (i - 1) * 20, o.y + o.h / 2 + 14 + 10 * (1 - g), 3, BL, g * 0.8f);
       }
       if (e.canta) {                                    // canta: micrófono de línea frente a la boquita, con la manito
-        float mx = ahora.bx + 50, my = ahora.by + 6, ang = 0.95f, hx, hy;
-        microLinea(mx, my, ang, 1, 1);
-        aPantalla(marco(mx, my, ang, 1), 42, 0, hx, hy);
+        float mx = ahora.bx + 56, my = ahora.by + 4, ang = 0.95f, hx, hy;
+        microLinea(mx, my, ang, 1.3f, 1);
+        aPantalla(marco(mx, my, ang, 1.3f), 42, 0, hx, hy);
         manoBlanca(hx, hy, ang - PI / 2, 0.85f, false);
         puntitos(u, 0.35f, 0.6f);
       } else bateria(n, g, 1);                          // sin voz: toca la batería
