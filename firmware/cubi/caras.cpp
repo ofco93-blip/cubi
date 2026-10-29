@@ -44,7 +44,8 @@ void paquete(uint8_t p) { elPaquete = p < N_PAQ ? p : CUBI_AZUL; }
 static Base laBase = REPOSO;
 static Reac laReac = NINGUNA;
 static float reacDesde = -1, tAhora = 0, baseDesde = 0, curvaAhora = 0;
-static float gritoAhora = 0;  // 0..1: "¡aaah!" (nota fuerte y sostenida): boca enorme y ojitos chiquitos
+static float gritoAhora = 0;  // 0..1: qué tan grande abre la boca en la parte fuerte (sigue cada sílaba, por niveles)
+static float gritoZona = 0;   // 0..1: está en una parte fuerte de la canción (sube rápido, baja en ~1 s)
 static int gradosN = 0; static float gradosDesde = -1, gradosHasta = -1;
 void mostrarGrados(int g, float seg) { gradosN = g; gradosDesde = tAhora; gradosHasta = tAhora + seg; }
 
@@ -649,14 +650,15 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
     feliz(r, campana(c8, 5.6f, 7.6f));
   }
   if (e.ritmo == R_KPOP) { feliz(r, 1); mover(r, 0, 8 * g); }   // con el micrófono: ojos cerrados, cabecea "tun, tun" y canta
-  // "¡aaah!": si la voz sostiene una nota fuerte un cuarto de segundo, la boca se abre enorme y los ojos se vuelven
-  // chiquitos y felices; al bajar la nota vuelve al canto normal
-  static float alto = 0, tAntes = 0;
+  // "¡aaah!": en la parte fuerte de la canción (voz muy fuerte o la barra rosada al tope) la boca crece, pero sigue
+  // abriendo y cerrando con cada sílaba por niveles: no se queda pegada abierta. Los ojos se vuelven chiquitos.
+  static float tAntes = 0;
   const float dt = lim(tAhora - tAntes, 0, 0.1f);
   tAntes = tAhora;
-  alto = e.canta && (e.boca > 0.78f || e.voz > 0.85f) ? alto + dt : 0;   // voz muy fuerte, o la barra rosada al tope
-  const bool grita = alto > 0.25f;
-  gritoAhora += ((grita ? 1.f : 0.f) - gritoAhora) * lim(dt * (grita ? 10 : 4), 0, 1);
+  const bool fuerte = e.canta && (e.boca > 0.78f || e.voz > 0.85f);
+  gritoZona += ((fuerte ? 1.f : 0.f) - gritoZona) * lim(dt * (fuerte ? 4 : 1.2f), 0, 1);
+  const float meta = e.canta ? gritoZona * tramo(e.boca, 0.4f, 1.0f) : 0;   // cuánto abre ahora, según la sílaba
+  gritoAhora += (meta - gritoAhora) * lim(dt * 16, 0, 1);
   if (gritoAhora > 0.01f) {                            // la boca gigante empuja los ojos arriba y a los lados (caricatura)
     const float G = gritoAhora;
     escalar(r, 1 - 0.5f * G, 1 - 0.6f * G); feliz(r, fmaxf(r.L.feliz, G));
@@ -782,7 +784,7 @@ static void telefonoIcono(float x, float y, float R, float u, float alfa) {
 }
 
 static void extrasMini(float u, const Entradas &e) {
-  if (gritoAhora > 0.4f) return;                        // en el "¡aaah!" gigante el instrumento se esconde
+  if (gritoZona > 0.5f) return;                         // en la parte fuerte el instrumento se esconde
   int n = (int)pulsosVistos;
   float g = expf(-e.pulso * 6), f = n + e.pulso, vaiven = sinf(f * PI);
   switch (e.ritmo) {

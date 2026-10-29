@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
       e.bpm = bpm; e.pulso = fmodf(t * bpm / 60, 1);
       e.canta = voz && fmodf(t, 4) < 2.5f; e.boca = e.canta ? 0.35f + 0.45f * fabsf(sinf(t * 5.3f)) : 0;
       e.ancho = 0.5f + 0.5f * sinf(t * 2.3f);   // las vocales cambian: a, e, i, o, u
-      if (e.canta && fmodf(t, 4) > 1.2f && fmodf(t, 4) < 2.2f) { e.boca = 0.95f; e.ancho = 0.45f; e.voz = 1; }   // un "¡aaah!" sostenido
+      if (e.canta && fmodf(t, 4) > 1.2f && fmodf(t, 4) < 2.2f) { e.boca = 0.45f + 0.55f * fabsf(sinf(t * 6)); e.ancho = 0.45f; e.voz = 1; }   // un "¡aaah!" sostenido
       e.nivel = 0.5f + 0.4f * fabsf(sinf(t * 1.7f));
     }
     if (que == "confeti" && i == (int)(1.5f * FPS)) cuentaPum();
