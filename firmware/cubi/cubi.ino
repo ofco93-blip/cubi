@@ -69,6 +69,8 @@ es8311_handle_t es = nullptr;
 
 uint8_t rotacion = ROTACION_INICIAL, volumen = VOLUMEN_INICIAL, micGan = GANANCIA_MIC;
 bool sonidoOn = true, musicaOn = true;
+bool musicaCel = true;  // true: baila solo cuando el celular reproduce (y usa la letra y el instrumento que manda);
+                        // false: solo con lo que oye su micrófono, sin mirar el celular
 float umbralVoz = UMBRAL_VOZ, ganBoca = GANANCIA_BOCA, sensK = SONIDO_K, umbralFreno = UMBRAL_FRENO;
 volatile uint32_t otaTotal = 0, otaHecho = 0;  // actualización por Bluetooth en curso (bytes)
 volatile bool otaError = false;
@@ -444,7 +446,7 @@ void animar(uint32_t now) {
   bool voz = aCanta; float bIn = aBoca, aIn = aAncho;
   est = libre ? estilo : NADA;
   if (estilo >= BALADA) estPlay = estilo;
-  if (libre && celPlay && bleOn && est < BALADA) est = estPlay;  // el celular está en play: baila de una, sin esperar 4 s
+  if (musicaCel) est = libre && celPlay && bleOn ? (estilo >= BALADA ? estilo : estPlay) : NADA;   // espera al celular; el oído pone el estilo
   if (now < demoHasta) {  // simulación para probar sin música (desde la app o por serie)
     float t = (now - demoT0) / 1000.f;
     est = TROPICAL; libre = true;
@@ -454,7 +456,7 @@ void animar(uint32_t now) {
     uint32_t b = (now - demoT0) / 476; if (b != demoBeat) { demoBeat = b; enGolpe(now); }
   }
   bool musica = est >= BALADA;
-  if (musica && now < celVozHasta) {  // con la letra: canta justo cuando canta el artista; la boca sigue lo que oye
+  if (musicaCel && musica && now < celVozHasta) {  // con la letra: canta justo cuando canta el artista; la boca sigue lo que oye
     float t = now / 1000.f;
     voz = celVoz;
     bIn = voz ? fmaxf(aBocaCruda, 0.6f * constrain(0.5f * sinf(t * 9.3f) + 0.3f * sinf(t * 3.7f) + 0.3f, 0.f, 1.f)) : 0;
@@ -589,9 +591,9 @@ uint8_t elegirRitmo(uint32_t now) {
     REG[] = { R_URBANO, R_KPOP, R_DJ }, ELE[] = { R_ELECTRO, R_DJ, R_BARRAS }, ROC[] = { R_ROCK, R_POP, R_GROOVE };
   static uint8_t r = R_POP, estR = NADA;
   if (ritmoFijo >= 0) return ritmoFijo;
-  if (celRitmo >= 0 && celPlay) return celRitmo;
+  if (musicaCel && celRitmo >= 0 && celPlay) return celRitmo;
   if (est < BALADA) estR = NADA;
-  if (celPlay && estR != NADA) return r;  // con el celular en play no cambia de baile a mitad de la canción
+  if (musicaCel && celPlay && estR != NADA) return r;  // con el celular en play no cambia de baile a mitad de la canción
   if (est >= BALADA && est != estR) {
     const uint8_t *f = BAL; int n = 5;
     if (est == TROPICAL) { f = TRO; n = 3; } else if (est == REGGAETON) { f = REG; n = 3; }
@@ -880,7 +882,7 @@ void energiaUpdate(uint32_t now) {
 }
 
 void guardar() {
-  prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn);
+  prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn); prefs.putBool("mc", musicaCel);
   prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan); prefs.putChar("adl", adelante); prefs.putFloat("fr", umbralFreno);
 }
 
@@ -957,6 +959,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     if (p.has("vol")) { volumen = constrain(p.get("vol").toInt(), 0, 100); if (es) es8311_voice_volume_set(es, volumen, NULL); sonar(S_WHATSAPP); }
     if (p.has("son")) sonidoOn = p.get("son") == "1";
     if (p.has("mus")) musicaOn = p.get("mus") == "1";
+    if (p.has("mc")) musicaCel = p.get("mc") == "1";
     if (p.has("fr")) umbralFreno = constrain(p.get("fr").toFloat(), 0.15f, 0.9f);
     if (p.has("adl")) adelante = -adelante;  // al frenar se pone feliz: se invierte
     if (p.has("rot")) { rotacion = rotacion == 3 ? 1 : 3; cv->setRotation(rotacion); memset(cv->getFramebuffer(), 0, 368 * 448 * 2); dib::todo(); }
@@ -971,7 +974,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     int bat = pmuOk && pmu.isBatteryConnect() ? pmu.getBatteryPercent() : -1;
     return String("{\"emo\":\"") + EMO_NOM[emo] + "\",\"modo\":" + modo + ",\"estado\":" + estado +
       ",\"estilo\":\"" + EST_NOM[estilo] + "\",\"bpm\":" + int(aBpm) + ",\"bat\":" + bat + ",\"usb\":" + (pmuOk && pmu.isVbusIn() ? 1 : 0) +
-      ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn +
+      ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"mc\":" + musicaCel +
       ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
       ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"fw\":" + VERSION_FW +
       ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + ",\"paq\":" + prefs.getUChar("paq", 0) + "}";  // cuadros por segundo del último cuadro
@@ -1126,7 +1129,7 @@ void setup() {
   energiaInit();
   prefs.begin("robot");
   rotacion = prefs.getUChar("rot", ROTACION_INICIAL); volumen = prefs.getUChar("vol", VOLUMEN_INICIAL);
-  sonidoOn = prefs.getBool("son", true); musicaOn = prefs.getBool("mus", true);
+  sonidoOn = prefs.getBool("son", true); musicaOn = prefs.getBool("mus", true); musicaCel = prefs.getBool("mc", true);
   caras::paquete(prefs.getUChar("paq", caras::CUBI_AZUL));
   umbralVoz = prefs.getFloat("uv", UMBRAL_VOZ); ganBoca = prefs.getFloat("gb", GANANCIA_BOCA);
   sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = prefs.getFloat("fr", UMBRAL_FRENO);
