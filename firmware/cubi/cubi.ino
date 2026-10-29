@@ -553,7 +553,7 @@ const float PANEL_BY = 300;                       // fila de botones (en lo que 
 float panelBx(int i) { return dib::W / 2 + (i - 1) * 146; }
 
 void dibujarPanel(uint32_t now) {
-  using namespace dib;
+  using dib::Col; using dib::figura; using dib::solido; using dib::dCaja; using dib::texto; using dib::BLANCO;
   static uint32_t tLee = 0; static int bat = -1; static bool carga = false, usb = false;
   if (pmuOk && (!tLee || now - tLee > 1000)) { tLee = now; bat = pmu.getBatteryPercent(); carga = pmu.isCharging(); usb = pmu.isVbusIn(); }
   const Col gris{170, 180, 200}, celeste{120, 190, 255};
