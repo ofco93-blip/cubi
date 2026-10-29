@@ -159,6 +159,11 @@ section[hidden] { display: none; }
 
 <!-- ================= AJUSTES ================= -->
 <section id="tab-ajustes" hidden>
+  <h2>Clima</h2>
+  <div class="card">
+    <div class="row"><span>Reaccionar al clima</span><label class="sw"><input type="checkbox" id="clima"><i></i></label></div>
+    <p class="note" id="climaNota">Con lluvia saca la sombrilla, con sol se alegra, con calor suda y con frío tirita. Usa tu ubicación aproximada (~1 km) y se actualiza cada 20 minutos.</p>
+  </div>
   <h2>Paquete de caras</h2>
   <div class="card">
     <div class="paqs">
@@ -331,6 +336,10 @@ $('bri').onchange = e => mandar('/brillo?v=' + e.target.value);
 $('vol').onchange = e => mandar('/ajuste?vol=' + e.target.value);
 $('son').onchange = e => mandar('/ajuste?son=' + (e.target.checked ? 1 : 0));
 $('rot').onclick = () => mandar('/ajuste?rot=1');
+$('clima').onchange = e => Android.climaCubi(e.target.checked);
+function climaEstado(si) { $('clima').checked = si; }
+function climaTexto(s) { if (s) $('climaNota').textContent = s; }
+if (window.Android) setTimeout(() => { climaEstado(Android.climaActivo()); climaTexto(Android.climaTexto()); }, 500);
 document.querySelectorAll('.paq').forEach(b => b.onclick = () => {
   if (!vivo) return toast('Primero conecta a Cubi por Bluetooth');
   mandar('/ajuste?paq=' + b.dataset.paq);

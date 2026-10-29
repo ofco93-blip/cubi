@@ -580,6 +580,7 @@ uint8_t elegirRitmo(uint32_t now) {
 // ---------- Panel que baja desde arriba: batería, Bluetooth, versión y botones ----------
 extern volatile bool bleOn;
 bool panelAbierto = false;
+int climaT = 0; String climaE;  // lo último que contó el celular del clima
 uint32_t panelHasta = 0;
 const float PANEL_BY = 300;                       // fila de botones (en lo que se ve, 448 x 368)
 float panelBx(int i) { return dib::W / 2 + (i - 1) * 146; }
@@ -603,6 +604,10 @@ void dibujarPanel(uint32_t now) {
   texto(usb ? (carga ? "Cargando" : "Conectado al USB") : "Con batería", W / 2, by + 62, 24, gris);
   texto(bleOn ? "Celular conectado" : "Sin celular", W / 2, 172, 24, bleOn ? celeste : gris);
   texto("Cubi v" VERSION, W / 2, 206, 18, Col{110, 120, 140});
+  if (climaE.length()) {
+    char c[40]; snprintf(c, sizeof(c), "%s, %d grados", climaE.c_str(), climaT); c[0] = toupper(c[0]);
+    texto(c, W / 2, 238, 22, celeste);
+  }
   // botones
   const char *nombre[3] = {"Sonido", "Brillo", "Gemini"};
   char valor[3][12];
@@ -886,6 +891,18 @@ String atender(const String &ruta, const Params &p, int &cod) {
     despertar(millis()); emoHasta = 0; demo(p.get("t") != "baile");
     ritmoFijo = -1;
     for (int i = 0; i < caras::N_RITMO; i++) if (p.get("r") == caras::NOMBRE_RITMO[i]) ritmoFijo = i;
+    return "ok";
+  }
+  if (ruta == "/clima") {  // el celular cuenta el clima (cada 20 min): reacciona cuando cambia
+    int t = p.get("t").toInt(); String e = p.get("e"); bool dia = p.get("d") == "1";
+    caras::Reac r = caras::NINGUNA;
+    if (e == "lluvia" || e == "tormenta") r = caras::LLUVIA;
+    else if (e == "nieve" || t <= 12) r = caras::FRIO;
+    else if (t >= 30) r = caras::CALOR;
+    else if (e == "despejado" && dia) r = caras::SOL;
+    static caras::Reac antes = caras::N_REAC;
+    if (r != antes && r != caras::NINGUNA && modo == NORMAL && !asis) reac(r);
+    antes = r; climaT = t; climaE = e;
     return "ok";
   }
   if (ruta == "/brillo") { despertar(millis()); brillo = constrain(p.get("v").toInt(), 0, 255); panel->setBrightness(brillo); return "ok"; }

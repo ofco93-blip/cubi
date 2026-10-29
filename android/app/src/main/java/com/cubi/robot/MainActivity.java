@@ -60,6 +60,7 @@ public class MainActivity extends Activity {
         if (CubiService.yo != null) {
             CubiService.yo.oyente = this::js;
             if (CubiService.yo.holaActivo()) CubiService.yo.primerPlano();  // con la app a la vista recupera el micrófono
+            if (CubiService.yo.climaActivo()) CubiService.yo.guardarUbicacion();
         }
     }
 
@@ -112,6 +113,12 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] p, int[] r) {
+        if (code == 5) {  // ubicación aproximada para el clima
+            boolean si = r.length > 0 && r[0] == PackageManager.PERMISSION_GRANTED;
+            if (si && CubiService.yo != null) CubiService.yo.climaOn(true);
+            else js("climaEstado(false)");
+            return;
+        }
         if (code == 4) {  // micrófono para "Hola Cubi"
             boolean si = r.length > 0 && r[0] == PackageManager.PERMISSION_GRANTED;
             if (si && CubiService.yo != null) CubiService.yo.hola(true);
@@ -268,6 +275,24 @@ public class MainActivity extends Activity {
             if (si && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
                 requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 4);
             else CubiService.yo.hola(si);
+        }
+
+        @JavascriptInterface
+        public void climaCubi(boolean si) {
+            if (CubiService.yo == null) return;
+            if (si && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 5);
+            else CubiService.yo.climaOn(si);
+        }
+
+        @JavascriptInterface
+        public boolean climaActivo() {
+            return CubiService.yo != null && CubiService.yo.climaActivo();
+        }
+
+        @JavascriptInterface
+        public String climaTexto() {
+            return CubiService.yo == null ? "" : CubiService.yo.climaTexto;
         }
 
         @JavascriptInterface

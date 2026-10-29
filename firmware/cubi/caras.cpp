@@ -115,6 +115,21 @@ static Pintura tonoP(const Rostro &r, float y0, float y1, float halo, float alfa
   return p;
 }
 
+// Robot minimalista en 3D: cada figura es una ficha de plástico blanco con la luz desde arriba: su grosor (un lado gris)
+// asoma por debajo, la cara va de blanco a gris hacia abajo y tiene un reflejo arriba a la izquierda.
+template <typename F>
+static void volumen(float x0, float y0, float x1, float y1, float alfa, F d, float prof = 7, bool brillo = true) {
+  if (alfa < 0.02f) return;
+  figura(x0, y0 + prof, x1, y1 + prof, solido(Col{62, 64, 72}, alfa), [&](float px, float py) { return d(px, py - prof); });
+  Pintura p; p.arriba = {236, 238, 244}; p.abajo = {128, 132, 146}; p.y0 = y0; p.y1 = y1;
+  p.halo = 12; p.haloA = 0.2f; p.haloCol = {215, 220, 232}; p.alfa = alfa;
+  figura(x0, y0, x1, y1, p, d);
+  if (!brillo) return;
+  float bx = x0 + (x1 - x0) * 0.3f, by = y0 + (y1 - y0) * 0.24f, rx = (x1 - x0) * 0.14f, ry = (y1 - y0) * 0.09f;
+  figura(bx - rx, by - ry, bx + rx, by + ry, solido(BLANCO, 0.75f * alfa, 3),
+         [=](float px, float py) { return fmaxf(dElipse(px, py, bx, by, rx, ry), d(px, py) + 4); });
+}
+
 static void ojo(const Rostro &r, const Ojo &o, float lado) {
   if (o.alfa < 0.02f || o.w < 2 || o.h < 2) return;
   float top = fminf(o.tapa, 0.98f);
@@ -125,11 +140,12 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
   const float fz = o.feliz, cy = y + o.h * (0.95f - 0.55f * fz), crx = o.w * 0.78f, cry = o.h * 0.62f;
   if (r.corazon > 0.5f) {
     float s = fminf(o.w, o.h) * 0.55f * (0.9f + 0.1f * r.corazon);
-    figura(x - s * 1.3f, y - s * 1.3f, x + s * 1.3f, y + s * 1.1f, tonoP(r, y - s, y + s, 20, o.alfa),
-           [=](float px, float py) { return dCorazon(px, py, x, y, s); });
+    auto cor = [=](float px, float py) { return dCorazon(px, py, x, y, s); };
+    if (mini) volumen(x - s * 1.3f, y - s * 1.3f, x + s * 1.3f, y + s * 1.1f, o.alfa, cor);
+    else figura(x - s * 1.3f, y - s * 1.3f, x + s * 1.3f, y + s * 1.1f, tonoP(r, y - s, y + s, 20, o.alfa), cor);
     return;
   }
-  figura(x - hw, y - hh, x + hw, y + hh, tonoP(r, y - hh, y + hh, 14, o.alfa), [=](float px, float py) {
+  auto forma = [=](float px, float py) {
     float d = dCaja(px, py, x, y, hw, hh, rad);
     if (mini && hh > hw) {   // domo: redondo arriba, casi plano abajo
       float cyT = y - hh + hw;
@@ -138,7 +154,9 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
     if (top > 0.005f || o.incl != 0) d = fmaxf(d, (y0 + tn * (px - x) - py) * co);
     if (fz > 0.01f) d = fmaxf(d, -dElipse(px, py, x, cy, crx, cry));
     return d;
-  });
+  };
+  if (mini) { volumen(x - hw, y - hh, x + hw, y + hh, o.alfa, forma); return; }
+  figura(x - hw, y - hh, x + hw, y + hh, tonoP(r, y - hh, y + hh, 14, o.alfa), forma);
   // brillito
   if (top < 0.3f && fz < 0.3f && !mini) {
     float bx = x - o.w * 0.2f, by = y - o.h * 0.27f;
@@ -721,7 +739,10 @@ static float dEstrella(float px, float py, float cx, float cy, float r, float gi
   return sqrtf(ex * ex + ey * ey) * (qy * bax - qx * bay > 0 ? 1.f : -1.f);
 }
 static void estrella(float x, float y, float R, float giro, float alfa) {
-  figura(x - R - 2, y - R - 2, x + R + 2, y + R + 2, solido(BL, alfa, 10), [=](float px, float py) { return dEstrella(px, py, x, y, R, giro); });
+  volumen(x - R - 2, y - R - 2, x + R + 2, y + R + 2, alfa, [=](float px, float py) { return dEstrella(px, py, x, y, R, giro); });
+}
+static void corazon3D(float x, float y, float s, float alfa) {
+  volumen(x - s * 1.3f, y - s * 1.3f, x + s * 1.3f, y + s * 1.1f, alfa, [=](float px, float py) { return dCorazon(px, py, x, y, s); });
 }
 static void anillo(float x, float y, float R, float grosor, float alfa) {
   figura(x - R - grosor, y - R - grosor, x + R + grosor, y + R + grosor, solido(BL, alfa, 6),
@@ -755,7 +776,7 @@ static void extrasMini(float u, const Entradas &e) {
       }
       for (int s = -1; s <= 1; s += 2) {
         float x = s < 0 ? oL.x : oR.x;
-        figura(x - hw - 2, y - hh - 2, x + hw + 2, y + hh + 2, solido(BL, a, 8), [=](float px, float py) { return dCaja(px, py, x, y, hw, hh, hh * 0.6f); });
+        volumen(x - hw - 2, y - hh - 2, x + hw + 2, y + hh + 2, a, [=](float px, float py) { return dCaja(px, py, x, y, hw, hh, hh * 0.6f); });
         float gp = fmodf(f / 4, 1.f) * 1.6f - 0.3f;   // el brillo cruza cada 4 golpes
         if (gp > 0 && gp < 1) {
           float gx = x - hw + 2 * hw * gp;
@@ -777,8 +798,8 @@ static void extrasMini(float u, const Entradas &e) {
         for (int i = 0; i < 5; i++) {
           float y = o.y + o.h / 2 - segH * (i + 0.5f);
           bool on = i < prende;
-          figura(o.x - o.w / 2, y - segH / 2, o.x + o.w / 2, y + segH / 2, solido(BL, a * (on ? 1 : 0.15f), on ? 8 : 0),
-                 [=](float px, float py) { return dCaja(px, py, o.x, y, o.w / 2, segH / 2 - 4, 6); });
+          volumen(o.x - o.w / 2, y - segH / 2, o.x + o.w / 2, y + segH / 2, a * (on ? 1 : 0.15f),
+                  [=](float px, float py) { return dCaja(px, py, o.x, y, o.w / 2, segH / 2 - 4, 6); }, 3, false);
         }
       }
       anillo(CX, (oL.y + oR.y) / 2, 150 + 80 * (1 - g), 2, 0.5f * g * a);
@@ -791,7 +812,7 @@ static void extrasMini(float u, const Entradas &e) {
         float sh = sacude ? g : 0.25f * g, x = CX + s * 172 + 6 * vaiven, y = EY + 70;
         float ang = s * 0.35f + 0.5f * sh * sinf(u * 40), hx = x + sinf(ang) * 38, hy = y - cosf(ang) * 38;
         linea(x, y, hx, hy, 4, BL, 0.95f);
-        circulo(hx, hy, 15, BL, 0.95f, 8);
+        volumen(hx - 16, hy - 16, hx + 16, hy + 16, 0.95f, [=](float px, float py) { return dCirculo(px, py, hx, hy, 15); }, 5);
         if (sacude && g > 0.35f) for (int j = 0; j < 3; j++) {
           float aa = ang + (j - 1) * 0.55f, d = 26 + 22 * (1 - g);
           circulo(hx + sinf(aa) * d, hy - cosf(aa) * d, 3, BL, g);
@@ -801,7 +822,7 @@ static void extrasMini(float u, const Entradas &e) {
     }
     case R_KPOP: {                                      // un ojo se vuelve corazón; el que guiña suelta destellos
       int p = n % 4;
-      if (p == 1 || p == 3) { const Ojo &o = p == 1 ? oR : oL; corazonito(o.x, o.y, 34 * (0.9f + 0.25f * g), 1 - o.alfa); }
+      if (p == 1 || p == 3) { const Ojo &o = p == 1 ? oR : oL; corazon3D(o.x, o.y, 34 * (0.9f + 0.25f * g), 1 - o.alfa); }
       else {
         const Ojo &w = p == 0 ? oL : oR; float s = p == 0 ? -1 : 1;
         chispa(w.x + s * (w.w / 2 + 26), w.y - w.h / 2, 10 + 12 * g, 0.4f + 0.6f * g, BL);
@@ -811,7 +832,7 @@ static void extrasMini(float u, const Entradas &e) {
     }
     case R_CORAZON: {                                   // el corazón grande late y suelta anillos; suben corazoncitos
       float a = 1 - oL.alfa, y = (oL.y + oR.y) / 2;
-      if (a > 0.02f) { corazonito(CX, y, 62 * (1 + 0.18f * g), a); anillo(CX, y, 90 + 70 * (1 - g), 2.5f, 0.6f * g * a); }
+      if (a > 0.02f) { corazon3D(CX, y, 62 * (1 + 0.18f * g), a); anillo(CX, y, 90 + 70 * (1 - g), 2.5f, 0.6f * g * a); }
       for (int i = 0; i < 3; i++) {
         float q = fmodf(u * 0.3f + i / 3.f, 1.f);
         corazonito(CX + (i - 1) * 160 + 10 * sinf(q * 6 + i), H - 30 - 220 * q, 10, 0.7f * campana(q, 0, 1));
@@ -920,7 +941,7 @@ static void extrasMini(float u, const Entradas &e) {
           float x = o.x + (j - 1) * sep;
           float lvl = 0.3f + 0.7f * lim(e.nivel * 1.3f, 0.2f, 1) * (0.5f + 0.5f * fabsf(sinf(u * (3 + j * 0.7f + s) + j * 2))) * (0.7f + 0.3f * g);
           float h = o.h * lvl;
-          figura(x - bw / 2 - 1, yb - h, x + bw / 2 + 1, yb, solido(BL, a, 8), [=](float px, float py) { return dCaja(px, py, x, yb - h / 2, bw / 2, h / 2, bw / 2); });
+          volumen(x - bw / 2 - 1, yb - h, x + bw / 2 + 1, yb, a, [=](float px, float py) { return dCaja(px, py, x, yb - h / 2, bw / 2, h / 2, bw / 2); }, 5, false);
         }
       }
       ecualizador(u, e, g, 11, 36, 70);

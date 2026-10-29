@@ -21,7 +21,11 @@ import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.location.Location;
+import android.location.LocationManager;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.media.AudioAttributes;
@@ -39,14 +43,17 @@ import android.os.ParcelUuid;
 
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.Collections;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -109,6 +116,7 @@ public class CubiService extends Service {
                 .setOngoing(true)
                 .build();
         oidoQuiere = getSharedPreferences("cubi", 0).getBoolean("hola", false);
+        clima();
         primerPlano();
         escucharAsistente();
         if (oidoQuiere) prepararOido();
@@ -245,6 +253,7 @@ public class CubiService extends Service {
                     listo = true;
                 }
                 avisar("conectado");
+                ui.post(CubiService.this::clima);
                 siguiente();
             }
 
@@ -319,6 +328,55 @@ public class CubiService extends Service {
             ocupado = gatt.writeCharacteristic(c);
             if (!ocupado) enVuelo = null;
         }
+    }
+
+    // ---------- clima: el celular lo consulta (Open-Meteo, gratis y sin cuenta) y se lo cuenta a Cubi ----------
+    String climaTexto = "";
+    boolean climaActivo() { return getSharedPreferences("cubi", 0).getBoolean("clima", false); }
+    void climaOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("clima", si).apply(); clima(); }
+
+    // ubicación aproximada (2 decimales, ~1 km): basta para el clima. Se guarda para usarla con la app cerrada.
+    @SuppressLint("MissingPermission")
+    void guardarUbicacion() {
+        if (checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
+        LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+        Location mejor = null;
+        try {
+            for (String p : lm.getProviders(true)) {
+                Location l = lm.getLastKnownLocation(p);
+                if (l != null && (mejor == null || l.getTime() > mejor.getTime())) mejor = l;
+            }
+        } catch (SecurityException e) { return; }
+        if (mejor != null) getSharedPreferences("cubi", 0).edit()
+            .putString("lugar", String.format(Locale.US, "%.2f,%.2f", mejor.getLatitude(), mejor.getLongitude())).apply();
+    }
+
+    private final Runnable climaCada = this::clima;
+    void clima() {
+        ui.removeCallbacks(climaCada);
+        if (!climaActivo()) return;
+        ui.postDelayed(climaCada, 20 * 60000);
+        guardarUbicacion();
+        String lugar = getSharedPreferences("cubi", 0).getString("lugar", "");
+        if (lugar.isEmpty()) { climaTexto = "Abre la app una vez con la ubicación prendida"; js("climaTexto(" + JSONObject.quote(climaTexto) + ")"); return; }
+        String[] ll = lugar.split(",");
+        new Thread(() -> {
+            try {
+                HttpURLConnection c = (HttpURLConnection) new URL("https://api.open-meteo.com/v1/forecast?latitude=" + ll[0] + "&longitude=" + ll[1]
+                    + "&current=temperature_2m,weather_code,is_day").openConnection();
+                c.setConnectTimeout(10000); c.setReadTimeout(10000);
+                ByteArrayOutputStream b = new ByteArrayOutputStream();
+                try (InputStream in = c.getInputStream()) { byte[] buf = new byte[4096]; int n; while ((n = in.read(buf)) > 0) b.write(buf, 0, n); }
+                JSONObject cur = new JSONObject(b.toString("UTF-8")).getJSONObject("current");
+                int t = (int) Math.round(cur.getDouble("temperature_2m")), cod = cur.getInt("weather_code"), dia = cur.getInt("is_day");
+                // códigos de la OMM: 0-1 despejado, 2-3 nubes, 45-48 niebla, 51-67 y 80-82 lluvia, 71-77 y 85-86 nieve, 95-99 tormenta
+                String e = cod <= 1 ? "despejado" : cod <= 3 ? "nubes" : cod <= 48 ? "niebla" : cod <= 67 ? "lluvia"
+                    : cod <= 77 ? "nieve" : cod <= 82 ? "lluvia" : cod <= 86 ? "nieve" : "tormenta";
+                enviar("clima|/clima?t=" + t + "&e=" + e + "&d=" + dia);
+                climaTexto = "Ahora: " + e + ", " + t + " grados";
+                js("climaTexto(" + JSONObject.quote(climaTexto) + ")");
+            } catch (Exception ignored) {}
+        }).start();
     }
 
     // ---------- asistente: Cubi pide abrir Gemini y se le cuenta si escucha o habla ----------
