@@ -590,8 +590,8 @@ int ritmoFijo = -1;  // un baile pedido desde la app para probarlo
 // Cada estilo que detecta el micrófono tiene su familia de bailes; elige uno al empezar la música y no lo cambia a mitad
 uint8_t elegirRitmo(uint32_t now) {
   using namespace caras;
-  static const uint8_t BAL[] = { R_DISFRUTA, R_PIANO, R_JAZZ, R_GUITARRA, R_CORAZON }, TRO[] = { R_TROPICAL, R_POP, R_GUITARRA },
-    REG[] = { R_URBANO, R_KPOP, R_DJ }, ELE[] = { R_ELECTRO, R_DJ, R_BARRAS }, ROC[] = { R_ROCK, R_POP, R_GROOVE };
+  static const uint8_t BAL[] = { R_DISFRUTA, R_PIANO, R_JAZZ, R_GUITARRA, R_CORAZON }, TRO[] = { R_TROPICAL, R_TROPICAL, R_GUITARRA },
+    REG[] = { R_DJ, R_KPOP, R_DJ }, ELE[] = { R_ELECTRO, R_DJ, R_BARRAS }, ROC[] = { R_ROCK, R_ROCK, R_GROOVE };   // la batería ya no por defecto
   static uint8_t r = R_KPOP, estR = NADA;
   if (ritmoFijo >= 0) return ritmoFijo;
   // con el celular en play: el instrumento que dijo Haiku; si no se sabe, no improvisa: micrófono y ojos cerrados

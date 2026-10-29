@@ -804,13 +804,14 @@ public class CubiService extends Service {
         ui.postDelayed(seguirLetraR, 250);
     }
 
-    // Haiku conoce casi todas las canciones: le pregunta qué instrumento se destaca y Cubi toca ese
+    // Haiku conoce casi todas las canciones: le pregunta el género y Cubi toca el instrumento de ese tipo de canción
+    // (pop → canta con micrófono; la batería solo cuando de verdad manda la percusión)
     public static class Instrumento {
         public String instrumento;
     }
 
-    static final String[][] INSTRUMENTOS = {{"electrica", "rock"}, {"acustica", "guitarra"}, {"bateria", "pop"}, {"saxo", "jazz"},
-            {"piano", "piano"}, {"dj", "dj"}, {"maracas", "tropical"}, {"microfono", "kpop"}};
+    static final String[][] INSTRUMENTOS = {{"pop", "kpop"}, {"electronica", "dj"}, {"urbano", "dj"}, {"rock", "rock"},
+            {"acustica", "guitarra"}, {"tropical", "tropical"}, {"jazz", "jazz"}, {"piano", "piano"}, {"percusion", "pop"}};
 
     private void pedirInstrumento(String titulo, String artista, String id) {
         if (claveClaude().isEmpty()) return;  // sin clave: el micrófono adivina el estilo como antes
@@ -818,11 +819,13 @@ public class CubiService extends Service {
             try {
                 if (claude == null) claude = AnthropicOkHttpClient.builder().apiKey(claveClaude()).build();
                 MessageCreateParams.Builder b = MessageCreateParams.builder().model(MODELO_CLAUDE).maxTokens(256L)
-                        .addUserMessage("Canción: \"" + titulo + "\" de " + artista + ". ¿Qué instrumento se destaca más en ella? "
-                                + "Responde exactamente uno: electrica (guitarra eléctrica, rock), acustica (guitarra acústica), "
-                                + "bateria (batería, pop, reggaetón, urbano), saxo (jazz, vientos), piano (baladas de piano), "
-                                + "dj (electrónica), maracas (salsa, cumbia, merengue, percusión latina), "
-                                + "microfono (cuando lo que más se nota es la voz).");
+                        .addUserMessage("Canción: \"" + titulo + "\" de " + artista + ". ¿De qué tipo de canción es? "
+                                + "En 'instrumento' responde exactamente uno: pop (pop, k-pop, r&b, baladas pop, cualquier canción "
+                                + "donde manda la voz), electronica (electrónica, house, EDM, dance), urbano (reggaetón, trap, hip hop), "
+                                + "rock (rock, metal, punk), acustica (folk, cantautor, country, acústico), tropical (salsa, cumbia, "
+                                + "merengue, bachata, vallenato), jazz (jazz, blues, soul con vientos), piano (baladas de piano, "
+                                + "clásica), percusion (solo si la batería o los tambores son lo principal, como un solo de batería). "
+                                + "Si dudas, pop.");
                 Instrumento r = claude.messages().create(b.outputConfig(Instrumento.class).build())
                         .content().stream().flatMap(c -> c.text().stream()).map(t -> t.text()).findFirst().orElse(null);
                 if (r == null || r.instrumento == null || !id.equals(cancionId)) return;
