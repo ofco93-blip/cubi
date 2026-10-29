@@ -901,7 +901,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     else if (t >= 30) r = caras::CALOR;
     else if (e == "despejado" && dia) r = caras::SOL;
     static caras::Reac antes = caras::N_REAC;
-    if (r != antes && r != caras::NINGUNA && modo == NORMAL && !asis) reac(r);
+    if ((r != antes || r == caras::LLUVIA) && r != caras::NINGUNA && modo == NORMAL && !asis) reac(r);   // mientras llueva, cada vez
     antes = r; climaT = t; climaE = e;
     return "ok";
   }

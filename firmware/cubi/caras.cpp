@@ -10,7 +10,7 @@ const char *NOMBRE_REAC[N_REAC] = {"", "saludo", "bache", "frenazo", "aceleron",
                                    "whatsapp", "llamada", "calor", "risa", "sorpresa", "amor", "mareo", "maps_izq", "maps_der",
                                    "llegamos", "sol", "lluvia", "frio", "bateria", "guino", "curiosa"};
 static const float DURA[N_REAC] = {0, 2.6f, 2.4f, 4.0f, 2.8f, 2.8f, 2.4f, 2.4f, 2.6f, 6.0f, 6.0f, 7.5f, 2.0f, 2.0f, 4.0f,
-                                   3.2f, 3.0f, 3.0f, 4.0f, 4.0f, 5.0f, 5.0f, 4.0f, 1.2f, 2.4f};
+                                   3.2f, 3.0f, 3.0f, 4.0f, 4.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f};
 float duracion(Reac r) { return DURA[r]; }
 const char *NOMBRE_RITMO[N_RITMO] = {"pop", "urbano", "electro", "tropical", "kpop", "corazon", "groove", "guitarra", "disfruta", "rock",
                                      "jazz", "dj", "piano", "barras"};
@@ -60,8 +60,8 @@ static Rostro neutro(int tono = AZUL) {
   r.R = {CX + EX, EY, EW, EH, 0, 0, 0, 1};
   r.a = TONOS[tono].a; r.b = TONOS[tono].b;
   r.boca = 0; r.bx = CX; r.by = MY; r.bAncho = 1; r.mejillas = 0; r.corazon = 0;
-  if (elPaquete == MINIMALISTA) {  // ojitos de domo, más chicos y separados (como el robot del tablero)
-    r.L.x = CX - EX * 0.85f; r.R.x = CX + EX * 0.85f; r.L.w = r.R.w = EW * 0.78f; r.L.h = r.R.h = EH * 0.52f;
+  if (elPaquete == MINIMALISTA) {  // ojitos de píldora parada, más chicos (como el robot del tablero)
+    r.L.x = CX - EX * 0.8f; r.R.x = CX + EX * 0.8f; r.L.w = r.R.w = EW * 0.6f; r.L.h = r.R.h = EH * 0.72f;
     r.by = MY - 34;
   }
   return r;
@@ -130,12 +130,8 @@ static float dArco(float px, float py, float cx, float cy, float R, float a0, fl
   float a = mid + (da > 0 ? half : -half), ex = cx + cosf(a) * R - px, ey = cy + sinf(a) * R - py;
   return sqrtf(ex * ex + ey * ey);
 }
-// píldora blanda: acostada es una píldora; parada es redonda arriba y curva abajo
-static float dPildora(float px, float py, float x, float y, float hw, float hh) {
-  if (hh <= hw) return dCaja(px, py, x, y, hw, hh, hh);
-  float cyT = y - hh + hw, bh = (y + hh - cyT) / 2;
-  return fminf(dCirculo(px, py, x, cyT, hw), dCaja(px, py, x, cyT + bh, hw, bh, fminf(hw * 0.8f, bh)));
-}
+// píldora: lados rectos y las puntas redondas (parada o acostada)
+static float dPildora(float px, float py, float x, float y, float hw, float hh) { return dCaja(px, py, x, y, hw, hh, fminf(hw, hh)); }
 
 static void ojo(const Rostro &r, const Ojo &o, float lado) {
   if (o.alfa < 0.02f || o.w < 2 || o.h < 2) return;
@@ -156,7 +152,7 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
     const float hh2 = fmaxf(hh * (1 - top), 4.f), y2 = y + hh - hh2, cy2 = y2 + 2 * hh2 * (0.95f - 0.55f * fz), cry2 = 2 * hh2 * 0.62f;
     const float yl = y2 - hh2 + fabsf(tn) * hw;
     if (fz > 0.5f) {   // feliz: un arco de trazo grueso, como el robot del tablero (no una píldora recortada)
-      const float R = hw * 0.92f, cyA = y + hh - R * 0.55f;
+      const float R = hw * 1.1f, cyA = y + hh * 0.35f;
       figura(x - R - 8, cyA - R - 8, x + R + 8, cyA + 8, solido(BLANCO, o.alfa, 10),
              [=](float px, float py) { return dArco(px, py, x, cyA, R, -PI * 0.86f, -PI * 0.14f) - 6.5f; });
       return;
@@ -458,25 +454,6 @@ static void auricular(float x, float y, float ang, float largo, float alfa) {
 // teléfono viejo de mesa con disco y cable en espiral
 // en el paquete blanco algunos íconos conservan su color (WhatsApp, flechas, pila, teléfono)
 struct ConColor { bool b; ConColor() : b(dib::blanco) { dib::blanco = false; } ~ConColor() { dib::blanco = b; } };
-static void telefonoViejo(float x, float y, float levanta, float alfa) {
-  ConColor cc;
-  Col oscuro = TONOS[ROJO].b;
-  cable(x - 50, y + 14, x - 100, y - 4, x - 50, y - 34 - levanta, 6, 6, oscuro, alfa);
-  figura(x - 72, y - 28, x + 72, y + 34, degr(ROJO, y - 28, y + 34, 14, alfa), [=](float px, float py) {
-    float hw = 46 + (py - y) * 0.35f;
-    return fmaxf(fabsf(px - x) - hw, fabsf(py - y - 4) - 24) - 6;
-  });
-  figura(x - 22, y - 18, x + 22, y + 26, solido(Col{255, 240, 222}, alfa), [=](float px, float py) { return dCirculo(px, py, x, y + 4, 20); });
-  figura(x - 18, y - 14, x + 18, y + 22, solido(Col{120, 30, 40}, alfa), [=](float px, float py) {
-    float d = dCirculo(px, py, x, y + 4, 5);
-    for (int i = 0; i < 8; i++) { float a = -2.2f + i * 0.62f; d = fminf(d, dCirculo(px, py, x + cosf(a) * 13, y + 4 + sinf(a) * 13, 3.2f)); }
-    return d;
-  });
-  Marco m = marco(x, y - 36 - levanta, levanta * 0.006f);
-  pieza(m, -64, -16, 64, 16, degr(ROJO, y - 52 - levanta, y - 20 - levanta, 12, alfa), [](float a, float b) {
-    return fminf(dCaja(a, b, 0, -4, 50, 7, 7), fminf(dCaja(a, b, -46, 4, 14, 12, 7), dCaja(a, b, 46, 4, 14, 12, 7)));
-  });
-}
 // logo de WhatsApp: globo blanco con el teléfono adentro sobre círculo verde
 static void logoWhatsapp(float x, float y, float R, float alfa) {
   ConColor cc;
@@ -536,18 +513,6 @@ static void espiral(float x, float y, float giro, float alfa) {
     linea(ax, ay, bx, by, 4, TONOS[MORADO].a, alfa, i == N ? 10 : 0);
     ax = bx; ay = by;
   }
-}
-static void sombrilla(float x, float y, float s, float alfa) {
-  Pintura p = degr(ROSA, y - s * 0.7f, y, 12, alfa);
-  figura(x - s, y - s * 0.75f, x + s, y + 4, p, [=](float px, float py) {
-    float d = fmaxf(dElipse(px, py, x, y, s, s * 0.72f), py - y);
-    for (int i = 0; i < 4; i++) d = fmaxf(d, -dCirculo(px, py, x - s * 0.75f + i * s * 0.5f, y + s * 0.1f, s * 0.26f));   // festones
-    return d;
-  });
-  linea(x, y - s * 0.7f, x, y + s * 0.75f, 3, Col{235, 235, 245}, alfa);
-  figura(x - 4, y + s * 0.6f, x + s * 0.35f, y + s * 0.95f, solido(Col{235, 235, 245}, alfa), [=](float px, float py) {
-    return fmaxf(fabsf(dCirculo(px, py, x + s * 0.14f, y + s * 0.75f, s * 0.14f)) - 3, y + s * 0.75f - py);
-  });
 }
 static void copo(float x, float y, float r, float giro, float alfa) {
   for (int i = 0; i < 3; i++) {
@@ -888,6 +853,26 @@ static void bateria(int n, float g, float alfa) {
   }
 }
 
+// teléfono: ícono verde redondo con el auricular blanco; tiembla mientras timbra y suelta ondas a los lados
+static void telefonoIcono(float x, float y, float R, float u, float alfa) {
+  ConColor cc;
+  const Col verde{52, 199, 89};
+  float lat = fmodf(u, 1.2f), timbre = lat < 0.6f ? 1 : 0, vib = timbre * sinf(u * 55) * 0.2f;
+  for (int lado = -1; lado <= 1; lado += 2) for (int i = 0; i < 2; i++) {
+    float Ra = R + 16 + 14 * i, a0 = lado > 0 ? -0.6f : PI - 0.6f;
+    figura(x - Ra - 4, y - Ra - 4, x + Ra + 4, y + Ra + 4, solido(verde, alfa * timbre * (0.9f - 0.35f * i), 6),
+           [=](float px, float py) { return dArco(px, py, x, y, Ra, a0, a0 + 1.2f) - 3; });
+  }
+  float s = 1 + 0.06f * timbre * fabsf(sinf(u * 20));
+  figura(x - R * s, y - R * s, x + R * s, y + R * s, solido(verde, alfa, 14), [=](float px, float py) { return dCirculo(px, py, x, y, R * s); });
+  Marco m = marco(x, y, -0.8f + vib, R / 40);
+  pieza(m, -30, -30, 30, 30, solido(BLANCO, alfa), [](float a, float b) {
+    float d = dArco(a, b, 8, 0, 19, PI * 0.62f, PI * 1.38f) - 6;                              // el mango curvo
+    d = fminf(d, dCaja(a, b, 6, 18, 9, 6.5f, 5.5f));                                            // las dos puntas
+    return fminf(d, dCaja(a, b, 6, -18, 9, 6.5f, 5.5f));
+  });
+}
+
 static void extrasMini(float u, const Entradas &e) {
   int n = (int)pulsosVistos;
   float g = expf(-e.pulso * 6), f = n + e.pulso, vaiven = sinf(f * PI);
@@ -1094,7 +1079,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
   switch (laBase) {
     case REPOSO:
       // Cubi: en reposo con ojitos de sueño que respiran, y la cara se pasea despacio (que no se queme el OLED)
-      mirada(t, lx, ly); mirar(r, 0.5f * lx, 0.5f * ly); tapas(r, fmaxf(bl, 0.58f + 0.06f * sinf(t * 0.8f)));
+      mirada(t, lx, ly); mirar(r, 0.5f * lx, 0.5f * ly); tapas(r, fmaxf(bl, (elPaquete == MINIMALISTA ? 0.4f : 0.58f) + 0.06f * sinf(t * 0.8f)));
       mover(r, 26 * sinf(t * 0.051f), 14 * sinf(t * 0.033f + 1));
       vel = 3;
       break;
@@ -1420,6 +1405,42 @@ static void extrasBase(float t, const Entradas &e, bool delante) {
   }
 }
 
+// ---------------------------------------------------------------- lluvia sobre el vidrio de la pantalla
+// Caen gotas en el vidrio (algunas escurren), se va empañando y pasa el limpiaparabrisas: ida y vuelta.
+static const float LP_Y = H + 30, LP_L = 470;   // pivote del limpiaparabrisas (abajo, fuera de la pantalla) y su largo
+static float limpiaAng(float u) {               // ángulo desde la vertical: -1,45 = acostado a la izquierda
+  if (u < 3.4f) return -1.45f;
+  if (u < 4.2f) return -1.45f + 2.9f * suave((u - 3.4f) / 0.8f);
+  if (u < 5.0f) return 1.45f - 2.9f * suave((u - 4.2f) / 0.8f);
+  return -1.45f;
+}
+static void lluviaVidrio(float u) {
+  const float limpio = u < 3.4f ? -1.45f : u < 4.2f ? limpiaAng(u) : 1.45f, fin = tramo(u, 6.4f, 7.0f);
+  float emp = 0.42f * tramo(u, 0.6f, 3.0f) * (1 - fin);   // empañado: gris claro donde no ha pasado el limpiaparabrisas
+  if (emp > 0.01f && limpio < 1.44f) figura(0, 0, W, H, solido(Col{150, 162, 178}, emp), [=](float px, float py) {
+    float dx = px - CX, dy = LP_Y - py;
+    return (limpio - atan2f(dx, dy)) * sqrtf(dx * dx + dy * dy);
+  });
+  for (int i = 0; i < 28; i++) {                           // gotas
+    float x = 20 + hash(i, 21) * (W - 40), y0 = 16 + hash(i, 22) * (H - 50), t0 = 0.15f + hash(i, 23) * 2.8f, sz = 3 + 5 * hash(i, 24);
+    bool corre = hash(i, 25) < 0.35f;
+    float t = u - t0;
+    if (u >= 3.4f && atan2f(x - CX, LP_Y - y0) < limpio)   // la barrió el limpiaparabrisas: vuelve a caer un rato después
+      t = u - 4.6f - t0 * 0.6f;
+    if (t < 0) continue;
+    float y = y0 + (corre ? fminf(70.f, t * t * 18) : 0), al = fminf(1.f, t * 6) * (1 - fin) * 0.85f;
+    if (corre && y > y0 + 4) linea(x, y0, x, y - sz * 0.5f, sz * 0.35f, Col{200, 215, 235}, al * 0.35f);   // estela
+    circulo(x, y, sz, Col{170, 190, 215}, al * 0.55f, 3);
+    circulo(x - sz * 0.35f, y - sz * 0.35f, sz * 0.3f, BLANCO, al);                                         // brillito
+  }
+  if (u > 3.2f && u < 5.2f) {                               // limpiaparabrisas
+    float ang = limpiaAng(u), c = sinf(ang), k = -cosf(ang);
+    linea(CX + c * 40, LP_Y + k * 40, CX + c * LP_L, LP_Y + k * LP_L, 5, Col{70, 74, 84}, 1);            // brazo
+    linea(CX + c * 120, LP_Y + k * 120, CX + c * LP_L, LP_Y + k * LP_L, 7, Col{25, 26, 30}, 1);          // escobilla de caucho
+    linea(CX + c * 120, LP_Y + k * 120, CX + c * LP_L, LP_Y + k * LP_L, 2, Col{150, 155, 165}, 1);       // su brillo
+  }
+}
+
 // ---------------------------------------------------------------- reacciones (anticipación, acción, consecuencia, remate)
 static Rostro deReac(float u, const Entradas &e, float &vel) {
   Rostro r = neutro(AZUL);
@@ -1509,7 +1530,7 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       break;
     case WHATSAPP: {
       float pop = campana(u, 0, 0.35f);
-      escalar(r, 0.9f + 0.2f * pop, 0.9f + 0.2f * pop); mover(r, 0, 30); mirar(r, 0, -0.4f);
+      escalar(r, 0.82f + 0.15f * pop, 0.82f + 0.15f * pop); mover(r, 0, 74); mirar(r, 0.1f * sinf(u * 2), -0.5f);
       vel = 30;
       break;
     }
@@ -1566,9 +1587,12 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       vel = 12;
       break;
     }
-    case LLUVIA:                                                     // mira la lluvia, debajo de la sombrilla
-      escalar(r, 0.86f, 0.86f); mover(r, 0, 48); mirar(r, 0.2f * sinf(u * 1.3f), -0.35f);
-      tapas(r, parpadeo(u));
+    case LLUVIA:                                                     // mira las gotas, entrecierra con el empañado,
+      if (u < 3.3f) {                                                // sigue al limpiaparabrisas y se alegra al ver limpio
+        mirar(r, 0.3f * sinf(u * 1.7f), -0.3f);
+        tapas(r, fmaxf(parpadeo(u), 0.3f * tramo(u, 1.5f, 3.0f)));
+      } else if (u < 5.0f) mirar(r, limpiaAng(u) / 1.45f * 0.9f, -0.1f);
+      else { feliz(r, tramo(u, 5.0f, 5.3f)); mover(r, 0, -6 * campana(u, 5.0f, 5.8f)); }
       vel = 12;
       break;
     case FRIO: {
@@ -1674,25 +1698,35 @@ static void extrasReac(float u, bool delante) {
       break;
     case WHATSAPP:
       if (delante) {
-        float a = tramo(u, 0.1f, 0.35f) * (1 - tramo(u, 5.5f, 6.0f)), s = 1 + 0.1f * campana(fmodf(u, 1.0f), 0, 0.3f);
-        logoWhatsapp(CX, 66 - 6 * campana(fmodf(u, 1.0f), 0, 0.3f), 44 * s, a);
+        ConColor cc;
+        const Col verde{37, 211, 102};
+        float a = tramo(u, 0.05f, 0.25f) * (1 - tramo(u, 5.5f, 6.0f));
+        float pop = 1 + 0.35f * expf(-u * 5) * sinf(u * 18);                                // entra con rebote
+        float lat = fmodf(u, 1.6f), vibra = lat < 0.4f ? sinf(lat * 80) * 5 * (1 - lat / 0.4f) : 0;   // vibra como el celular
+        float x = CX - 30 + vibra, y = 84, R = 44 * pop * (1 + 0.03f * sinf(u * 5));
+        for (int i2 = 0; i2 < 2; i2++) {                                                    // ondas verdes
+          float p = fmodf(u * 0.7f + i2 * 0.5f, 1.f), Rr = R + 6 + 50 * p;
+          figura(x - Rr - 4, y - Rr - 4, x + Rr + 4, y + Rr + 4, solido(verde, a * 0.55f * (1 - p), 6),
+                 [=](float px, float py) { return fabsf(dCirculo(px, py, x, y, Rr)) - 2.5f; });
+        }
+        logoWhatsapp(x, y, R, a);
+        float bs = u < 0.5f ? 0 : 1 + 0.4f * expf(-(u - 0.5f) * 6) * sinf((u - 0.5f) * 20);   // globito rojo con el "1"
+        if (bs > 0.05f) {
+          float bx = x + R * 0.74f, by = y - R * 0.74f;
+          circulo(bx, by, 15 * bs, Col{255, 59, 48}, a, 4);
+          dib::texto("1", bx, by - 1, 22 * bs, BLANCO, a);
+        }
+        if (u > 1.0f) {                                                                     // alguien está escribiendo...
+          float ap = tramo(u, 1.0f, 1.3f) * a, gx = x + R + 74, gy = y + 6;
+          figura(gx - 48, gy - 24, gx + 48, gy + 30, solido(BLANCO, ap, 6), [=](float px, float py) {
+            return fminf(dCaja(px, py, gx, gy, 44, 20, 20), dSegmento(px, py, gx - 34, gy + 12, gx - 42, gy + 24, 4));
+          });
+          for (int k2 = 0; k2 < 3; k2++) circulo(gx - 18 + k2 * 18, gy - 4 * campana(fmodf(u * 1.8f - k2 * 0.18f, 1.f), 0, 0.4f), 5, Col{90, 96, 110}, ap);
+        }
       }
       break;
     case LLAMADA:
-      if (delante) {
-        float a = tramo(u, 0.1f, 0.35f) * (1 - tramo(u, 5.5f, 6.0f));
-        float timbre = fmodf(u, 1.2f) < 0.6f ? 1 : 0;              // timbra, para, timbra
-        float salta = timbre * fabsf(sinf(u * 34)) * 9;
-        telefonoViejo(CX + timbre * 3 * sinf(u * 60), 92, salta, a);
-        for (int s = -1; s <= 1; s += 2) for (int i = 0; i < 2; i++) {   // rayitas del timbre
-          float R = 80 + i * 16;
-          figura(CX - R - 4, 50 - 40, CX + R + 4, 50 + 40, solido(BLANCO, a * timbre * 0.8f), [=](float px, float py) {
-            float d = fabsf(dCirculo(px, py, CX, 60, R)) - 2.5f;
-            float ang = atan2f(py - 60, (px - CX) * s);
-            return fmaxf(d, fabsf(ang + 0.25f) * R - 18);
-          });
-        }
-      }
+      if (delante) telefonoIcono(CX, 84, 40, u, tramo(u, 0.1f, 0.35f) * (1 - tramo(u, 5.5f, 6.0f)));
       break;
     case CALOR:
       if (delante) {
@@ -1747,17 +1781,7 @@ static void extrasReac(float u, bool delante) {
       if (delante) solCara(W - 66, 62, 30, u, tramo(u, 0, 0.4f) * (1 - tramo(u, 3.5f, 4.0f)));
       break;
     case LLUVIA:
-      if (delante) {
-        float a = tramo(u, 0, 0.4f) * (1 - tramo(u, 4.5f, 5.0f));
-        sombrilla(CX, 96, 150, a);
-        for (int i = 0; i < 12; i++) {                               // gotas que caen por fuera de la sombrilla
-          float p = fmodf(u * (0.9f + 0.3f * hash(i, 8)) + hash(i, 9), 1.f);
-          float x = (i % 2) ? 22 + hash(i, 10) * 40 : W - 22 - hash(i, 10) * 40;
-          if (i > 7) x = 60 + hash(i, 11) * (W - 120);
-          float y = (i > 7) ? -10 + p * 60 : -10 + p * (H + 20);
-          gota(x, y, 6, a * campana(p, 0, 1));
-        }
-      }
+      if (delante) lluviaVidrio(u);
       break;
     case FRIO:
       if (delante) for (int i = 0; i < 9; i++) {
