@@ -260,6 +260,23 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean claudeListo() {
+            return CubiService.yo != null && !CubiService.yo.claveClaude().isEmpty();
+        }
+
+        @JavascriptInterface
+        public void claudeClave(String k) {
+            if (CubiService.yo != null) CubiService.yo.guardarClaveClaude(k);
+        }
+
+        @JavascriptInterface
+        public void hablarCubi() {
+            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 6);
+            else if (CubiService.yo != null) runOnUiThread(() -> CubiService.yo.charla());
+        }
+
+        @JavascriptInterface
         public boolean puedeAbrirSolo() {
             return Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(MainActivity.this);
         }

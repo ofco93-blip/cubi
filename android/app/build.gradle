@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId 'com.cubi.robot'
-        minSdk 24
+        minSdk 26
         targetSdk 34
         // cada compilación en GitHub sube el número, así la app nueva se instala encima de la vieja
         versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int)
@@ -36,6 +36,13 @@ android {
         }
     }
 
+    // la librería de Claude trae archivos de licencia repetidos
+    packaging {
+        resources {
+            excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/INDEX.LIST']
+        }
+    }
+
     lint {
         checkReleaseBuilds false
         abortOnError false
@@ -51,4 +58,6 @@ dependencies {
     // "Hola Cubi": reconocimiento de voz sin internet en el celular
     implementation 'com.alphacephei:vosk-android:0.3.47@aar'
     implementation 'net.java.dev.jna:jna:5.13.0@aar'
+    // Cubi habla con Claude Haiku
+    implementation 'com.anthropic:anthropic-java:2.34.0'
 }

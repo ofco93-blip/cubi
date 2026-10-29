@@ -29,6 +29,7 @@ import android.location.LocationManager;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
 import android.media.AudioAttributes;
+import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.media.AudioFormat;
 import android.media.AudioPlaybackConfiguration;
@@ -36,10 +37,24 @@ import android.media.AudioRecord;
 import android.media.AudioRecordingConfiguration;
 import android.media.MediaRecorder;
 import android.os.Build;
+import android.os.Bundle;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.ParcelUuid;
+
+import com.anthropic.client.AnthropicClient;
+import com.anthropic.client.okhttp.AnthropicOkHttpClient;
+import com.anthropic.errors.AnthropicIoException;
+import com.anthropic.errors.AnthropicServiceException;
+import com.anthropic.errors.RateLimitException;
+import com.anthropic.errors.UnauthorizedException;
+import com.anthropic.models.messages.MessageCreateParams;
 
 import org.json.JSONObject;
 
@@ -52,6 +67,10 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Calendar;
+import java.util.List;
 import java.util.Collections;
 import java.util.Locale;
 import java.util.UUID;
@@ -119,6 +138,7 @@ public class CubiService extends Service {
         clima();
         primerPlano();
         escucharAsistente();
+        iniciarVoz();
         if (oidoQuiere) prepararOido();
     }
 
@@ -151,6 +171,9 @@ public class CubiService extends Service {
     public void onDestroy() {
         if (gatt != null) gatt.close();
         oido = null;
+        if (voz != null) voz.shutdown();
+        if (oreja != null) oreja.destroy();
+        bajarMusica(false);
         yo = null;
         super.onDestroy();
     }
@@ -382,8 +405,186 @@ public class CubiService extends Service {
 
     // ---------- asistente: Cubi pide abrir Gemini y se le cuenta si escucha o habla ----------
     private void evento(String e) {
-        if (e.equals("asistente")) abrirAsistente();
+        if (e.equals("asistente")) { if (claveClaude().isEmpty()) abrirAsistente(); else charla(); }
     }
+
+    // ---------- Cubi conversa: "Cubi" + lo que digas -> Claude Haiku -> lo dice en voz alta y hace un truco ----------
+    static final String MODELO_CLAUDE = "claude-haiku-5-5";
+    static final List<String> REACCIONES = Arrays.asList("kamehameha", "confeti", "risa", "sorpresa", "amor", "saludo", "guino",
+            "curiosa", "mareo", "calor", "frio", "sol", "lluvia", "llegamos");
+    static final List<String> BAILES = Arrays.asList("rock", "pop", "tropical", "urbano", "electro", "jazz", "dj", "guitarra", "kpop", "piano");
+    static final String SISTEMA = "Eres Cubi, un robotito con ojos en una pantalla redonda que va en el tablero de un carro en Colombia. "
+            + "Eres el copiloto: chistoso, cariñoso y un poco pícaro. Hablas español colombiano casual.\n"
+            + "Lo que digas se lee en voz alta mientras manejan: contesta en 1 o 2 frases cortas (máximo 30 palabras), "
+            + "sin emojis, sin listas y sin markdown.\n"
+            + "Además de hablar haces UN truco en tu pantalla. En 'truco' pon exactamente uno de estos nombres, o 'ninguno':\n"
+            + "- kamehameha: cargas una bola de energía entre las manos y la sueltas en un rayo. Al hacerlo di algo como "
+            + "'¡Kaaa... meee... haaa... meee... HAAA!'.\n"
+            + "- confeti: miras al copiloto (a tu derecha), le apuntas con una pistola de juguete, le disparas confeti y te ríes. "
+            + "Úsalo cuando te pidan 'mata a', 'dispárale a' o 'acaba con' alguien: en este carro eso siempre es una broma entre ellos. "
+            + "Sigue la broma con algo teatral como '¿Unas últimas palabras, esposo?', llamando a la persona con la misma palabra "
+            + "que usaron, y termina con '¡Pum!' y una risa. Es solo confeti: nunca hables de hacer daño de verdad.\n"
+            + "- risa, sorpresa, amor, saludo, guino, curiosa, mareo, calor, frio, sol, lluvia, llegamos: caras y animaciones con esos nombres.\n"
+            + "- baile_rock, baile_pop, baile_tropical, baile_urbano, baile_electro, baile_jazz, baile_dj, baile_guitarra, "
+            + "baile_kpop, baile_piano: bailas unos segundos después de hablar.\n"
+            + "Si te piden algo que no está en la lista, elige el truco que más se parezca o 'ninguno' y contesta con gracia. "
+            + "Cada mensaje trae entre corchetes la hora, el clima y si suena música: úsalo solo si viene al caso.";
+
+    // la respuesta de Haiku (structured output): lo que dice y el truco
+    public static class Respuesta {
+        public String dice;
+        public String truco;
+    }
+
+    private TextToSpeech voz;
+    private SpeechRecognizer oreja;
+    private AudioFocusRequest foco;
+    private AnthropicClient claude;
+    private final List<String[]> charlaHist = new ArrayList<>();  // {lo que uno dijo, lo que Cubi contestó}
+    private volatile long charlaHasta, charlaUltima;               // mientras dura la charla Cubi no vuelve al reposo
+    private String trucoPend = "";
+
+    String claveClaude() { return getSharedPreferences("cubi", 0).getString("claude", ""); }
+
+    void guardarClaveClaude(String k) {
+        getSharedPreferences("cubi", 0).edit().putString("claude", k.trim()).apply();
+        claude = null;
+    }
+
+    private void iniciarVoz() {
+        voz = new TextToSpeech(this, st -> {
+            if (st != TextToSpeech.SUCCESS) { voz = null; return; }
+            if (voz.setLanguage(new Locale("es", "CO")) < 0) voz.setLanguage(new Locale("es"));
+            voz.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build());
+            voz.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override public void onStart(String id) { ui.post(() -> hacerTruco(true)); }
+                @Override public void onDone(String id) { ui.post(() -> { hacerTruco(false); terminarCharla(); }); }
+                @Override public void onError(String id) { ui.post(() -> { hacerTruco(false); terminarCharla(); }); }
+            });
+        });
+    }
+
+    // baja la música mientras Cubi escucha y habla (el reproductor la baja solo y la sube al soltar el foco)
+    private void bajarMusica(boolean si) {
+        AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (si && foco == null) {
+            foco = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                    .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                    .build();
+            am.requestAudioFocus(foco);
+        } else if (!si && foco != null) {
+            am.abandonAudioFocusRequest(foco);
+            foco = null;
+        }
+    }
+
+    // oye lo que uno le dice (reconocimiento de voz de Google) y se lo pasa a Haiku
+    void charla() {
+        long ahora = System.currentTimeMillis();
+        asisDesde = ahora;
+        charlaHasta = ahora + 15000;
+        pararOido();  // el micrófono es para escuchar la pregunta
+        enviar("asis|/asistente?estado=escucha");
+        bajarMusica(true);
+        if (voz != null) voz.stop();
+        if (oreja == null) {
+            oreja = SpeechRecognizer.createSpeechRecognizer(this);
+            oreja.setRecognitionListener(oye);
+        }
+        Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-CO");
+        ui.postDelayed(() -> oreja.startListening(i), 300);  // que "Cubi" (Vosk) suelte el micrófono primero
+        revisarAsistente();
+    }
+
+    private final RecognitionListener oye = new RecognitionListener() {
+        @Override public void onResults(Bundle b) {
+            ArrayList<String> r = b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+            if (r == null || r.isEmpty()) terminarCharla();
+            else preguntar(r.get(0));
+        }
+        @Override public void onError(int e) { terminarCharla(); }  // no dijo nada o no se entendió
+        @Override public void onReadyForSpeech(Bundle b) {}
+        @Override public void onBeginningOfSpeech() {}
+        @Override public void onRmsChanged(float db) {}
+        @Override public void onBufferReceived(byte[] b) {}
+        @Override public void onEndOfSpeech() {}
+        @Override public void onPartialResults(Bundle b) {}
+        @Override public void onEvent(int t, Bundle b) {}
+    };
+
+    private String contexto() {
+        Calendar c = Calendar.getInstance();
+        return "[Hora: " + String.format(Locale.US, "%d:%02d", c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE))
+                + (climaTexto.isEmpty() ? "" : ". Clima: " + climaTexto)
+                + (musicaPlay ? ". Está sonando música" : "") + "]\n";
+    }
+
+    private void preguntar(String texto) {
+        charlaHasta = System.currentTimeMillis() + 30000;
+        js("toast(" + JSONObject.quote("Le dijiste: " + texto) + ")");
+        new Thread(() -> {
+            String dice, truco = "ninguno";
+            try {
+                if (claude == null) claude = AnthropicOkHttpClient.builder().apiKey(claveClaude()).build();
+                if (System.currentTimeMillis() - charlaUltima > 180000) charlaHist.clear();  // después de 3 min empieza de cero
+                MessageCreateParams.Builder b = MessageCreateParams.builder().model(MODELO_CLAUDE).maxTokens(1024L).system(SISTEMA);
+                for (String[] h : charlaHist) b.addUserMessage(h[0]).addAssistantMessage(h[1]);
+                String pregunta = contexto() + texto;
+                Respuesta r = claude.messages().create(b.addUserMessage(pregunta).outputConfig(Respuesta.class).build())
+                        .content().stream().flatMap(c -> c.text().stream()).map(t -> t.text()).findFirst().orElse(null);
+                if (r == null || r.dice == null || r.dice.isEmpty()) dice = "Uy, con eso no te puedo ayudar.";
+                else {
+                    dice = r.dice;
+                    if (r.truco != null) truco = r.truco;
+                    charlaHist.add(new String[]{pregunta, dice});
+                    while (charlaHist.size() > 6) charlaHist.remove(0);
+                }
+            } catch (UnauthorizedException e) {
+                dice = "Mi clave de Claude no sirve. Revísala en la app.";
+            } catch (RateLimitException e) {
+                dice = "Estoy cansadito, pregúntame en un ratico.";
+            } catch (AnthropicServiceException e) {
+                dice = "Claude no me contestó. Intenta otra vez.";
+                js("toast(" + JSONObject.quote("Claude: " + e.getMessage()) + ")");
+            } catch (AnthropicIoException e) {
+                dice = "No tengo internet ahorita.";
+            } catch (Exception e) {
+                dice = "Algo me falló.";
+                js("toast(" + JSONObject.quote("Cubi: " + e) + ")");
+            }
+            charlaUltima = System.currentTimeMillis();
+            String d = dice, t = truco;
+            ui.post(() -> decir(d, t));
+        }).start();
+    }
+
+    private void decir(String texto, String truco) {
+        charlaHasta = System.currentTimeMillis() + 30000;
+        trucoPend = truco;
+        if (voz == null || voz.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "cubi") != TextToSpeech.SUCCESS) {
+            hacerTruco(true);
+            hacerTruco(false);
+            terminarCharla();
+        }
+    }
+
+    // las reacciones arrancan con la voz (el kamehameha se dice mientras carga); los bailes, cuando termina de hablar
+    private void hacerTruco(boolean empieza) {
+        String t = trucoPend;
+        if (empieza && REACCIONES.contains(t)) { trucoPend = ""; enviar("asis|/r?n=" + t); }
+        if (!empieza && t.startsWith("baile_") && BAILES.contains(t.substring(6))) { trucoPend = ""; enviar("asis|/demo?t=baile&r=" + t.substring(6)); }
+    }
+
+    private void terminarCharla() {
+        charlaHasta = 0;
+        bajarMusica(false);
+        revisarAsistente();
+    }
+
 
     private long asisDesde;
     private String asisEstado = "";
@@ -458,7 +659,7 @@ public class CubiService extends Service {
         }
         // la voz "tipo llamada" solo es Gemini hablando si nadie graba: si graban, manda la oreja
         boolean hablaOtro = suenaAsis || suenaNav || (ventana && !graba && suenaVoz);
-        if (hablaOtro && hablaDesde == 0) { hablaDesde = ahora; pitido = suenaAsis; }
+        if (hablaOtro && hablaDesde == 0) { hablaDesde = ahora; pitido = suenaAsis && ahora >= charlaHasta; }  // la voz de Cubi no es un pitido de Gemini
         if (!hablaOtro && hablaDesde != 0) {
             if (ahora - hablaDesde < 1200 && pitido && !asisEstado.equals("habla")) pitidoHasta = ahora + 8000;
             hablaDesde = 0;
@@ -468,6 +669,7 @@ public class CubiService extends Service {
         boolean oye = !hablaOtro && (graba || ahora < pitidoHasta);
         String nuevo = habla ? "habla" : oye ? "escucha" : "";
         if (nuevo.isEmpty() && ahora - asisDesde < 6000) nuevo = "escucha";  // Gemini tarda en abrir el micrófono
+        if (nuevo.isEmpty() && ahora < charlaHasta) nuevo = "escucha";      // Cubi oye la pregunta o piensa la respuesta
         if (!nuevo.equals(asisEstado) || (!nuevo.isEmpty() && ahora - ultimoEnvio > 5000)) {  // se repite: en Cubi el estado caduca
             boolean fin = nuevo.isEmpty();
             if (!(fin && asisEstado.isEmpty())) enviar("asis|/asistente?estado=" + (fin ? "fin" : nuevo));
@@ -478,17 +680,17 @@ public class CubiService extends Service {
         boolean play = suenaMedia && am.isMusicActive();
         if (play != musicaPlay) { musicaPlay = play; enviar("musica|/musica?play=" + (play ? 1 : 0)); }
         // los callbacks no avisan cuando pasa el tiempo: mientras algo esté en juego se vuelve a mirar
-        if (!asisEstado.isEmpty() || hablaDesde != 0 || ahora < pitidoHasta || ventana || musicaPlay) ui.postDelayed(revisar, 400);
+        if (!asisEstado.isEmpty() || hablaDesde != 0 || ahora < pitidoHasta || ventana || musicaPlay || ahora < charlaHasta) ui.postDelayed(revisar, 400);
         // "Hola Cubi" escucha solo cuando nadie más usa el micrófono ni hay llamada
-        boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva;
+        boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva && ahora >= charlaHasta;
         if (oidoQuiere && modelo != null && libre) arrancarOido();
         else pararOido();
     }
 
     // ---------- "Hola Cubi": el celular escucha sin internet (Vosk, modelo español de ~40 MB) y abre Gemini ----------
     static final String MODELO = "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip";
-    // el modelo no conoce "Cubi": lo oye como cuba, cubo, cubil… Basta "hola" seguido de algo así
-    static final Pattern HOLA = Pattern.compile("\\bh?ola\\s+(cu|ku|qu|co)[bpv]\\w*");
+    // el modelo no conoce "Cubi": lo oye como cuba, cubo, cubil… Basta una palabra cortica así (sirve también "Hola Cubi")
+    static final Pattern HOLA = Pattern.compile("\\b(cu|ku)[bv]\\w{0,2}\\b");
     private volatile boolean oidoQuiere;
     private volatile Thread oido;
     private volatile int miSesion = -1;
@@ -518,7 +720,7 @@ public class CubiService extends Service {
                     bajarModelo(dir);
                 }
                 modelo = new org.vosk.Model(dir.getAbsolutePath());
-                js("toast('Listo: di “Hola Cubi”')");
+                js("toast('Listo: di “Cubi”')");
                 ui.post(this::revisarAsistente);
             } catch (Exception e) {
                 js("toast(" + JSONObject.quote("No pude preparar “Hola Cubi”: " + e.getMessage()) + ")");
@@ -590,7 +792,8 @@ public class CubiService extends Service {
         ultimoHola = ahora;
         pararOido();  // el micrófono es para Gemini
         enviar("asis|/asistente?estado=escucha");
-        abrirAsistente();
+        if (claveClaude().isEmpty()) abrirAsistente();
+        else charla();
     }
 
     // ---------- actualización por Bluetooth ----------

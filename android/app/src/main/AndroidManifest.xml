@@ -23,6 +23,12 @@
     <!-- Abrir Gemini cuando Cubi lo pide, aunque la app esté en segundo plano -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
+    <!-- Cubi habla: reconocimiento de voz y voz del celular -->
+    <queries>
+        <intent><action android:name="android.speech.RecognitionService" /></intent>
+        <intent><action android:name="android.intent.action.TTS_SERVICE" /></intent>
+    </queries>
+
     <application
         android:label="Cubi"
         android:icon="@drawable/ic_launcher"
