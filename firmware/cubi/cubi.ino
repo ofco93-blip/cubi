@@ -346,7 +346,8 @@ uint32_t emoHasta = 0;
 bool emoForzada = false;
 bool hayMusica = false, cantando = false;  // lo que animar() decide y las caras usan
 extern volatile bool bleOn;
-bool celPlay = false; uint8_t estPlay = TROPICAL;  // el celular avisa play/pausa; estPlay = el último estilo que se oyó
+bool celPlay = false; uint8_t estPlay = TROPICAL;
+bool celVoz = false; uint32_t celVozHasta = 0;  // el celular sabe por la letra cuándo canta el artista (caduca si deja de avisar)  // el celular avisa play/pausa; estPlay = el último estilo que se oyó
 uint32_t tGolpe = 0;  // pedida desde la app o tocando: le gana a la música; las del movimiento no
 uint8_t anim = NINGUNA; uint32_t animT0 = 0, animProx = 8000, animPaso = 0;
 float bostezo = 0, abreDer = 1;
@@ -445,6 +446,11 @@ void animar(uint32_t now) {
     uint32_t b = (now - demoT0) / 476; if (b != demoBeat) { demoBeat = b; enGolpe(now); }
   }
   bool musica = est >= BALADA;
+  if (musica && now < celVozHasta) {  // con la letra: canta justo cuando canta el artista; la boca sigue lo que oye
+    float t = now / 1000.f;
+    voz = celVoz;
+    bIn = voz ? fmaxf(aBocaCruda, 0.6f * constrain(0.5f * sinf(t * 9.3f) + 0.3f * sinf(t * 3.7f) + 0.3f, 0.f, 1.f)) : 0;
+  }
   if (asis && now > asisHasta) asis = NO_ASIS;
   if (asis) { musica = false; est = NADA; libre = true; despertar(now); }  // el asistente le gana a todo
   // solo mueve la boca con canciones, o cuando el asistente (Gemini) le está hablando a uno
@@ -903,9 +909,9 @@ String atender(const String &ruta, const Params &p, int &cod) {
     for (int i = 0; i < caras::N_RITMO; i++) if (p.get("r") == caras::NOMBRE_RITMO[i]) ritmoFijo = i;
     return "ok";
   }
-  if (ruta == "/musica") {  // el celular avisa play o pausa: con play baila de una; con pausa deja de bailar
-    celPlay = p.get("play") == "1";
-    if (!celPlay) estilo = NADA;
+  if (ruta == "/musica") {  // el celular avisa play o pausa (con play baila de una) y, por la letra, si el artista canta
+    if (p.has("play")) { celPlay = p.get("play") == "1"; if (!celPlay) { estilo = NADA; celVozHasta = 0; } }
+    if (p.has("voz")) { celVoz = p.get("voz") == "1"; celVozHasta = millis() + 6000; }
     return "ok";
   }
   if (ruta == "/clima") {  // el celular cuenta el clima (cada 20 min): reacciona cuando cambia
@@ -952,7 +958,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     char b[300];
     snprintf(b, sizeof b, "{\"estado\":%u,\"estilo\":\"%s\",\"bpm\":%.0f,\"nivel\":%.2f,\"voz\":%.2f,\"canta\":%d,\"boca\":%.2f,\"ancho\":%.2f,"
       "\"bajo\":%.2f,\"rms\":%.0f,\"piso\":%.0f,\"golpes\":%lu,\"reg\":%.2f}",
-      estado, EST_NOM[estilo], aBpm, aNivel, aVoz, aCanta ? 1 : 0, aBoca, aAncho, aBajoP, aRms, aPiso, (unsigned long)beatCnt, aReg);
+      estado, EST_NOM[estilo], aBpm, aNivel, aVoz, cantando ? 1 : 0, bocaV, aAncho, aBajoP, aRms, aPiso, (unsigned long)beatCnt, aReg);
     return b;
   }
   // Actualización por Bluetooth: inicio (tamaño y MD5), los datos llegan por la característica OTA, y fin (verifica y reinicia).

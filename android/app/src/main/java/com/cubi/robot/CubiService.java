@@ -38,7 +38,9 @@ import android.media.AudioPlaybackConfiguration;
 import android.media.AudioRecord;
 import android.media.AudioRecordingConfiguration;
 import android.media.MediaRecorder;
+import android.media.MediaMetadata;
 import android.media.session.MediaController;
+import android.media.session.PlaybackState;
 import android.media.session.MediaSessionManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -51,6 +53,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.ParcelUuid;
+import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.speech.tts.Voice;
 import android.view.KeyEvent;
@@ -71,6 +74,9 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.util.regex.Matcher;
+import org.json.JSONArray;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayDeque;
@@ -579,7 +585,7 @@ public class CubiService extends Service {
         Calendar c = Calendar.getInstance();
         return "[Hora: " + String.format(Locale.US, "%d:%02d", c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE))
                 + (climaTexto.isEmpty() ? "" : ". Clima: " + climaTexto)
-                + (musicaPlay ? ". Está sonando música" : "") + "]\n";
+                + (musicaPlay ? ". Está sonando " + (cancionTexto.isEmpty() ? "música" : cancionTexto) : "") + "]\n";
     }
 
     private void preguntar(String texto) {
@@ -649,6 +655,103 @@ public class CubiService extends Service {
             String q = busquedaPend;
             ui.postDelayed(() -> musica(ac, q), 400);  // después de soltar el foco: la música vuelve a su volumen
         }
+    }
+
+    // ---------- Cubi canta cuando canta el artista: letra sincronizada (LRCLIB, gratis) + posición de la canción ----------
+    private MediaController reproductor;
+    private long reproductorVisto, vozMandada;
+    private String cancionId = "";
+    String cancionTexto = "";              // "Título de Artista", para que Haiku sepa qué suena
+    private volatile long[] letraT;        // cuándo empieza cada línea (ms)
+    private volatile boolean[] letraVoz;   // si esa línea tiene letra (las vacías son partes sin voz)
+    private int vozEnviada = -1;
+    private final Runnable seguirLetraR = this::seguirLetra;
+    static final Pattern LINEA = Pattern.compile("\\[(\\d+):(\\d+(?:\\.\\d+)?)\\](.*)");
+
+    private MediaController buscarReproductor() {
+        if (!puedeTocarMusica()) return null;
+        try {
+            for (MediaController c : getSystemService(MediaSessionManager.class).getActiveSessions(new ComponentName(this, Oyente.class)))
+                if (c.getPlaybackState() != null && c.getPlaybackState().getState() == PlaybackState.STATE_PLAYING) return c;
+        } catch (SecurityException ignored) {
+        }
+        return null;
+    }
+
+    private void seguirLetra() {
+        ui.removeCallbacks(seguirLetraR);
+        long ahora = SystemClock.elapsedRealtime();
+        if (!musicaPlay || !puedeTocarMusica()) {
+            if (vozEnviada == 1) enviar("asis|/musica?voz=0");
+            vozEnviada = -1;
+            return;
+        }
+        if (reproductor == null || ahora - reproductorVisto > 3000) { reproductor = buscarReproductor(); reproductorVisto = ahora; }
+        MediaController c = reproductor;
+        MediaMetadata m = c == null ? null : c.getMetadata();
+        PlaybackState st = c == null ? null : c.getPlaybackState();
+        if (m != null && st != null) {
+            String titulo = m.getString(MediaMetadata.METADATA_KEY_TITLE), artista = m.getString(MediaMetadata.METADATA_KEY_ARTIST);
+            String id = artista + "|" + titulo;
+            if (titulo != null && !id.equals(cancionId)) {
+                cancionId = id;
+                cancionTexto = titulo + (artista != null ? " de " + artista : "");
+                letraT = null;
+                bajarLetra(titulo, artista == null ? "" : artista, m.getLong(MediaMetadata.METADATA_KEY_DURATION), id);
+            }
+            long[] t = letraT; boolean[] v = letraVoz;
+            if (t != null && st.getState() == PlaybackState.STATE_PLAYING) {
+                long pos = st.getPosition() + (long) ((ahora - st.getLastPositionUpdateTime()) * st.getPlaybackSpeed());
+                int i = -1;
+                for (int k = 0; k < t.length && t[k] <= pos + 150; k++) i = k;  // 150 ms antes: lo que tarda en llegar a Cubi
+                int s = i >= 0 && v[i] && pos - t[i] < 7000 ? 1 : 0;           // una línea sin la siguiente dura 7 s máximo
+                if (s != vozEnviada || ahora - vozMandada > 4000) { enviar("asis|/musica?voz=" + s); vozEnviada = s; vozMandada = ahora; }
+            }
+        }
+        ui.postDelayed(seguirLetraR, 250);
+    }
+
+    // busca la canción en LRCLIB y se queda con la letra sincronizada de la versión de duración más parecida
+    private void bajarLetra(String titulo, String artista, long durMs, String id) {
+        new Thread(() -> {
+            try {
+                String u = "https://lrclib.net/api/search?track_name=" + URLEncoder.encode(titulo, "UTF-8")
+                        + "&artist_name=" + URLEncoder.encode(artista, "UTF-8");
+                HttpURLConnection h = (HttpURLConnection) new URL(u).openConnection();
+                h.setRequestProperty("User-Agent", "Cubi (https://github.com/ofco93-blip/cubi)");
+                h.setConnectTimeout(8000);
+                h.setReadTimeout(10000);
+                JSONArray a;
+                try (InputStream in = h.getInputStream()) {
+                    ByteArrayOutputStream o = new ByteArrayOutputStream();
+                    byte[] b = new byte[8192];
+                    int n;
+                    while ((n = in.read(b)) > 0) o.write(b, 0, n);
+                    a = new JSONArray(o.toString("UTF-8"));
+                }
+                String mejor = null; double dif = 1e9;
+                for (int i = 0; i < a.length(); i++) {
+                    JSONObject r = a.getJSONObject(i);
+                    String sync = r.optString("syncedLyrics", "");
+                    if (sync.isEmpty() || sync.equals("null")) continue;
+                    double d = durMs > 0 ? Math.abs(r.optDouble("duration", 0) - durMs / 1000.0) : 0;
+                    if (d < dif) { dif = d; mejor = sync; }
+                }
+                if (mejor == null || dif > 10 || !id.equals(cancionId)) return;  // sin letra sincronizada: queda el micrófono
+                ArrayList<Long> ts = new ArrayList<>(); ArrayList<Boolean> vs = new ArrayList<>();
+                for (String linea : mejor.split("\n")) {
+                    Matcher mt = LINEA.matcher(linea.trim());
+                    if (!mt.matches()) continue;
+                    ts.add((long) ((Integer.parseInt(mt.group(1)) * 60 + Double.parseDouble(mt.group(2))) * 1000));
+                    vs.add(!mt.group(3).trim().isEmpty());
+                }
+                long[] t = new long[ts.size()]; boolean[] v = new boolean[ts.size()];
+                for (int i = 0; i < t.length; i++) { t[i] = ts.get(i); v[i] = vs.get(i); }
+                letraVoz = v;
+                letraT = t;
+            } catch (Exception ignored) {  // sin internet o sin letra: Cubi sigue con lo que oye
+            }
+        }).start();
     }
 
     // con "Acceso a notificaciones" se le habla directo al reproductor: "busca esto y ponlo" (como Android Auto)
@@ -803,7 +906,7 @@ public class CubiService extends Service {
         }
         // música en play (Spotify, YouTube...): Cubi baila de una y deja de bailar apenas se pausa
         boolean play = suenaMedia && am.isMusicActive();
-        if (play != musicaPlay) { musicaPlay = play; enviar("musica|/musica?play=" + (play ? 1 : 0)); }
+        if (play != musicaPlay) { musicaPlay = play; enviar("musica|/musica?play=" + (play ? 1 : 0)); if (play) seguirLetra(); }
         // los callbacks no avisan cuando pasa el tiempo: mientras algo esté en juego se vuelve a mirar
         if (!asisEstado.isEmpty() || hablaDesde != 0 || ahora < pitidoHasta || ventana || musicaPlay || ahora < charlaHasta) ui.postDelayed(revisar, 400);
         // "Hola Cubi" escucha solo cuando nadie más usa el micrófono ni hay llamada
