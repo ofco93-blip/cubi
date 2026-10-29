@@ -658,7 +658,7 @@ public class CubiService extends Service {
     }
 
     // ---------- Google Maps / Waze: la notificación de navegación trae el próximo giro; cerca del giro Cubi muestra la flecha ----------
-    static final Pattern DISTANCIA = Pattern.compile("(\d+(?:[.,]\d+)?)\s*(km|m|mi|ft|pies)\b");
+    static final Pattern DISTANCIA = Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*(km|m|mi|ft|pies)\\b");
     private String giroAvisado = "";
     private long llegadaAvisada;
 
@@ -681,7 +681,7 @@ public class CubiService extends Service {
             String u = m.group(2);
             metros = u.equals("km") ? v * 1000 : u.equals("mi") ? v * 1609 : u.equals("m") ? v : v * 0.3048;
         }
-        String giro = dir + DISTANCIA.matcher(s).replaceAll("").replaceAll("\s+", " ").trim();  // el giro sin la distancia
+        String giro = dir + DISTANCIA.matcher(s).replaceAll("").replaceAll("\\s+", " ").trim();  // el giro sin la distancia
         if (giro.equals(giroAvisado) || metros > 250) return;  // cada giro se muestra una vez, ya cerquita
         giroAvisado = giro;
         enviar("asis|/r?n=" + dir);
