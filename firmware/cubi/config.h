@@ -22,6 +22,7 @@
 #define SONIDO_K        3.0f        // nivel sobre el ruido de fondo para considerar que "hay sonido"
 #define BAJO_ALTO       0.38f       // proporción de bajos que se considera "bajo fuerte" (electrónica/reggaetón)
 #define AGUDO_ALTO      0.22f       // proporción de agudos que se considera "brillante" (rock)
+#define REG_MIN         0.35f       // 0..1: qué tan parejo debe repetirse el golpe para ser música (ruido ~0,1-0,25)
 
 // --- Canto (lipsync). Se ajustan en vivo desde la app; estos son los valores de fábrica ---
 #define UMBRAL_VOZ      0.35f       // 0..1: desde qué "parecido a voz" empieza a cantar (baja = canta más fácil)

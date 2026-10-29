@@ -7,6 +7,7 @@
 #include <Preferences.h>
 #include <ESP_I2S.h>
 #include <arduinoFFT.h>
+#include "tempo.h"
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLE2902.h>
@@ -159,20 +160,21 @@ bool sintetizar() {
 // =====================================================================================
 // MÚSICA Y CANTO: micrófono -> FFT -> golpes (beat), BPM, estilo y voz para mover la boca.
 // Golpes: bajo vs. promedio móvil (idea de WLED sound-reactive).
+// Tempo y "¿es música?": autocorrelación de los ataques (tempo.h), aguanta ritmos sincopados.
 // Voz: energía en 280-3000 Hz que sea tonal (no ruido de platillos) y que suba y baje como las sílabas.
 // ponytail: reglas a mano, se calibran desde la app. Si se quedan cortas: separar la voz con un modelo TinyML.
 // =====================================================================================
 float vR[NF], vI[NF];
 ArduinoFFT<float> FFT(vR, vI, NF, SR);
 volatile uint8_t estilo = NADA;
-volatile uint32_t beatCnt = 0, hiCnt = 0, tSonido = 0;  // tSonido: última vez que oyó algo (lo despierta)
+volatile uint32_t beatCnt = 0, hiCnt = 0, aplausoCnt = 0, tSonido = 0;  // tSonido: última vez que oyó algo (lo despierta)
 volatile bool aCanta = false;
 volatile float aNivel = 0, aVoz = 0, aBoca = 0, aBocaCruda = 0, aAncho = 0.5f, aBajoP = 0, aBpm = 0, aReg = 0, aBajo = 0, aMedio = 0, aAgudo = 0, aRms = 0, aPiso = 0;
 const char *EST_NOM[N_EST] = { "nada", "voz", "balada", "tropical", "reggaeton", "electronica", "rock" };
 
 uint8_t clasificar(float bpm, float reg, float bajo, float medio, float agudo) {
   // sin golpe parejo no es música (motor, viento, aire acondicionado): antes eso contaba como balada y bailaba en reposo
-  if (reg < 0.4f) return bajo < 0.22f && medio > 0.35f ? VOZ : NADA;
+  if (reg < REG_MIN) return bajo < 0.22f && medio > 0.35f ? VOZ : NADA;
   if (bpm < 84) return BALADA;
   if (bajo > BAJO_ALTO && bpm >= 118 && bpm <= 140) return ELECTRO;
   if (agudo > AGUDO_ALTO && bajo < BAJO_ALTO) return ROCK;
@@ -235,7 +237,9 @@ void analizarVoz(bool hay) {
 void tareaAudio(void *) {
   float bAvg = 0, bPrev = 0, piso = 30, pico = 300, fB = 0, fM = 0, fA = 0;
   uint32_t ultBeat = 0, tEval = 0, tSon = 0, mudoHasta = 0, paHasta = 0;
-  uint16_t ibi[12]; int nIbi = 0, iIbi = 0; uint8_t cand = NADA, candN = 0;
+  uint8_t cand = NADA, candN = 0;
+  static Tempo tempo; static float lPrev[128];
+  float rPrev = 0, aplauso = 0;
   for (;;) {
     size_t n = i2s.readBytes((char *)rxBuf, sizeof(rxBuf));
     bool s = sintetizar();
@@ -265,27 +269,29 @@ void tareaAudio(void *) {
     aNivel = hay ? constrain(rms / pico, 0.f, 1.f) : 0;
     aRms = rms; aPiso = piso;
     if (hay) tSonido = now;
+    // aplauso / golpe seco (idea de Lumo): salta de golpe sobre el fondo y se apaga en el bloque siguiente; la voz no se apaga así
+    if (aplauso) { if (rms < aplauso * 0.5f) aplausoCnt++; aplauso = 0; }
+    else if (hay && rms > piso * 10 && rms > rPrev * 4) aplauso = rms;
+    rPrev = rms;
+    // ataques para el tempo: cuánto subió el espectro (en log) desde el bloque anterior, 62 Hz a 4 kHz
+    float flujo = 0;
+    for (int k = 2; k < 128; k++) { float l = logf(1 + vR[k]); flujo += max(0.f, l - lPrev[k]); lPrev[k] = l; }
+    tempo.poner(hay ? flujo : 0);
     analizarVoz(hay);
 
     bAvg += (b - bAvg) * 0.04f;
     aBajoP = hay ? constrain((b - bAvg) / (bAvg + 1), 0.f, 1.f) : 0;
-    if (hay && b > bAvg * BEAT_K && b > bPrev * 1.1f && now - ultBeat > 300) {
-      if (ultBeat && now - ultBeat < 2000) { ibi[iIbi] = now - ultBeat; iIbi = (iIbi + 1) % 12; nIbi = min(nIbi + 1, 12); }
-      ultBeat = now; beatCnt++;
-    }
+    if (hay && b > bAvg * BEAT_K && b > bPrev * 1.1f && now - ultBeat > 300) { ultBeat = now; beatCnt++; }
     bPrev = b;
     if (hay) { fB += (b / tot - fB) * 0.03f; fM += (md / tot - fM) * 0.03f; fA += (hi / tot - fA) * 0.03f; tSon = now; }
 
     if (now - tEval < 2000) continue;
     tEval = now;
-    if (now - tSon > 3000) { estilo = NADA; nIbi = 0; candN = 0; continue; }
-    uint16_t o[12]; memcpy(o, ibi, sizeof(o));
-    std::sort(o, o + nIbi);
-    float med = nIbi ? o[nIbi / 2] : 0, bpm = med ? 60000.f / med : 0, reg = 0;
+    if (now - tSon > 3000) { estilo = NADA; candN = 0; continue; }
+    float bpm, reg;
+    tempo.medir(bpm, reg);
     while (bpm && bpm < 70) bpm *= 2;
     while (bpm > 180) bpm /= 2;
-    for (int i = 0; i < nIbi; i++) if (fabsf(o[i] - med) < med * 0.18f) reg += 1.f / nIbi;
-    if (nIbi < 4 || now - ultBeat > 2500) reg = 0;
     aBpm = bpm; aReg = reg; aBajo = fB; aMedio = fM; aAgudo = fA;
     uint8_t e = clasificar(bpm, reg, fB, fM, fA);
     if (e == cand) candN++; else { cand = e; candN = 1; }
@@ -448,6 +454,11 @@ void animar(uint32_t now) {
   if (musica) despertar(now);
   if (beatCnt != beatVisto) { beatVisto = beatCnt; if (musica) enGolpe(now); }
   if (hiCnt != hiVisto) { hiVisto = hiCnt; if (musica) chispa(now); }
+  static uint32_t aplausoVisto = 0, proxSusto = 0;  // un aplauso o un golpe seco lo asusta (sin música, cada 15 s máximo)
+  if (aplausoCnt != aplausoVisto) {
+    aplausoVisto = aplausoCnt;
+    if (!musica && !asis && modo == NORMAL && now > proxSusto && caras::reaccionActual() == caras::NINGUNA) { reac(caras::SORPRESA); proxSusto = now + 15000; }
+  }
   estado = voz ? (musica ? 3 : 1) : (musica ? 2 : 0);
 
   int c = emo;
@@ -784,7 +795,10 @@ void touchUpdate(uint32_t now) {
   if (toque1 && now - toque1 >= 350) {
     toque1 = 0;
     if (modo == RING || modo == WHATSAPP) setModo(NORMAL, 0);
-    reac(emoBase == SUENO ? caras::SALUDO : caras::RISA);
+    static uint32_t toques[4];  // el 4.º toque en 5 s ya no le da risa: se enoja (idea de Lumo)
+    memmove(toques, toques + 1, sizeof(toques) - sizeof(toques[0])); toques[3] = now;
+    if (toques[0] && now - toques[0] < 5000) { setEmo(ENOJADO, 2500); memset(toques, 0, sizeof(toques)); }
+    else reac(emoBase == SUENO ? caras::SALUDO : caras::RISA);
   }
   tPrev = t;
 }
@@ -807,7 +821,11 @@ void energiaUpdate(uint32_t now) {
   static uint32_t t, sinUsb;
   if (!pmuOk || otaTotal || now - t < 1000) return;
   t = now;
-  if (pmu.isVbusIn() || !pmu.isBatteryConnect()) { sinUsb = 0; return; }
+  static int8_t usbAntes = -1;  // al conectarlo "come" energía feliz; al desconectarlo se sorprende (idea de Lumo)
+  bool usb = pmu.isVbusIn();
+  if (usbAntes >= 0 && usb != usbAntes && modo == NORMAL && !asis) { despertar(now); reac(usb ? caras::AMOR : caras::SORPRESA); }
+  usbAntes = usb;
+  if (usb || !pmu.isBatteryConnect()) { sinUsb = 0; return; }
   static uint32_t avisoBat = 0;
   if (pmu.getBatteryPercent() < 15 && (!avisoBat || now - avisoBat > 600000)) { avisoBat = now; reac(caras::BATERIA); }
   if (!sinUsb) sinUsb = now;
@@ -896,8 +914,8 @@ String atender(const String &ruta, const Params &p, int &cod) {
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
     char b[300];
     snprintf(b, sizeof b, "{\"estado\":%u,\"estilo\":\"%s\",\"bpm\":%.0f,\"nivel\":%.2f,\"voz\":%.2f,\"canta\":%d,\"boca\":%.2f,\"ancho\":%.2f,"
-      "\"bajo\":%.2f,\"rms\":%.0f,\"piso\":%.0f,\"golpes\":%lu}",
-      estado, EST_NOM[estilo], aBpm, aNivel, aVoz, aCanta ? 1 : 0, aBoca, aAncho, aBajoP, aRms, aPiso, (unsigned long)beatCnt);
+      "\"bajo\":%.2f,\"rms\":%.0f,\"piso\":%.0f,\"golpes\":%lu,\"reg\":%.2f}",
+      estado, EST_NOM[estilo], aBpm, aNivel, aVoz, aCanta ? 1 : 0, aBoca, aAncho, aBajoP, aRms, aPiso, (unsigned long)beatCnt, aReg);
     return b;
   }
   // Actualización por Bluetooth: inicio (tamaño y MD5), los datos llegan por la característica OTA, y fin (verifica y reinicia).
