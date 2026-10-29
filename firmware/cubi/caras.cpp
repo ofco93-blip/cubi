@@ -619,7 +619,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       int n = (int)pulsosVistos;
       float g = expf(-e.pulso * 6), k = powf(1 - e.pulso, 3);
       float vaiven = sinf((n + e.pulso) * PI);               // un golpe hacia cada lado
-      r.boca = e.canta ? fmaxf(e.boca, 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;   // entre sílabas se cierra
+      float abre = 1;   // cuánto abre la boca este baile cuando hay voz (0 = no canta)
       switch (e.ritmo) {
         case R_URBANO:                                        // gorra, mirada tranquila, cabecea fuerte y rapea
           escalar(r, 0.92f, 0.86f - 0.06f * g); mover(r, 0, 26 + 12 * g); tapas(r, 0.38f);
@@ -630,61 +630,59 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
           mover(r, 16 * sinf((n + e.pulso) * PI * 0.5f), 12 - 40 * salto);
           if (e.pulso < 0.12f) escalar(r, 1.1f, 0.86f);
           if (salto > 0.45f) feliz(r, 1); else tapas(r, bl);
-          r.boca = 0.3f + 0.3f * salto;
           break;
         }
         case R_TROPICAL:                                      // sombrero vueltiao y maracas, se mece como cadera
           escalar(r, 0.8f, 0.76f); mover(r, 30 * vaiven, 52 - 4 * g);
           if (fmodf(n + e.pulso, 1.f) < 0.5f) feliz(r, 1); else tapas(r, bl);
-          r.boca = 0.22f;
+          abre = 0.8f;
           break;
         case R_KPOP: {                                        // la V sobre un ojo, guiñando el otro
           float lado = 12 * sinf((n + e.pulso) * PI * 0.5f), v = 0.5f + 0.5f * cosf((n + e.pulso) * PI * 0.5f);   // 1 = V derecha puesta
           mover(r, lado, -8 * g);
           if (v < 0.3f) { r.R.feliz = 1; r.R.tapa = 0; } else if (v > 0.7f) { r.L.feliz = 1; r.L.tapa = 0; }
-          r.boca = 0.18f;
+          abre = 0.7f;
           break;
         }
         case R_CORAZON:                                       // corazoncito coreano con los dedos
           mover(r, 12 * sinf((n + e.pulso) * PI * 0.5f), -18 - 8 * g); feliz(r, 1);
-          r.boca = 0.18f;
+          abre = 0.7f;
           break;
         case R_GROOVE: {                                      // "cool": entrecerrados, mira a un lado por golpe y chasquea
           float lado = (n % 2) ? -1 : 1, mira = suave(fminf(1, e.pulso * 4));
           mirar(r, 0.45f * (lado * mira - lado * (1 - mira)), 0);
           mover(r, 0, -14 + 8 * g); escalar(r, 1, 1 - 0.12f * g); tapas(r, 0.42f);
           r.L.incl = r.R.incl = 0.08f * lado * mira;
-          r.boca = 0;
+          abre = 0.7f;
           break;
         }
         case R_DISFRUTA:                                      // ojitos cerrados disfrutando, se mece despacio
-          feliz(r, 1); mirar(r, 0.4f * sinf((n + e.pulso) * PI * 0.25f), 0); mover(r, 0, -4 * k); r.boca = fminf(r.boca, 0.4f);
+          feliz(r, 1); mirar(r, 0.4f * sinf((n + e.pulso) * PI * 0.25f), 0); mover(r, 0, -4 * k); abre = 0.6f;
           break;
         case R_GUITARRA:                                      // toca la guitarra acústica
-          feliz(r, 1); escalar(r, 0.9f, 0.9f); mover(r, 30 + 8 * sinf((n + e.pulso) * PI * 0.25f), -26); r.boca = 0;
+          feliz(r, 1); escalar(r, 0.9f, 0.9f); mover(r, 30 + 8 * sinf((n + e.pulso) * PI * 0.25f), -26); abre = 0.7f;
           break;
         case R_ROCK:                                          // cabeceo de rockero con cuernitos
           mover(r, 0, 10 - 28 * k); escalar(r, 1 + 0.06f * k, 1 - 0.16f * k); tapas(r, 0.32f);
           r.L.incl = r.R.incl = 0.1f;
-          r.boca = fmaxf(r.boca, 0.3f);
           break;
         case R_JAZZ:                                          // "cool" con el saxo: ojos entrecerrados, se mece lento
           escalar(r, 0.84f, 0.84f); mover(r, -44 + 8 * vaiven, -30 + 6 * g); tapas(r, 0.35f);
-          r.L.incl = r.R.incl = -0.06f * vaiven; r.boca = 0;
+          r.L.incl = r.R.incl = -0.06f * vaiven;   // con voz: cantante de jazz (micrófono); sin voz: saxo
           break;
         case R_DJ:                                            // con audífonos: cabecea con el golpe y se alegra
           escalar(r, 0.86f, 0.86f - 0.06f * g); mover(r, 0, -36 + 10 * g);
           if (g > 0.5f) feliz(r, 1); else tapas(r, bl);
-          r.boca = fminf(r.boca, 0.5f);
+          abre = 0.7f;
           break;
         case R_PIANO:                                         // disfruta tocando: ojitos felices y se mece
           feliz(r, 1); escalar(r, 0.88f, 0.88f); mover(r, 14 * sinf((n + e.pulso) * PI * 0.5f), -44);
-          r.boca = fminf(r.boca, 0.5f);
+          abre = 0.7f;
           break;
         case R_BARRAS:                                        // las barritas suben con la música y los ojos saltan
           escalar(r, 1 + 0.05f * g, 0.9f - 0.06f * g); mover(r, 0, -40 - 10 * e.nivel);
           if (n % 4 == 3 && g > 0.4f) feliz(r, 1); else tapas(r, bl);
-          r.boca = fminf(r.boca, 0.55f);
+          abre = 0.75f;
           break;
         default:                                              // pop: canta con micrófono
           mover(r, 0, -14 * k); escalar(r, 1 + 0.05f * k, 1 - 0.08f * k);
@@ -692,7 +690,8 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
           if (n % 8 >= 6) feliz(r, 0.85f); else tapas(r, bl);
           break;
       }
-      if (!e.canta) r.boca = 0;                               // parte sin voz: solo baila
+      // con voz la boca sigue al cantante (entre sílabas se cierra); sin voz no hay boca: solo baila o toca
+      r.boca = e.canta ? fmaxf(e.boca * abre, 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;
       vel = 16;
       break;
     }
@@ -738,7 +737,8 @@ static void extrasBase(float t, const Entradas &e, bool delante) {
         case R_URBANO:
           if (!delante) break;
           gorra(CX - 10, oL.y - oL.h / 2 + 8, -0.12f);
-          manito(ahora.bx + 64, ahora.by + 2, 32, -1.25f);              // manito de bocina junto a la boca
+          if (!e.canta) { manito(W - 70, H - 60 - 30 * g, 30, 0.3f); break; }   // sin voz: la manito sigue el golpe
+          manito(ahora.bx + 64, ahora.by + 2, 32, -1.25f);              // rapea: manito de bocina junto a la boca
           if (g > 0.35f) for (int i = 0; i < 3; i++) {
             float a = -0.5f + i * 0.5f, x = ahora.bx + 104, y = ahora.by;
             linea(x + cosf(a) * 8, y + sinf(a) * 8, x + cosf(a) * (8 + 18 * g), y + sinf(a) * (8 + 18 * g), 2.5f, BL, 1);
@@ -830,6 +830,12 @@ static void extrasBase(float t, const Entradas &e, bool delante) {
           break;
         case R_JAZZ: {
           if (!delante) break;
+          if (e.canta) {                                        // cantante de jazz: micrófono y la otra mano al aire
+            micro(ahora.bx + 74, ahora.by + 30, -0.55f, 1.6f);
+            manito(ahora.bx + 96, ahora.by + 66, 30, -0.5f);
+            manito(fmaxf(ahora.L.x - ahora.L.w / 2 - 40, 40), EY + 40 - 14 * vaiven, 28, -0.3f);
+            break;
+          }
           float bx = ahora.bx, by = ahora.by - 4, ang = -0.95f + 0.06f * vaiven, e2 = 0.85f, c = cosf(ang), sn = sinf(ang);
           auto en = [&](float a, float b, float &wx, float &wy) { wx = bx + (a * c - b * sn) * e2; wy = by + (a * sn + b * c) * e2; };
           saxofon(bx, by, ang, e2);
@@ -883,8 +889,11 @@ static void extrasBase(float t, const Entradas &e, bool delante) {
         }
         default:
           if (!delante) break;
-          micro(ahora.bx + 74, ahora.by + 30, -0.55f, 1.6f);
-          manito(ahora.bx + 96, ahora.by + 66, 30, -0.5f);
+          if (e.canta) {                                        // canta con micrófono
+            micro(ahora.bx + 74, ahora.by + 30, -0.55f, 1.6f);
+            manito(ahora.bx + 96, ahora.by + 66, 30, -0.5f);
+          } else for (int lado = -1; lado <= 1; lado += 2)      // parte sin voz: aplaude al golpe
+            manito(CX + lado * (60 + 50 * (1 - g)), H - 56, 30, lado * 0.4f);
           for (int i = 0; i < 2; i++) {
             float q = fmodf(u * 0.35f + i / 2.f, 1.f), x = 46 + sinf(q * 6 + i) * 10, y = H - 40 - q * 240;
             notaColor(i ? W - x - 20 : x, y, 26, COLORES[(i * 2 + n / 2) % 5], campana(q, 0, 1) * 0.9f);
