@@ -749,7 +749,6 @@ static void extrasBase(float t, const Entradas &e, bool delante) {
         case R_ELECTRO: {
           float salto = 1 - (2 * e.pulso - 1) * (2 * e.pulso - 1);
           if (!delante) {
-            if ((n / 4) % 2 == 1 && g > 0.55f) circulo(CX, EY, 230, COLORES[(int)(u * 8) % 5], 0.14f, 40);   // estrobo
             luces(fmodf((n % 8 + e.pulso) / 8.f, 1.f), g);
           } else for (int lado = -1; lado <= 1; lado += 2) {
             float x = (lado < 0 ? oL.x : oR.x) + lado * (oL.w / 2 + 40 + 8 * salto), y = oL.y + 30 - 60 * salto;
