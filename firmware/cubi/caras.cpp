@@ -44,6 +44,7 @@ void paquete(uint8_t p) { elPaquete = p < N_PAQ ? p : CUBI_AZUL; }
 static Base laBase = REPOSO;
 static Reac laReac = NINGUNA;
 static float reacDesde = -1, tAhora = 0, baseDesde = 0, curvaAhora = 0;
+static float gritoAhora = 0;  // 0..1: "¡aaah!" (nota fuerte y sostenida): boca enorme y ojitos chiquitos
 static int gradosN = 0; static float gradosDesde = -1, gradosHasta = -1;
 void mostrarGrados(int g, float seg) { gradosN = g; gradosDesde = tAhora; gradosHasta = tAhora + seg; }
 
@@ -192,7 +193,9 @@ static void boca(const Rostro &r) {
   if (elPaquete == MINIMALISTA && laBase == CANTA) {             // canta: una boquita vertical que abre y cierra con la voz
     if (op < 0.12f) return;                                      // entre sílabas se cierra del todo
     // vocal: w = 0 redonda (o, u) .. 1 estirada (i, e). La "a" abre alta; la "o" es más redonda; la "i" una rayita ancha
-    const float w = lim((r.bAncho - 0.75f) / 0.6f, 0, 1), bh = (5 + 24 * op) * (1 - 0.35f * w), bw = 5 + 5 * w + (1 - w) * 0.35f * bh;
+    const float w = lim((r.bAncho - 0.75f) / 0.6f, 0, 1), G = gritoAhora;
+    const float bh0 = (5 + 24 * op) * (1 - 0.35f * w), bw0 = 5 + 5 * w + (1 - w) * 0.35f * bh0;
+    const float bh = bh0 + (38 - bh0) * G, bw = bw0 + (48 - bw0) * G;   // en el "¡aaah!" la boca crece a lo ancho de la pantalla
     figura(x - bw - 2, y + 6 - bh - 2, x + bw + 2, y + 6 + bh + 2, solido(BLANCO, 1, 10),
            [=](float px, float py) { return dCaja(px, py, x, y + 6, bw, bh, fminf(bw, bh)); });
     return;
@@ -644,6 +647,15 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
     feliz(r, campana(c8, 5.6f, 7.6f));
   }
   if (e.ritmo == R_KPOP) { feliz(r, 1); mover(r, 0, 8 * g); }   // con el micrófono: ojos cerrados, cabecea "tun, tun" y canta
+  // "¡aaah!": si la voz sostiene una nota fuerte un cuarto de segundo, la boca se abre enorme y los ojos se vuelven
+  // chiquitos y felices; al bajar la nota vuelve al canto normal
+  static float alto = 0, tAntes = 0;
+  const float dt = lim(tAhora - tAntes, 0, 0.1f);
+  tAntes = tAhora;
+  alto = e.canta && (e.boca > 0.78f || e.voz > 0.85f) ? alto + dt : 0;   // voz muy fuerte, o la barra rosada al tope
+  const bool grita = alto > 0.25f;
+  gritoAhora += ((grita ? 1.f : 0.f) - gritoAhora) * lim(dt * (grita ? 10 : 4), 0, 1);
+  if (gritoAhora > 0.01f) { escalar(r, 1 - 0.45f * gritoAhora, 1 - 0.55f * gritoAhora); feliz(r, fmaxf(r.L.feliz, gritoAhora)); mover(r, 0, -16 * gritoAhora); }
 }
 
 static void anillo(float x, float y, float R, float grosor, float alfa) {

@@ -681,7 +681,7 @@ void pintar(uint32_t now) {
   else if (emoBase == SUENO) b = caras::DUERME;
   caras::base(b);
   caras::Entradas en;
-  en.boca = bocaV; en.ancho = anchoV; en.canta = cantando; en.nivel = aNivel; en.curva = curvaLook / 60;
+  en.boca = bocaV; en.ancho = anchoV; en.canta = cantando; en.nivel = aNivel; en.curva = curvaLook / 60; en.voz = aVoz;
   if (b == caras::CANTA) {
     float bpm = now < demoHasta ? 126 : aBpm > 60 ? aBpm : 110;
     static float fase = 0; static uint32_t antesF = now, golpeVisto = 0; static uint8_t fuera = 0;
