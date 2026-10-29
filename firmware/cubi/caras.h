@@ -26,6 +26,7 @@ struct Entradas {
   bool canta = true;    // el artista está cantando (si no, la boca se cierra y solo baila)
   float nivel = 0;      // 0..1: qué tan fuerte suena (las barritas)
   float ancho = 0.5f;   // 0 = boca redonda (o, u) .. 1 = estirada (i, e)
+  float curva = 0;      // -1..1: hacia dónde gira el carro (mueve el destello del sol)
 };
 
 // paquetes de caras (se escogen desde la app)

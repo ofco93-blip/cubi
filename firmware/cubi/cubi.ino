@@ -649,7 +649,7 @@ void pintar(uint32_t now) {
   else if (emoBase == SUENO) b = caras::DUERME;
   caras::base(b);
   caras::Entradas en;
-  en.boca = bocaV; en.ancho = anchoV; en.canta = cantando; en.nivel = aNivel;
+  en.boca = bocaV; en.ancho = anchoV; en.canta = cantando; en.nivel = aNivel; en.curva = curvaLook / 60;
   if (b == caras::CANTA) {
     float bpm = now < demoHasta ? 126 : aBpm > 60 ? aBpm : 110;
     en.bpm = bpm; en.pulso = fmodf((now - tGolpe) * bpm / 60000.f, 1.f); en.ritmo = elegirRitmo(now);

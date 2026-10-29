@@ -10,7 +10,7 @@ const char *NOMBRE_REAC[N_REAC] = {"", "saludo", "bache", "frenazo", "aceleron",
                                    "whatsapp", "llamada", "calor", "risa", "sorpresa", "amor", "mareo", "maps_izq", "maps_der",
                                    "llegamos", "sol", "lluvia", "frio", "bateria", "guino", "curiosa"};
 static const float DURA[N_REAC] = {0, 2.6f, 2.4f, 4.0f, 2.8f, 2.8f, 2.4f, 2.4f, 2.6f, 6.0f, 6.0f, 7.5f, 2.0f, 2.0f, 4.0f,
-                                   3.2f, 3.0f, 3.0f, 4.0f, 4.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f};
+                                   3.2f, 3.0f, 3.0f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f};
 float duracion(Reac r) { return DURA[r]; }
 const char *NOMBRE_RITMO[N_RITMO] = {"pop", "urbano", "electro", "tropical", "kpop", "corazon", "groove", "guitarra", "disfruta", "rock",
                                      "jazz", "dj", "piano", "barras"};
@@ -43,7 +43,7 @@ static uint8_t elPaquete = CUBI_AZUL;
 void paquete(uint8_t p) { elPaquete = p < N_PAQ ? p : CUBI_AZUL; }
 static Base laBase = REPOSO;
 static Reac laReac = NINGUNA;
-static float reacDesde = -1, tAhora = 0, baseDesde = 0;
+static float reacDesde = -1, tAhora = 0, baseDesde = 0, curvaAhora = 0;
 
 // ---------------------------------------------------------------- azar
 static uint32_t semilla = 12345;
@@ -519,13 +519,6 @@ static void copo(float x, float y, float r, float giro, float alfa) {
     float a = giro + i * PI / 3, c = cosf(a) * r, s = sinf(a) * r;
     linea(x - c, y - s, x + c, y + s, 2.2f, TONOS[HIELO].a, alfa, i == 0 ? 8 : 0);
   }
-}
-static void solCara(float x, float y, float r, float t, float alfa) {
-  for (int i = 0; i < 10; i++) {
-    float a = t * 0.8f + i * 2 * PI / 10, l = r * (1.4f + 0.12f * sinf(t * 5 + i));
-    linea(x + cosf(a) * r * 1.15f, y + sinf(a) * r * 1.15f, x + cosf(a) * l, y + sinf(a) * l, 3, TONOS[ORO].a, alfa);
-  }
-  figura(x - r, y - r, x + r, y + r, degr(ORO, y - r, y + r, 24, alfa), [=](float px, float py) { return dCirculo(px, py, x, y, r); });
 }
 static void pilita(float x, float y, float nivel, bool parpadea, float alfa) {
   ConColor cc;
@@ -1441,6 +1434,67 @@ static void lluviaVidrio(float u) {
   }
 }
 
+// ---------------------------------------------------------------- sol: rayo que barre el vidrio, destello del parabrisas y gafas
+// El destello sale del sol (arriba a la derecha) y cruza la pantalla; cuando el carro gira, el sol se corre y el destello con él.
+static void solDestello(float u, float a) {
+  ConColor cc;
+  const float sx = W - 46 - curvaAhora * 150, sy = 30;
+  figura(sx - 70, sy - 70, sx + 70, sy + 70, solido(Col{255, 214, 90}, a, 46), [=](float px, float py) { return dCirculo(px, py, sx, sy, 22 + 2 * sinf(u * 3)); });
+  for (int k = 0; k < 8; k++) {                                      // rayitos que giran despacio
+    float g = u * 0.4f + k * PI / 4, r0 = 32, r1 = 46 + 6 * sinf(u * 4 + k);
+    linea(sx + cosf(g) * r0, sy + sinf(g) * r0, sx + cosf(g) * r1, sy + sinf(g) * r1, 3, Col{255, 220, 120}, a * 0.8f);
+  }
+  static const float T[5] = {0.42f, 0.7f, 1.0f, 1.32f, 1.7f}, RR[5] = {9, 22, 13, 32, 18}, AA[5] = {0.3f, 0.16f, 0.26f, 0.12f, 0.2f};
+  static const Col CC[5] = {{255, 236, 170}, {255, 190, 120}, {190, 230, 255}, {255, 220, 150}, {200, 255, 210}};
+  for (int k = 0; k < 5; k++) {                                      // circulitos del destello en fila, hacia el centro
+    float x = sx + (CX - sx) * T[k], y = sy + (EY - sy) * T[k];
+    if (k % 2) figura(x - RR[k] - 3, y - RR[k] - 3, x + RR[k] + 3, y + RR[k] + 3, solido(CC[k], a * AA[k] * 1.6f, 4),
+                      [=](float px, float py) { return fabsf(dCirculo(px, py, x, y, RR[k])) - 2; });
+    else circulo(x, y, RR[k], CC[k], a * AA[k], 6);
+  }
+}
+static void gafasSol(float dy, float brillo, float alfa) {
+  const Ojo &oL = ahora.L, &oR = ahora.R;
+  const float y = (oL.y + oR.y) / 2 + dy, hw = fmaxf(oL.w, oR.w) / 2 + 16, hh = fminf(fmaxf(fmaxf(oL.h, oR.h) / 2 + 8, 26.f), hw * 0.85f);
+  for (int s2 = -1; s2 <= 1; s2 += 2) {
+    const float x = s2 < 0 ? oL.x : oR.x;
+    figura(x - hw - 4, y - hh - 4, x + hw + 4, y + hh + 4, solido(Col{16, 18, 26}, alfa), [=](float px, float py) { return dCaja(px, py, x, y, hw, hh, hh * 0.8f); });
+    figura(x - hw - 6, y - hh - 6, x + hw + 6, y + hh + 6, solido(BLANCO, alfa, 6), [=](float px, float py) { return fabsf(dCaja(px, py, x, y, hw, hh, hh * 0.8f)) - 3; });
+    if (brillo > 0 && brillo < 1) {                                  // el brillo que cruza el lente
+      const float gx = x - hw + 2 * hw * brillo;
+      figura(gx - 30, y - hh, gx + 30, y + hh, solido(BLANCO, 0.75f * alfa), [=](float px, float py) {
+        return fmaxf(dCaja(px, py, x, y, hw - 5, hh - 5, hh * 0.7f), fabsf((px - gx) + (py - y) * 0.5f) - 5);
+      });
+    }
+    linea(x - s2 * hw, y - hh * 0.35f, x - s2 * (hw + 26), y - hh * 0.6f, 4, BLANCO, alfa);   // patitas
+  }
+  linea(oL.x + hw, y - hh * 0.4f, oR.x - hw, y - hh * 0.4f, 4, BLANCO, alfa);               // puente
+}
+static void solHistoria(float u) {
+  const float fin = 1 - tramo(u, 6.4f, 7.0f);
+  float b = campana(u, 0.15f, 1.5f);                                  // 1) un rayo de luz barre el vidrio y lo deslumbra
+  if (b > 0.01f) {
+    const float bx = -120 + (W + 240) * tramo(u, 0.15f, 1.5f), c = cosf(0.5f), sn = sinf(0.5f);
+    ConColor cc;
+    figura(0, 0, W, H, solido(Col{255, 238, 196}, 0.38f * b, 70), [=](float px, float py) { return fabsf((px - bx) * c + (py - EY) * sn) - 26; });
+  }
+  solDestello(u, tramo(u, 0.1f, 0.5f) * fin * (u < 3.6f ? 1 : 0.6f));
+  if (u > 1.5f && u < 3.9f) {                                         // 2) manito de visera sobre los ojos
+    const float entra = tramo(u, 1.5f, 1.95f) * (1 - tramo(u, 3.45f, 3.85f));
+    const float y = fminf(ahora.L.y - ahora.L.h / 2, ahora.R.y - ahora.R.h / 2) - 14;
+    manoBlanca(W + 60 - (W + 60 - (ahora.R.x - 6)) * entra, y - 30 * (1 - entra) + 3 * sinf(u * 3), PI + 0.08f, 1.35f, false);
+  }
+  if (u > 3.4f) {                                                     // 3) caen las gafas, rebotan, brillan y se quedan
+    const float p = tramo(u, 3.4f, 3.95f);
+    float dy = -280 * (1 - p) * (1 - p);
+    if (u > 3.95f) dy = -16 * fabsf(sinf((u - 3.95f) * PI * 2.6f)) * expf(-(u - 3.95f) * 6);
+    gafasSol(dy, tramo(u, 4.3f, 4.85f), fin);
+    const Ojo &o = ahora.R;
+    float ch = campana(u, 4.6f, 5.3f);
+    if (ch > 0.01f) chispa(o.x + o.w / 2 + 22, o.y - o.h / 2 - 8, 10 + 14 * ch, ch, BLANCO);
+  }
+}
+
 // ---------------------------------------------------------------- reacciones (anticipación, acción, consecuencia, remate)
 static Rostro deReac(float u, const Entradas &e, float &vel) {
   Rostro r = neutro(AZUL);
@@ -1580,11 +1634,17 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       feliz(r, 1); mover(r, 0, -16 * fabsf(sinf(u * 6)));
       r.boca = 0.3f;
       break;
-    case SOL: {
-      Rostro c = neutro(ORO); r = c;
-      feliz(r, tramo(u, 0.3f, 0.6f) * (1 - tramo(u, 3.4f, 3.8f)));
-      mirar(r, -0.25f, 0.1f); mover(r, 0, 4 * sinf(u * 2));
-      vel = 12;
+    case SOL: {                                                      // el sol lo deslumbra, se hace visera con la mano,
+      Rostro c = neutro(ORO); r = c;                                 // le caen unas gafas oscuras y queda relajado
+      float desl = tramo(u, 0.3f, 0.7f) * (1 - tramo(u, 3.5f, 3.9f));
+      tapas(r, 0.62f * desl * (1 - 0.45f * tramo(u, 1.8f, 2.2f)));
+      escalar(r, 1 - 0.1f * desl, 1 - 0.1f * desl); mover(r, 0, 12 * desl);
+      if (u > 1.8f && u < 3.5f) mirar(r, -0.55f, -0.15f);           // con la visera mira a lo lejos
+      if (u > 3.7f) {                                                // con gafas: más bajitos para que quepan detrás, y se mece
+        escalar(r, 1, 0.6f);
+        mover(r, 8 * sinf((u - 3.7f) * 2.4f), 4 * sinf((u - 3.7f) * 4.8f));
+      }
+      vel = 14;
       break;
     }
     case LLUVIA:                                                     // mira las gotas, entrecierra con el empañado,
@@ -1778,7 +1838,7 @@ static void extrasReac(float u, bool delante) {
       }
       break;
     case SOL:
-      if (delante) solCara(W - 66, 62, 30, u, tramo(u, 0, 0.4f) * (1 - tramo(u, 3.5f, 4.0f)));
+      if (delante) solHistoria(u);
       break;
     case LLUVIA:
       if (delante) lluviaVidrio(u);
@@ -1807,7 +1867,7 @@ void reaccion(Reac r) { laReac = r; reacDesde = tAhora; }
 Reac reaccionActual() { return laReac; }
 
 void cuadro(float t, float dt, const Entradas &e) {
-  tAhora = t;
+  tAhora = t; curvaAhora = e.curva;
   dib::blanco = elPaquete == MINIMALISTA;
   if (laReac != NINGUNA && t - reacDesde >= DURA[laReac]) laReac = NINGUNA;
   float vel;
