@@ -700,6 +700,16 @@ public class CubiService extends Service {
     private String giroAvisado = "";
     private long llegadaAvisada;
 
+    // ---------- WhatsApp: llegó un mensaje → Cubi hace su reacción (máximo una cada 8 s: un chat activo manda muchos) ----------
+    private long ultimoWhatsapp;
+
+    void whatsapp() {
+        long ahora = System.currentTimeMillis();
+        if (ahora - ultimoWhatsapp < 8000) return;
+        ultimoWhatsapp = ahora;
+        enviar("asis|/evento?tipo=whatsapp");
+    }
+
     void indicacion(String t) {
         String s = t.toLowerCase(Locale.ROOT);
         long ahora = System.currentTimeMillis();
