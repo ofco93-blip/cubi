@@ -17,7 +17,9 @@ static int medir() {
     printf("%s - %.0f us\n", NOMBRE_BASE[b], std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count() / 100);
   }
   base(CANTA);
+  for (int pq = 0; pq < N_PAQ; pq++)
   for (int r = 0; r < N_RITMO; r++) for (int voz = 1; voz >= 0; voz--) {
+    paquete(pq);
     auto t0 = std::chrono::steady_clock::now();
     const int N = 100;
     for (int i = 0; i < N; i++) {
@@ -26,7 +28,7 @@ static int medir() {
       dib::empezar(); cuadro(t, 0.04f, e); dib::terminar();
     }
     double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count() / N;
-    printf("%s %s %.0f us\n", NOMBRE_RITMO[r], voz ? "voz" : "sin", us);
+    printf("%s%s %s %.0f us\n", pq ? "mini_" : "", NOMBRE_RITMO[r], voz ? "voz" : "sin", us);
   }
   return 0;
 }

@@ -8,7 +8,7 @@ os.makedirs(sal, exist_ok=True)
 hoja = []
 for nombre in pedidas:
     raw = os.path.join(sal, nombre + ".raw")
-    subprocess.run([vista, nombre, "4", raw], check=True)
+    subprocess.run([vista, nombre, "6", raw], check=True)
     d = open(raw, "rb").read(); n = len(d) // (W * H * 3); os.remove(raw)
     cuadros = [Image.frombytes("RGB", (W, H), d[i * W * H * 3:(i + 1) * W * H * 3]) for i in range(n)]
     pal = [c.resize((W // 2, H // 2)).quantize(colors=96) for c in cuadros[::2]]
