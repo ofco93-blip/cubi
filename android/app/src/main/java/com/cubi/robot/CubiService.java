@@ -1059,11 +1059,14 @@ public class CubiService extends Service {
         }
         // música en play: Cubi baila de una y deja de bailar apenas se pausa. Con el permiso de música solo cuentan
         // las apps de música (los reels y videos no lo ponen a bailar)
-        boolean play = suenaMedia && am.isMusicActive() && (!puedeTocarMusica() || suenaAppDeMusica());
+        // Con el permiso de música se mira el estado de Spotify (o la app de música) directamente: así funciona igual
+        // cuando suena por Android Auto, donde el celular no siempre reporta audio propio. Sin permiso, el audio del celular.
+        boolean play = puedeTocarMusica() ? suenaAppDeMusica() : suenaMedia && am.isMusicActive();
         if (play != musicaPlay) { musicaPlay = play; enviar("musica|/musica?play=" + (play ? 1 : 0)); }
         if (musicaPlay && !siguiendo) seguirLetra();
         // los callbacks no avisan cuando pasa el tiempo: mientras algo esté en juego se vuelve a mirar
         if (!asisEstado.isEmpty() || hablaDesde != 0 || ahora < pitidoHasta || ventana || musicaPlay || ahora < charlaHasta) ui.postDelayed(revisar, 400);
+        else if (listo) ui.postDelayed(revisar, 2000);  // con Cubi conectado se vuelve a mirar: con Android Auto no siempre llega el aviso de audio
         // "Hola Cubi" escucha solo cuando nadie más usa el micrófono ni hay llamada
         boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva && ahora >= charlaHasta;
         if (oidoQuiere && modelo != null && libre) arrancarOido();
