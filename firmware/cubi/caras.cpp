@@ -197,7 +197,7 @@ static void boca(const Rostro &r) {
     const float w = lim((r.bAncho - 0.75f) / 0.6f, 0, 1), G = gritoAhora;
     const float bh0 = (5 + 24 * op) * (1 - 0.35f * w), bw0 = 5 + 5 * w + (1 - w) * 0.35f * bh0;
     // en el "¡aaah!" la boca crece vertical hasta ocupar casi toda la pantalla; el ancho sigue la vocal
-    const float bhG = 120 * (1 - 0.3f * w), bwG = bhG * (0.42f + 0.3f * (1 - w) * 0.6f + 0.22f * w);
+    const float bhG = 64 * (1 - 0.25f * w), bwG = bhG * (0.5f + 0.2f * (1 - w) + 0.2f * w);   // grande, pero cabe con los ojos en su sitio
     const float bh = bh0 + (bhG - bh0) * G, bw = bw0 + (bwG - bw0) * G;
     figura(x - bw - 2, y + 6 - bh - 2, x + bw + 2, y + 6 + bh + 2, solido(BLANCO, 1, 10),
            [=](float px, float py) { return dCaja(px, py, x, y + 6, bw, bh, fminf(bw, bh)); });
@@ -662,12 +662,10 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
   const float silaba = 0.5f - 0.5f * cosf(e.pulso * 4 * PI);
   const float meta = e.canta ? gritoZona * (0.3f + 0.7f * (0.55f * silaba + 0.45f * tramo(e.boca, 0.4f, 1.0f))) : 0;
   gritoAhora += (meta - gritoAhora) * lim(dt * 14, 0, 1);
-  if (gritoAhora > 0.01f) {                            // la boca gigante empuja los ojos arriba y a los lados (caricatura)
-    const float G = gritoAhora;
-    escalar(r, 1 - 0.5f * G, 1 - 0.6f * G); feliz(r, fmaxf(r.L.feliz, G));
-    r.L.x -= 70 * G; r.R.x += 70 * G; r.L.y -= 80 * G; r.R.y -= 80 * G;
-    r.L.incl = -0.25f * G; r.R.incl = -0.25f * G;
-    r.by -= 70 * G;                                     // la boca sube al centro de la pantalla
+  if (gritoZona > 0.01f) {                             // en la parte fuerte cierra los ojitos (felices) para que quepa la boca;
+    const float Z = gritoZona;                          // los ojos no se mueven de su sitio y el instrumento sigue tocando
+    feliz(r, fmaxf(r.L.feliz, Z)); escalar(r, 1 - 0.15f * Z, 1);
+    r.by -= 22 * Z;                                     // la boca sube un poquito, hacia los ojos
   }
 }
 
@@ -787,7 +785,6 @@ static void telefonoIcono(float x, float y, float R, float u, float alfa) {
 }
 
 static void extrasMini(float u, const Entradas &e) {
-  if (gritoZona > 0.5f) return;                         // en la parte fuerte el instrumento se esconde
   int n = (int)pulsosVistos;
   float g = expf(-e.pulso * 6), f = n + e.pulso, vaiven = sinf(f * PI);
   // velocidad por niveles según qué tan fuerte suena: suave 1 toque por golpe, normal 2, fuerte 4 (con un margen para

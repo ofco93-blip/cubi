@@ -277,8 +277,10 @@ void tareaAudio(void *) {
 
     piso = rms < piso ? piso * 0.9f + rms * 0.1f : piso * 1.0004f;  // ruido de fondo: baja rápido, sube lento
     bool hay = rms > piso * sensK && rms > 40;
+    // el ritmo no depende de los controles de la app: usa su propio umbral fijo sobre el ruido de fondo
+    bool suena = rms > piso * 1.8f && rms > 30;
     pico = max(rms, pico * 0.998f);
-    aNivel = hay ? constrain(rms / pico, 0.f, 1.f) : 0;
+    aNivel = suena ? constrain(rms / pico, 0.f, 1.f) : 0;
     aRms = rms; aPiso = piso;
     if (hay) tSonido = now;
     // aplauso / golpe seco (idea de Lumo): salta de golpe sobre el fondo y se apaga en el bloque siguiente; la voz no se apaga así
@@ -288,12 +290,18 @@ void tareaAudio(void *) {
     // ataques para el tempo: cuánto subió el espectro (en log) desde el bloque anterior, 62 Hz a 4 kHz
     float flujo = 0;
     for (int k = 2; k < 128; k++) { float l = logf(1 + vR[k]); flujo += max(0.f, l - lPrev[k]); lPrev[k] = l; }
-    tempo.poner(hay ? flujo : 0);
+    tempo.poner(suena ? flujo : 0);
     analizarVoz(hay);
 
     bAvg += (b - bAvg) * 0.04f;
     aBajoP = hay ? constrain((b - bAvg) / (bAvg + 1), 0.f, 1.f) : 0;
-    if (hay && b > bAvg * BEAT_K && b > bPrev * 1.1f && now - ultBeat > 300) { ultBeat = now; beatCnt++; }
+    // golpe: un ataque del bombo o un salto fuerte del espectro (caja, aplauso, rasgueo); el reloj de golpes en pintar()
+    // solo se corrige con los que caen cerca del pulso, así los falsos no lo desordenan
+    static float fAvg = 0, fPrev = 0;
+    fAvg += (flujo - fAvg) * 0.05f;
+    bool golpe = (b > bAvg * BEAT_K && b > bPrev * 1.1f) || (flujo > fAvg * 1.7f && flujo > fPrev);
+    if (suena && golpe && now - ultBeat > 250) { ultBeat = now; beatCnt++; }
+    fPrev = flujo;
     bPrev = b;
     if (hay) { fB += (b / tot - fB) * 0.03f; fM += (md / tot - fM) * 0.03f; fA += (hi / tot - fA) * 0.03f; tSon = now; }
 
