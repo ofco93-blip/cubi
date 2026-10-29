@@ -191,6 +191,7 @@ uint8_t clasificar(float bpm, float reg, float bajo, float medio, float agudo) {
 float suma(int a, int b) { float s = 0; for (int i = a; i <= b; i++) s += vR[i]; return s; }
 
 extern uint8_t asis;  // si Gemini está hablando (lo avisa el celular)
+extern bool celPlay;  // el celular dice que suena música
 // Voz y boca a partir de la FFT del bloque (vR ya tiene magnitudes). Corre en la tarea de audio.
 void analizarVoz(bool hay) {
   static float vMod = 0, vPrev = 0, vozS = 0, vMax = 60, vMin = 60, boca = 0, ancho = 0.5f, hAvg = 0;
@@ -209,7 +210,7 @@ void analizarVoz(bool hay) {
   static float rs = 0, base = 0.3f;
   rs += (frac - rs) * 0.3f;
   base += (rs - base) * (rs < base ? 0.05f : 0.003f);  // baja rápido, sube en ~10 s: lo que suena sin voz
-  float vozMus = hay && estilo >= BALADA ? constrain((rs - base) / fmaxf(0.06f, base * 0.5f), 0.f, 1.f) * (0.5f + 0.5f * modN) : 0;
+  float vozMus = hay && (estilo >= BALADA || celPlay) ? constrain((rs - base) / fmaxf(0.06f, base * 0.5f), 0.f, 1.f) * (0.5f + 0.5f * modN) : 0;
   vozS += ((hay ? fmaxf((0.5f * fracN + 0.5f * tonN) * modN, vozMus) : 0) - vozS) * 0.25f;  // ~120 ms
   if (!canta && vozS > umbralVoz) { if (++sube >= 2) canta = true; } else sube = 0;  // 64 ms seguidos para arrancar
   if (canta && vozS < umbralVoz * 0.7f) canta = false;
@@ -590,6 +591,7 @@ uint8_t elegirRitmo(uint32_t now) {
   if (ritmoFijo >= 0) return ritmoFijo;
   if (celRitmo >= 0 && celPlay) return celRitmo;
   if (est < BALADA) estR = NADA;
+  if (celPlay && estR != NADA) return r;  // con el celular en play no cambia de baile a mitad de la canción
   if (est >= BALADA && est != estR) {
     const uint8_t *f = BAL; int n = 5;
     if (est == TROPICAL) { f = TRO; n = 3; } else if (est == REGGAETON) { f = REG; n = 3; }

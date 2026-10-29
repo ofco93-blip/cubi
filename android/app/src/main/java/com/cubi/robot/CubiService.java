@@ -863,9 +863,20 @@ public class CubiService extends Service {
     }
 
     // con "Acceso a notificaciones" se le habla directo al reproductor: "busca esto y ponlo" (como Android Auto)
+    // Algunos celulares contestan "no" aunque el acceso esté prendido: también se mira la lista del sistema y, si está
+    // ahí, se le pide a Android que vuelva a conectar el oyente (pasa después de actualizar la app)
+    private long reconectado;
+
     boolean puedeTocarMusica() {
-        return Build.VERSION.SDK_INT >= 27  // Android 8.0 no sabe preguntarlo
-                && getSystemService(NotificationManager.class).isNotificationListenerAccessGranted(new ComponentName(this, Oyente.class));
+        ComponentName yo = new ComponentName(this, Oyente.class);
+        if (Build.VERSION.SDK_INT >= 27 && getSystemService(NotificationManager.class).isNotificationListenerAccessGranted(yo)) return true;
+        String l = android.provider.Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
+        boolean enLista = l != null && l.contains(getPackageName());
+        if (enLista && System.currentTimeMillis() - reconectado > 60000) {
+            reconectado = System.currentTimeMillis();
+            android.service.notification.NotificationListenerService.requestRebind(yo);
+        }
+        return enLista;
     }
 
     private boolean tocarEnSesion(String q) {
