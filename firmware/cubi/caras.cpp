@@ -613,42 +613,42 @@ static void piano(float y, int n, float g) {
 static float pulsosVistos = 0, ultimoPulso = 1;
 
 // ---------------------------------------------------------------- Robot minimalista: bailan solo los ojos
-// (nada de gorras, manitos ni instrumentos); cada ritmo lleva un detalle blanco y simple. Devuelve cuánto abre la boca.
-static float bailaMini(Rostro &r, const Entradas &e, int n, float g, float k, float vaiven, float bl) {
+// (nada de gorras, manitos ni instrumentos, ni boca); cada ritmo lleva un detalle blanco y simple.
+static void bailaMini(Rostro &r, const Entradas &e, int n, float g, float k, float vaiven, float bl) {
   float f = n + e.pulso;
   switch (e.ritmo) {
-    case R_URBANO: tapas(r, 0.45f); mover(r, 0, 4 + 18 * g); escalar(r, 1, 1 - 0.08f * g); return 0.8f;   // cabeceo con visera
+    case R_URBANO: tapas(r, 0.45f); mover(r, 0, 4 + 18 * g); escalar(r, 1, 1 - 0.08f * g); return;   // cabeceo con visera
     case R_ELECTRO: {                                                                                    // salta
       float s = 1 - (2 * e.pulso - 1) * (2 * e.pulso - 1);
       mover(r, 0, 10 - 34 * s);
       if (e.pulso < 0.12f) escalar(r, 1.15f, 0.8f);
       if (s > 0.5f) feliz(r, 1); else tapas(r, bl);
-      return 0.8f;
+      return;
     }
-    case R_TROPICAL: feliz(r, 1); mover(r, 34 * vaiven, -6 * g); r.L.incl = r.R.incl = 0.12f * vaiven; return 0.8f;   // cadera
+    case R_TROPICAL: feliz(r, 1); mover(r, 34 * vaiven, -6 * g); r.L.incl = r.R.incl = 0.12f * vaiven; return;   // cadera
     case R_KPOP: {                                                                                       // guiña a cada lado
       float v = cosf(f * PI * 0.5f);
       mover(r, 12 * sinf(f * PI * 0.5f), -8 * g);
       if (v > 0.3f) r.L.feliz = 1; else if (v < -0.3f) r.R.feliz = 1;
-      return 0.7f;
+      return;
     }
-    case R_CORAZON: r.corazon = 1; escalar(r, 1 + 0.15f * g, 1 + 0.15f * g); mover(r, 10 * sinf(f * PI * 0.5f), -4 * g); return 0.7f;
+    case R_CORAZON: r.corazon = 1; escalar(r, 1 + 0.15f * g, 1 + 0.15f * g); mover(r, 10 * sinf(f * PI * 0.5f), -4 * g); return;
     case R_GROOVE: {                                                                                     // mira a un lado por golpe
       float lado = (n % 2) ? -1 : 1, m = suave(fminf(1, e.pulso * 4));
       mirar(r, 0.5f * lado * (2 * m - 1), 0); tapas(r, 0.4f); mover(r, 0, 6 * g);
-      return 0.7f;
+      return;
     }
     case R_DISFRUTA: case R_GUITARRA: case R_PIANO:                                                      // ojitos felices que se mecen
       feliz(r, 1); mirar(r, 0.35f * sinf(f * PI * 0.25f), 0); mover(r, 0, -6 * k);
-      return 0.65f;
-    case R_ROCK: tapas(r, 0.3f); r.L.incl = r.R.incl = 0.14f; mover(r, 0, 14 - 34 * k); escalar(r, 1.05f, 1 - 0.2f * k); return 1;
-    case R_JAZZ: tapas(r, 0.4f); mover(r, 22 * vaiven, 0); r.L.incl = r.R.incl = -0.06f * vaiven; return 0.8f;
-    case R_DJ: mover(r, 0, 4 + 14 * g); if (g > 0.5f) feliz(r, 1); else tapas(r, bl); return 0.7f;
-    case R_BARRAS: mover(r, 0, -34 - 8 * e.nivel); escalar(r, 1, 1 - 0.1f * g); tapas(r, bl); return 0.75f;
+      return;
+    case R_ROCK: tapas(r, 0.3f); r.L.incl = r.R.incl = 0.14f; mover(r, 0, 14 - 34 * k); escalar(r, 1.05f, 1 - 0.2f * k); return;
+    case R_JAZZ: tapas(r, 0.4f); mover(r, 22 * vaiven, 0); r.L.incl = r.R.incl = -0.06f * vaiven; return;
+    case R_DJ: mover(r, 0, 4 + 14 * g); if (g > 0.5f) feliz(r, 1); else tapas(r, bl); return;
+    case R_BARRAS: mover(r, 0, -34 - 8 * e.nivel); escalar(r, 1, 1 - 0.1f * g); tapas(r, bl); return;
     default:                                                                                             // pop: rebota
       mover(r, 0, -16 * k); escalar(r, 1 + 0.06f * k, 1 - 0.1f * k); mirar(r, 0.3f * ((n % 4 < 2) ? -1 : 1), 0);
       if (n % 8 >= 6) feliz(r, 0.85f); else tapas(r, bl);
-      return 1;
+      return;
   }
 }
 static void anillo(float x, float y, float R, float grosor, float alfa) {
@@ -779,7 +779,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       float g = expf(-e.pulso * 6), k = powf(1 - e.pulso, 3);
       float vaiven = sinf((n + e.pulso) * PI);               // un golpe hacia cada lado
       float abre = 1;   // cuánto abre la boca este baile cuando hay voz (0 = no canta)
-      if (elPaquete == MINIMALISTA) abre = bailaMini(r, e, n, g, k, vaiven, bl);
+      if (elPaquete == MINIMALISTA) { bailaMini(r, e, n, g, k, vaiven, bl); abre = 0; }
       else switch (e.ritmo) {
         case R_URBANO:                                        // gorra, mirada tranquila, cabecea fuerte y rapea
           escalar(r, 0.92f, 0.86f - 0.06f * g); mover(r, 0, 26 + 12 * g); tapas(r, 0.38f);
@@ -851,7 +851,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
           break;
       }
       // con voz la boca sigue al cantante (entre sílabas se cierra); sin voz no hay boca: solo baila o toca
-      r.boca = e.canta ? fmaxf(e.boca * abre, 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;
+      r.boca = e.canta && abre > 0 ? fmaxf(e.boca * abre, 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;
       vel = 16;
       break;
     }
