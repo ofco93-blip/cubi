@@ -282,6 +282,25 @@ public class MainActivity extends Activity {
             } catch (Exception e) { return "{}"; }
         }
 
+        // abre los ajustes de texto a voz del celular (motor y voces); si no existen, el instalador de voces
+        @JavascriptInterface
+        public void abrirVoces() {
+            try {
+                startActivity(new Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            } catch (Exception e) {
+                try {
+                    startActivity(new Intent(android.speech.tts.TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (Exception e2) {
+                    js("toast('Busca “texto a voz” en los Ajustes del celular')");
+                }
+            }
+        }
+
+        @JavascriptInterface
+        public void recargarVoces() {
+            if (CubiService.yo != null) runOnUiThread(() -> CubiService.yo.reiniciarVoz());
+        }
+
         @JavascriptInterface
         public void vozCubi(String nombre, float tono) {
             if (CubiService.yo != null) runOnUiThread(() -> { CubiService.yo.elegirVoz(nombre, tono); CubiService.yo.probarVoz(); });

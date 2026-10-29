@@ -505,6 +505,13 @@ public class CubiService extends Service {
         voz.setSpeechRate(1.05f);
     }
 
+    // después de bajar voces o cambiar el motor de voz: se arranca de nuevo para que aparezcan
+    void reiniciarVoz() {
+        if (voz != null) voz.shutdown();
+        voz = null;
+        iniciarVoz();
+    }
+
     void elegirVoz(String nombre, float tono) {
         getSharedPreferences("cubi", 0).edit().putString("voz", nombre).putFloat("tono", tono).apply();
         ponerVoz();
