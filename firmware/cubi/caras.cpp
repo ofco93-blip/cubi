@@ -8,9 +8,9 @@ using namespace dib;
 const char *NOMBRE_BASE[N_BASE] = {"reposo", "escucha", "habla", "canta", "piensa", "duerme", "telefono"};
 const char *NOMBRE_REAC[N_REAC] = {"", "saludo", "bache", "frenazo", "aceleron", "arranque", "izq", "der", "caricia",
                                    "whatsapp", "llamada", "calor", "risa", "sorpresa", "amor", "mareo", "maps_izq", "maps_der",
-                                   "llegamos", "sol", "lluvia", "frio", "bateria", "guino", "curiosa", "kamehameha"};
+                                   "llegamos", "sol", "lluvia", "frio", "bateria", "guino", "curiosa", "kamehameha", "confeti"};
 static const float DURA[N_REAC] = {0, 2.6f, 2.4f, 4.0f, 2.8f, 2.8f, 2.4f, 2.4f, 2.6f, 6.0f, 6.0f, 7.5f, 2.0f, 2.0f, 4.0f,
-                                   3.2f, 3.0f, 3.0f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f, 5.0f};
+                                   3.2f, 3.0f, 3.0f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f, 5.0f, 5.5f};
 float duracion(Reac r) { return DURA[r]; }
 const char *NOMBRE_RITMO[N_RITMO] = {"pop", "urbano", "electro", "tropical", "kpop", "corazon", "groove", "guitarra", "disfruta", "rock",
                                      "jazz", "dj", "piano", "barras"};
@@ -1242,6 +1242,38 @@ static void solHistoria(float u) {
   }
 }
 
+// ---------------------------------------------------------------- pistola de confeti: apunta al copiloto (a la derecha) y ¡pum!
+static void pistolaConfeti(float u) {
+  ConColor cc;
+  const Col naranja{255, 140, 40}, verde{80, 220, 120};
+  const float entra = tramo(u, 0.3f, 0.8f), fin = 1 - tramo(u, 4.6f, 5.3f), tiro = u - 3.0f;
+  const float retro = tiro > 0 ? expf(-tiro * 8) : 0, baja = tramo(u, 3.7f, 4.3f);
+  const float x = CX - 70 - 320 * (1 - entra) - 18 * retro, y = H - 72 + (u < 3 ? 4 * sinf(u * 3) : 0);
+  const float ang = -0.15f - 0.4f * retro + 0.5f * baja;
+  Marco m = marco(x, y, ang, 1);
+  pieza(m, -24, -36, 104, 46, solido(naranja, fin, 6), [](float a, float b) {
+    float barril = dCapsula2(a, b, -8, -10, 12, 62, -10, 12);
+    float boca = dCapsula2(a, b, 60, -10, 12, 84, -10, 20);           // trompetica por donde sale el confeti
+    return fminf(fminf(barril, boca), dCaja(a, b, 2, 18, 9, 20, 6));
+  });
+  pieza(m, -12, -16, 62, -4, solido(verde, fin), [](float a, float b) { return dCaja(a, b, 25, -10, 26, 3, 3); });
+  float hx, hy, mx, my;
+  aPantalla(m, 4, 20, hx, hy); manoBlanca(hx, hy, ang + 0.4f, 0.9f, false, fin);
+  aPantalla(m, 92, -10, mx, my);
+  if (tiro > 0 && tiro < 2.2f) {                                      // la ráfaga: sale hacia arriba a la derecha y cae
+    const float al = 1 - tramo(tiro, 1.4f, 2.2f);
+    for (int i = 0; i < 26; i++) {
+      float sp = 140 + 220 * hash(i, 1), a0 = ang - 1.1f + 1.3f * hash(i, 2);
+      float px = mx + cosf(a0) * sp * tiro, py = my + sinf(a0) * sp * tiro + 260 * tiro * tiro;
+      Marco p2 = marco(px, py, tiro * 9 * (hash(i, 3) - 0.5f) + i);
+      pieza(p2, -7, -5, 7, 5, solido(COLORES[i % 5], al), [](float a, float b) { return dCaja(a, b, 0, 0, 6, 3.5f, 1); });
+    }
+    float fl = campana(tiro, 0, 0.25f);
+    if (fl > 0.01f) chispa(mx + 12, my, 26 * fl + 8, fl, Col{255, 240, 160});
+  }
+  if (u > 3.3f) confeti(u - 3.3f, tramo(u, 3.3f, 3.6f) * (1 - tramo(u, 4.8f, 5.5f)));   // y llueve confeti de arriba
+}
+
 // ---------------------------------------------------------------- kamehameha: carga una bola de energía entre las manos y la suelta
 static void kame(float u) {
   ConColor cc;
@@ -1457,10 +1489,22 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       tapas(r, (0.3f * conc + 0.3f * rayo) * (1 - orgullo)); r.L.incl = r.R.incl = 0.2f * conc * (1 - orgullo);
       if (u < 2.62f) mirar(r, 0.45f * conc, 0.45f * conc);           // mira la bola entre las manos
       else mirar(r, -0.5f * rayo, 0.35f * rayo);                      // sigue al rayo
-      mover(r, 4 * carga * (1 - rayo) * sinf(u * 90) + 28 * rayo, -8 * conc * (1 - rayo));
+      escalar(r, 1 - 0.1f * conc, 1 - 0.22f * conc);
+      mover(r, 4 * carga * (1 - rayo) * sinf(u * 90) + 28 * rayo, -24 * conc);
       feliz(r, orgullo);
       r.boca = 0.8f * rayo; r.bAncho = 1.2f;
       vel = 40;
+      break;
+    }
+    case PUM: {                                                      // mira al copiloto con cara de malo, le apunta,
+      float malo = tramo(u, 0, 0.4f) * (1 - tramo(u, 3.0f, 3.2f));    // ¡pum! confeti, y se muere de la risa
+      float risa = tramo(u, 3.05f, 3.3f) * (1 - tramo(u, 5.1f, 5.5f));
+      mirar(r, 0.75f * malo, 0.1f * malo);
+      tapas(r, 0.4f * malo); r.L.incl = r.R.incl = 0.22f * malo;
+      if (u > 3.0f && u < 3.15f) mover(r, -16, 0);                   // el culatazo
+      feliz(r, risa); mover(r, 0, 7 * sinf(u * 40) * risa);
+      r.boca = risa * (0.6f + 0.3f * fabsf(sinf(u * 14))); r.bAncho = 1.7f;
+      vel = 30;
       break;
     }
     case CURIOSA: {                                                  // ladea la cabeza y abre un ojo más que el otro
@@ -1479,6 +1523,9 @@ static void extrasReac(float u, bool delante) {
   switch (laReac) {
     case KAME:
       if (delante) kame(u);
+      break;
+    case PUM:
+      if (delante) pistolaConfeti(u);
       break;
     case SALUDO:
       if (delante && u > 0.6f) {
