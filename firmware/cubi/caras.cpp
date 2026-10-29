@@ -1274,7 +1274,7 @@ static void solHistoria(float u) {
   }
 }
 
-// ---------------------------------------------------------------- pistola de confeti: te apunta de frente, cuenta 3 2 1 y ¡pum!
+// ---------------------------------------------------------------- pistola de confeti: apunta al copiloto, cuenta 3 2 1 y ¡pum!
 // Apunta hasta que el celular termina de decir "¡Prepárate, ...!" y manda cuentaPum(); si no llega, cuenta solo a los 7 s.
 static float pumCuenta = -1;
 void cuentaPum() { if (laReac == PUM && pumCuenta < 0) pumCuenta = tAhora - reacDesde; }
@@ -1282,35 +1282,54 @@ static float pumK(float u) {   // segundos desde que empezó la cuenta (negativo
   if (pumCuenta < 0 && u > 7) pumCuenta = 7;
   return pumCuenta < 0 ? -1 : u - pumCuenta;
 }
+// pistola láser de juguete de lado, en una mano, apuntando al copiloto (a la derecha): rayo y ¡confeti!
 static void pistolaConfeti(float u) {
   ConColor cc;
-  const Col naranja{255, 140, 40}, verde{80, 220, 120};
+  const Col cuerpo{90, 220, 210}, metal{235, 240, 250}, punta{255, 80, 120}, rayo{255, 120, 170};
   const float k = pumK(u), entra = tramo(u, 0.2f, 0.7f), fin = k < 0 ? 1 : 1 - tramo(k, 4.6f, 5.4f);
-  const float tiro = k - 3.0f, retro = tiro > 0 ? expf(-tiro * 8) : 0, baja = k < 0 ? 0 : tramo(k, 3.6f, 4.2f);
-  const float x = CX + 4 * sinf(u * 1.7f) * (1 - baja), y = H - 92 + 240 * (1 - entra) + 40 * baja - 14 * retro;
-  const float e = 1 + 0.25f * retro;                                  // al disparar salta hacia uno
-  // vista de frente: aro naranja, franja verde y el hueco negro por donde sale el confeti
-  figura(x - 52 * e, y - 52 * e, x + 52 * e, y + 52 * e, solido(naranja, fin, 8), [=](float px, float py) { return dCirculo(px, py, x, y, 42 * e); });
-  figura(x - 38 * e, y - 38 * e, x + 38 * e, y + 38 * e, solido(verde, fin), [=](float px, float py) { return fabsf(dCirculo(px, py, x, y, 31 * e)) - 3 * e; });
-  figura(x - 22 * e, y - 22 * e, x + 22 * e, y + 22 * e, solido(NEG, fin), [=](float px, float py) { return dCirculo(px, py, x, y, 17 * e); });
-  manoBlanca(x - 56 * e, y + 20 * e, 0.3f, 0.9f, false, fin);       // las dos manitos la sujetan
-  manoBlanca(x + 56 * e, y + 20 * e, PI - 0.3f, 0.9f, false, fin);
-  if (k >= 0 && k < 3) {                                              // 3 · 2 · 1 arriba: cada número entra grande y se achica
-    const float f = k - floorf(k);
-    const char b[2] = {char('3' - (int)k), 0};
-    dib::texto(b, CX, 52, 70 + 30 * (1 - tramo(f, 0, 0.25f)), BLANCO, 1 - tramo(f, 0.8f, 1));
+  const float tiro = k - 3.0f, retro = tiro > 0 ? expf(-tiro * 8) : 0, baja = k < 0 ? 0 : tramo(k, 3.8f, 4.4f);
+  const float x = CX - 70 - 320 * (1 - entra) - 16 * retro, y = H - 78 + 3 * sinf(u * 2.1f) * (1 - baja) + 30 * baja;
+  const float ang = -0.1f - 0.35f * retro + 0.45f * baja;
+  Marco m = marco(x, y, ang, 1);
+  const float carga = k >= 0 && k < 3 ? fmodf(k, 1.f) : 0;           // la punta se prende con cada número
+  pieza(m, -12, 4, 26, 52, solido(metal, fin, 4), [](float a, float b) {                       // mango
+    return dCapsula2(a, b, 6, 10, 9, -2, 42, 8);
+  });
+  pieza(m, -18, -24, 104, 24, solido(cuerpo, fin, 6), [](float a, float b) {                   // cuerpo y cañón
+    return fminf(dCapsula2(a, b, 0, 0, 17, 52, 0, 15), dCapsula2(a, b, 52, 0, 8, 92, 0, 6));
+  });
+  for (int i = 0; i < 3; i++) {                                       // aros del cañón
+    const float ax = 18 + i * 14;
+    pieza(m, ax - 6, -26, ax + 6, 26, solido(metal, fin), [=](float a, float b) { return dCaja(a, b, ax, 0, 3, 21 - i * 2, 3); });
   }
-  if (tiro > 0 && tiro < 1.6f) {                                      // ¡pum! el confeti sale hacia uno y crece al acercarse
-    const float fl = 1 - tramo(tiro, 0, 0.3f);
-    if (fl > 0.01f) circulo(x, y, 30 + 200 * tramo(tiro, 0, 0.25f), Col{255, 240, 190}, 0.8f * fl, 20);
-    const float al = 1 - tramo(tiro, 1.0f, 1.6f);
-    for (int i = 0; i < 34; i++) {
-      const float ang = hash(i, 1) * 2 * PI, v = 0.6f + 0.8f * hash(i, 2), d = 50 + 380 * v * tiro;
-      Marco p2 = marco(x + cosf(ang) * d, y + sinf(ang) * d * 0.8f - 60 * tiro, tiro * 10 * (hash(i, 3) - 0.5f) + i, 1 + 3.5f * tiro * v);
+  float px, py;
+  aPantalla(m, 98, 0, px, py);                                        // la punta que brilla
+  circulo(px, py, 9 + 3 * carga, punta, fin, 10 + 14 * carga);
+  float hx, hy;
+  aPantalla(m, 2, 30, hx, hy);
+  manoBlanca(hx, hy, ang + 0.35f, 0.9f, false, fin);                  // una sola mano en el mango
+  if (k >= 0 && k < 3) {                                              // 3 · 2 · 1 arriba
+    const float f = k - floorf(k);
+    const char c[2] = {char('3' - (int)k), 0};
+    dib::texto(c, CX, 52, 70 + 30 * (1 - tramo(f, 0, 0.25f)), BLANCO, 1 - tramo(f, 0.8f, 1));
+  }
+  if (tiro > 0 && tiro < 0.45f) {                                     // ¡pum!: el rayo cruza hasta el copiloto
+    const float a2 = 1 - tramo(tiro, 0.25f, 0.45f), dx = cosf(ang), dy = sinf(ang), largo = (W + 40 - px) / fmaxf(dx, 0.3f);
+    const float ex = px + dx * largo, ey = py + dy * largo;
+    linea(px, py, ex, ey, 9, rayo, 0.8f * a2, 18);
+    linea(px, py, ex, ey, 3, BLANCO, a2);
+  }
+  if (tiro > 0.1f && tiro < 1.8f) {                                   // el confeti revienta donde está el copiloto
+    const float t2 = tiro - 0.1f, al = 1 - tramo(t2, 1.1f, 1.7f), bx = W - 30, by = py + sinf(ang) * (W - 30 - px);
+    for (int i = 0; i < 30; i++) {
+      const float an = PI * (0.55f + 0.9f * hash(i, 1)), v = 120 + 260 * hash(i, 2);   // sale hacia atrás y hacia arriba
+      Marco p2 = marco(bx + cosf(an) * v * t2, by + sinf(an) * v * t2 * 0.9f - 120 * t2 + 260 * t2 * t2, t2 * 10 * (hash(i, 3) - 0.5f) + i, 1.2f);
       pieza(p2, -7, -5, 7, 5, solido(COLORES[i % 5], al), [](float a, float b) { return dCaja(a, b, 0, 0, 6, 3.5f, 1); });
     }
+    const float fl = 1 - tramo(t2, 0, 0.3f);
+    if (fl > 0.01f) chispa(bx, by, 30 * fl + 10, fl, Col{255, 240, 160});
   }
-  if (tiro > 0.3f) confeti(tiro - 0.3f, tramo(tiro, 0.3f, 0.6f) * (1 - tramo(k, 4.8f, 5.5f)));   // y llueve confeti
+  if (tiro > 0.4f) confeti(tiro - 0.4f, tramo(tiro, 0.4f, 0.7f) * (1 - tramo(k, 4.8f, 5.5f)));   // y llueve confeti
 }
 
 // ---------------------------------------------------------------- kamehameha: carga la bola entre las manos y te la lanza
@@ -1546,6 +1565,7 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       float k = pumK(u), malo = tramo(u, 0, 0.4f) * (k < 3 ? 1 : 1 - tramo(k, 3.0f, 3.2f));   // ¡pum! y se muere de la risa
       float risa = k < 0 ? 0 : tramo(k, 3.05f, 3.3f) * (1 - tramo(k, 5.2f, 5.6f));
       tapas(r, 0.4f * malo); r.L.incl = r.R.incl = 0.22f * malo;
+      mirar(r, 0.75f * malo, 0.1f * malo);                            // mira al copiloto, a quien le apunta
       mover(r, 3 * sinf(u * 2.3f) * malo, -14 * malo);
       if (k > 3.0f && k < 3.15f) escalar(r, 1.08f, 0.9f);           // el culatazo
       feliz(r, risa); mover(r, 0, 7 * sinf(u * 40) * risa);

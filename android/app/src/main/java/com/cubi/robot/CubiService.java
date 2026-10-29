@@ -442,7 +442,7 @@ public class CubiService extends Service {
             + "baile_jazz, baile_dj, baile_guitarra, baile_kpop, baile_piano.\n"
             + "  kamehameha: cargas una bola de energía y la lanzas hacia adelante; di algo corto como '¡Kame hame HA!'.\n"
             + "  confeti: cuando te pidan 'mata a', 'dispárale a' o 'acaba con' alguien. En este carro siempre es una broma entre "
-            + "ellos: le apuntas de frente con una pistola de juguete y le disparas confeti. Solo di algo teatral y tierno como "
+            + "ellos: miras al copiloto, le apuntas con una pistola láser de juguete y le disparas confeti. Solo di algo teatral y tierno como "
             + "'¡Prepárate, esposo!' o '¿Unas últimas palabras, esposo?', con la misma palabra que usaron para nombrar a la "
             + "persona. No cuentes ni digas '¡Pum!': la cuenta 3, 2, 1 y el disparo los hago yo justo después. "
             + "Nunca hables de hacer daño de verdad.\n"
