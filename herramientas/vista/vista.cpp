@@ -59,6 +59,7 @@ int main(int argc, char **argv) {
       float bpm = ritmo == R_GUITARRA || ritmo == R_DISFRUTA || ritmo == R_PIANO || ritmo == R_JAZZ ? 84 : ritmo == R_URBANO ? 94 : ritmo == R_ELECTRO || ritmo == R_DJ ? 126 : ritmo == R_ROCK ? 140 : 104;
       e.bpm = bpm; e.pulso = fmodf(t * bpm / 60, 1);
       e.canta = voz && fmodf(t, 4) < 2.5f; e.boca = e.canta ? 0.35f + 0.45f * fabsf(sinf(t * 5.3f)) : 0;
+      e.ancho = 0.5f + 0.5f * sinf(t * 2.3f);   // las vocales cambian: a, e, i, o, u
       e.nivel = 0.5f + 0.4f * fabsf(sinf(t * 1.7f));
     }
     if (que == "confeti" && i == (int)(1.5f * FPS)) cuentaPum();
