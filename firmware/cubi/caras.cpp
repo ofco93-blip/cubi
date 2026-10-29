@@ -612,44 +612,111 @@ static void piano(float y, int n, float g) {
 // ---------------------------------------------------------------- caras de fondo
 static float pulsosVistos = 0, ultimoPulso = 1;
 
-// ---------------------------------------------------------------- Robot minimalista: bailan solo los ojos
-// (nada de gorras, manitos ni instrumentos, ni boca); cada ritmo lleva un detalle blanco y simple.
+// ---------------------------------------------------------------- Robot minimalista: los bailes son de los ojos
+// Sin gorras, manitos, instrumentos ni boca: los ojos bailan y se TRANSFORMAN (gafas, medidores, vinilos, estrellas,
+// corazón, barras...). Para transformarlos, bailaMini esconde los ojos (alfa 0) y extrasMini dibuja la figura en su
+// lugar; como alfa se suaviza, el cambio se ve como una mezcla y no como un salto.
 static void bailaMini(Rostro &r, const Entradas &e, int n, float g, float k, float vaiven, float bl) {
   float f = n + e.pulso;
   switch (e.ritmo) {
-    case R_URBANO: tapas(r, 0.45f); mover(r, 0, 4 + 18 * g); escalar(r, 1, 1 - 0.08f * g); return;   // cabeceo con visera
-    case R_ELECTRO: {                                                                                    // salta
+    case R_URBANO:                                      // gafas oscuras: cabecea duro y se ladea despacio
+      mover(r, 12 * sinf(f * PI * 0.5f), 6 + 24 * g);
+      r.L.alfa = r.R.alfa = 0;
+      return;
+    case R_ELECTRO: {                                   // los ojos son medidores de volumen y saltan
       float s = 1 - (2 * e.pulso - 1) * (2 * e.pulso - 1);
-      mover(r, 0, 10 - 34 * s);
-      if (e.pulso < 0.12f) escalar(r, 1.15f, 0.8f);
-      if (s > 0.5f) feliz(r, 1); else tapas(r, bl);
+      mover(r, 0, 14 - 40 * s);
+      if (e.pulso < 0.12f) escalar(r, 1.12f, 0.84f);
+      r.L.alfa = r.R.alfa = 0;
       return;
     }
-    case R_TROPICAL: feliz(r, 1); mover(r, 34 * vaiven, -6 * g); r.L.incl = r.R.incl = 0.12f * vaiven; return;   // cadera
-    case R_KPOP: {                                                                                       // guiña a cada lado
-      float v = cosf(f * PI * 0.5f);
-      mover(r, 12 * sinf(f * PI * 0.5f), -8 * g);
-      if (v > 0.3f) r.L.feliz = 1; else if (v < -0.3f) r.R.feliz = 1;
+    case R_TROPICAL:                                    // ^^ de cadera: van y vienen como una ola, uno detrás del otro
+      feliz(r, 1);
+      mover(r, 36 * vaiven, -6 * g + 10 * fabsf(vaiven));
+      r.L.y += 12 * cosf(f * PI); r.R.y -= 12 * cosf(f * PI);
+      r.L.incl = r.R.incl = 0.15f * vaiven;
+      return;
+    case R_KPOP: {                                      // guiño, corazón, guiño, corazón (uno en cada ojo)
+      int p = n % 4;
+      mover(r, 14 * sinf(f * PI * 0.5f), -10 * g); escalar(r, 1 + 0.06f * g, 1 - 0.08f * g);
+      if (p == 0) r.L.feliz = 1; else if (p == 1) r.R.alfa = 0; else if (p == 2) r.R.feliz = 1; else r.L.alfa = 0;
       return;
     }
-    case R_CORAZON: r.corazon = 1; escalar(r, 1 + 0.15f * g, 1 + 0.15f * g); mover(r, 10 * sinf(f * PI * 0.5f), -4 * g); return;
-    case R_GROOVE: {                                                                                     // mira a un lado por golpe
-      float lado = (n % 2) ? -1 : 1, m = suave(fminf(1, e.pulso * 4));
-      mirar(r, 0.5f * lado * (2 * m - 1), 0); tapas(r, 0.4f); mover(r, 0, 6 * g);
+    case R_CORAZON: {                                   // ojitos de corazón que se juntan en uno grande y se vuelven a separar
+      float c = fmodf(f, 8) / 8, junta = tramo(c, 0.05f, 0.3f) * (1 - tramo(c, 0.75f, 0.95f));
+      r.corazon = 1;
+      float dx = (r.R.x - r.L.x) / 2 * junta;
+      r.L.x += dx; r.R.x -= dx;
+      r.L.alfa = r.R.alfa = 1 - tramo(junta, 0.6f, 0.95f);
+      escalar(r, 1 + 0.12f * g, 1 + 0.12f * g); mover(r, 0, -6 * g);
       return;
     }
-    case R_DISFRUTA: case R_GUITARRA: case R_PIANO:                                                      // ojitos felices que se mecen
-      feliz(r, 1); mirar(r, 0.35f * sinf(f * PI * 0.25f), 0); mover(r, 0, -6 * k);
+    case R_GROOVE: {                                    // "moonwalk": se desliza despacio y vuelve de un tirón
+      float c = fmodf(f, 2) / 2, x = c < 0.9f ? -46 + 92 * c / 0.9f : 46 - 92 * (c - 0.9f) / 0.1f;
+      mover(r, x, 6 * g); tapas(r, 0.42f); r.L.incl = r.R.incl = -0.1f;
       return;
-    case R_ROCK: tapas(r, 0.3f); r.L.incl = r.R.incl = 0.14f; mover(r, 0, 14 - 34 * k); escalar(r, 1.05f, 1 - 0.2f * k); return;
-    case R_JAZZ: tapas(r, 0.4f); mover(r, 22 * vaiven, 0); r.L.incl = r.R.incl = -0.06f * vaiven; return;
-    case R_DJ: mover(r, 0, 4 + 14 * g); if (g > 0.5f) feliz(r, 1); else tapas(r, bl); return;
-    case R_BARRAS: mover(r, 0, -34 - 8 * e.nivel); escalar(r, 1, 1 - 0.1f * g); tapas(r, bl); return;
-    default:                                                                                             // pop: rebota
-      mover(r, 0, -16 * k); escalar(r, 1 + 0.06f * k, 1 - 0.1f * k); mirar(r, 0.3f * ((n % 4 < 2) ? -1 : 1), 0);
-      if (n % 8 >= 6) feliz(r, 0.85f); else tapas(r, bl);
+    }
+    case R_DISFRUTA:                                    // soñando: cada ojo flota a su ritmo
+      feliz(r, 1); mirar(r, 0.35f * sinf(f * PI * 0.25f), 0);
+      r.L.y += 9 * sinf(f * PI * 0.5f); r.R.y += 9 * sinf(f * PI * 0.5f + 1.2f);
+      mover(r, 0, -6 * k);
       return;
+    case R_GUITARRA: {                                  // rasguea dos veces por golpe: los ojos se aplastan con cada uno
+      float rasga = expf(-fmodf(e.pulso * 2, 1.f) * 6);
+      feliz(r, 1); escalar(r, 1 + 0.08f * rasga, 1 - 0.12f * rasga);
+      mirar(r, 0.3f * sinf(f * PI * 0.25f), 0); mover(r, 0, -12);
+      return;
+    }
+    case R_PIANO: {                                     // cada ojo "toca" una tecla: uno baja en cada golpe
+      feliz(r, 1);
+      Ojo &o = n % 2 ? r.R : r.L;
+      o.y += 16 * g;
+      mover(r, 14 * sinf(f * PI * 0.25f), -26);
+      return;
+    }
+    case R_ROCK:                                        // cabeceo bravo; en el golpe los ojos se vuelven > <
+      tapas(r, 0.3f); r.L.incl = r.R.incl = 0.2f;
+      mover(r, 0, -10 + 34 * g); escalar(r, 1.05f, 1 - 0.22f * g);
+      if (g > 0.55f) r.L.alfa = r.R.alfa = 0;
+      return;
+    case R_JAZZ:                                        // entrecerrados, se mece lento, sube una ceja y a veces guiña
+      tapas(r, 0.42f); mover(r, 22 * vaiven, 0); r.L.incl = r.R.incl = -0.06f * vaiven;
+      if (n % 8 == 4) r.R.feliz = 1;
+      return;
+    case R_DJ:                                          // los ojos son dos vinilos
+      mover(r, 0, 2 + 16 * g);
+      r.L.alfa = r.R.alfa = 0;
+      return;
+    case R_BARRAS:                                      // cada ojo se parte en tres barritas que bailan
+      mover(r, 0, -30);
+      r.L.alfa = r.R.alfa = 0;
+      return;
+    default: {                                          // pop: saltan por turnos; cada 8 golpes se vuelven estrellas
+      Ojo &o = n % 2 ? r.R : r.L;
+      float s = campana(e.pulso, 0, 0.6f);
+      o.y -= 34 * s; o.h *= 1 + 0.12f * s; o.w *= 1 - 0.1f * s;
+      escalar(r, 1 + 0.06f * g, 1 - 0.1f * g); mirar(r, 0.25f * sinf(f * PI * 0.5f), 0);
+      if (n % 8 == 7) r.L.alfa = r.R.alfa = 0; else tapas(r, bl);
+      return;
+    }
   }
+}
+
+// estrella de 5 puntas (de Inigo Quilez), apuntando hacia arriba
+static float dEstrella(float px, float py, float cx, float cy, float r, float giro) {
+  float x = px - cx, y = cy - py, c = cosf(giro), s = sinf(giro);
+  float qx = fabsf(x * c - y * s), qy = x * s + y * c;
+  const float k1x = 0.809017f, k1y = -0.587785f;
+  float d = fmaxf(k1x * qx + k1y * qy, 0.f); qx -= 2 * d * k1x; qy -= 2 * d * k1y;
+  d = fmaxf(-k1x * qx + k1y * qy, 0.f); qx += 2 * d * k1x; qy -= 2 * d * k1y;
+  qx = fabsf(qx); qy -= r;
+  const float bax = 0.45f * 0.587785f, bay = 0.45f * 0.809017f - 1;
+  float h = lim((qx * bax + qy * bay) / (bax * bax + bay * bay), 0, r);
+  float ex = qx - bax * h, ey = qy - bay * h;
+  return sqrtf(ex * ex + ey * ey) * (qy * bax - qx * bay > 0 ? 1.f : -1.f);
+}
+static void estrella(float x, float y, float R, float giro, float alfa) {
+  figura(x - R - 2, y - R - 2, x + R + 2, y + R + 2, solido(BL, alfa, 10), [=](float px, float py) { return dEstrella(px, py, x, y, R, giro); });
 }
 static void anillo(float x, float y, float R, float grosor, float alfa) {
   figura(x - R - grosor, y - R - grosor, x + R + grosor, y + R + grosor, solido(BL, alfa, 6),
@@ -661,60 +728,146 @@ static void puntitos(float u, float vel, float alfa) {   // puntitos que suben a
     circulo(CX + lado * (175 + 8 * sinf(q * 7 + i)), H - 40 - 230 * q, 5 + 3 * (i / 2), BL, alfa * campana(q, 0, 1), 8);
   }
 }
+static void ecualizador(float u, const Entradas &e, float g, int N, float sep, float alto) {
+  for (int i = 0; i < N; i++) {
+    float x = CX + (i - (N - 1) / 2.f) * sep, a = 0.45f + 0.55f * fabsf(sinf(u * (2.6f + 0.37f * i) + i * 1.7f));
+    float h = 8 + alto * lim(e.nivel * 1.4f, 0.15f, 1) * a * (0.65f + 0.35f * g);
+    figura(x - 6, H - 12 - h, x + 6, H - 10, solido(BL, 0.9f, 6), [=](float px, float py) { return dCaja(px, py, x, H - 11 - h / 2, 5, h / 2 + 1, 5); });
+  }
+}
+
 static void extrasMini(float u, const Entradas &e) {
   int n = (int)pulsosVistos;
-  float g = expf(-e.pulso * 6), f = n + e.pulso;
+  float g = expf(-e.pulso * 6), f = n + e.pulso, vaiven = sinf(f * PI);
   const Ojo &oL = ahora.L, &oR = ahora.R;
   switch (e.ritmo) {
-    case R_URBANO: {                                    // visera: una raya encima de los ojos
-      float y = fminf(oL.y - oL.h / 2, oR.y - oR.h / 2) - 22;
-      linea(oL.x - oL.w / 2 - 14, y + 6, oR.x + oR.w / 2 + 44, y - 4, 5, BL, 0.9f, 6);
+    case R_URBANO: {                                    // gafas oscuras con un brillo que las cruza
+      float a = 1 - oL.alfa, c8 = fmodf(f, 8), baja = tramo(c8, 6, 6.4f) * (1 - tramo(c8, 7.6f, 8));
+      float y = (oL.y + oR.y) / 2 - 6 + 34 * baja, hh = 30, hw = oL.w * 0.72f + 6;
+      if (baja > 0.05f) for (int s = -1; s <= 1; s += 2) {   // se bajan las gafas y se asoman los ojitos por encima
+        float x = s < 0 ? oL.x : oR.x, yo = y - hh - 18;
+        figura(x - 16, yo - 20, x + 16, yo + 20, solido(BL, a * baja, 8), [=](float px, float py) { return dCaja(px, py, x, yo, 14, 18, 14); });
+      }
+      for (int s = -1; s <= 1; s += 2) {
+        float x = s < 0 ? oL.x : oR.x;
+        figura(x - hw - 2, y - hh - 2, x + hw + 2, y + hh + 2, solido(BL, a, 8), [=](float px, float py) { return dCaja(px, py, x, y, hw, hh, hh * 0.6f); });
+        float gp = fmodf(f / 4, 1.f) * 1.6f - 0.3f;   // el brillo cruza cada 4 golpes
+        if (gp > 0 && gp < 1) {
+          float gx = x - hw + 2 * hw * gp;
+          figura(gx - 24, y - hh, gx + 24, y + hh, solido(NEG, a * 0.85f), [=](float px, float py) {
+            return fmaxf(dCaja(px, py, x, y, hw - 3, hh - 3, hh * 0.5f), fabsf((px - gx) + (py - y) * 0.5f) - 4);
+          });
+        }
+      }
+      linea(oL.x + hw - 4, y - hh * 0.45f, oR.x - hw + 4, y - hh * 0.45f, 4, BL, a);   // puente
       break;
     }
-    case R_ELECTRO: case R_BARRAS: {                    // ecualizador
-      bool barras = e.ritmo == R_BARRAS;
-      int N = barras ? 11 : 15; float sep = barras ? 36 : 26, alto = barras ? 90 : 56;
+    case R_ELECTRO: {                                   // ojos-medidor: se prenden por cuadritos con el volumen
+      float a = 1 - oL.alfa;
+      for (int s = -1; s <= 1; s += 2) {
+        const Ojo &o = s < 0 ? oL : oR;
+        float nivel = lim(0.2f + e.nivel * 1.1f * (0.55f + 0.45f * g) + 0.18f * sinf(u * 9 + s * 1.3f), 0, 1);
+        int prende = 1 + int(nivel * 4.99f);
+        float segH = o.h / 5;
+        for (int i = 0; i < 5; i++) {
+          float y = o.y + o.h / 2 - segH * (i + 0.5f);
+          bool on = i < prende;
+          figura(o.x - o.w / 2, y - segH / 2, o.x + o.w / 2, y + segH / 2, solido(BL, a * (on ? 1 : 0.15f), on ? 8 : 0),
+                 [=](float px, float py) { return dCaja(px, py, o.x, y, o.w / 2, segH / 2 - 4, 6); });
+        }
+      }
+      anillo(CX, (oL.y + oR.y) / 2, 150 + 80 * (1 - g), 2, 0.5f * g * a);
+      ecualizador(u, e, g, 15, 26, 46);
+      break;
+    }
+    case R_TROPICAL: {                                  // maracas a los lados: se sacuden en el 2 y el 4 y sueltan bolitas
+      bool sacude = n % 2 == 1;
+      for (int s = -1; s <= 1; s += 2) {
+        float sh = sacude ? g : 0.25f * g, x = CX + s * 172 + 6 * vaiven, y = EY + 70;
+        float ang = s * 0.35f + 0.5f * sh * sinf(u * 40), hx = x + sinf(ang) * 38, hy = y - cosf(ang) * 38;
+        linea(x, y, hx, hy, 4, BL, 0.95f);
+        circulo(hx, hy, 15, BL, 0.95f, 8);
+        if (sacude && g > 0.35f) for (int j = 0; j < 3; j++) {
+          float aa = ang + (j - 1) * 0.55f, d = 26 + 22 * (1 - g);
+          circulo(hx + sinf(aa) * d, hy - cosf(aa) * d, 3, BL, g);
+        }
+      }
+      break;
+    }
+    case R_KPOP: {                                      // un ojo se vuelve corazón; el que guiña suelta destellos
+      int p = n % 4;
+      if (p == 1 || p == 3) { const Ojo &o = p == 1 ? oR : oL; corazonito(o.x, o.y, 34 * (0.9f + 0.25f * g), 1 - o.alfa); }
+      else {
+        const Ojo &w = p == 0 ? oL : oR; float s = p == 0 ? -1 : 1;
+        chispa(w.x + s * (w.w / 2 + 26), w.y - w.h / 2, 10 + 12 * g, 0.4f + 0.6f * g, BL);
+        chispa(w.x + s * (w.w / 2 + 48), w.y - w.h / 2 + 32, 6 + 6 * g, 0.3f + 0.5f * g, BL);
+      }
+      break;
+    }
+    case R_CORAZON: {                                   // el corazón grande late y suelta anillos; suben corazoncitos
+      float a = 1 - oL.alfa, y = (oL.y + oR.y) / 2;
+      if (a > 0.02f) { corazonito(CX, y, 62 * (1 + 0.18f * g), a); anillo(CX, y, 90 + 70 * (1 - g), 2.5f, 0.6f * g * a); }
+      for (int i = 0; i < 3; i++) {
+        float q = fmodf(u * 0.3f + i / 3.f, 1.f);
+        corazonito(CX + (i - 1) * 160 + 10 * sinf(q * 6 + i), H - 30 - 220 * q, 10, 0.7f * campana(q, 0, 1));
+      }
+      break;
+    }
+    case R_GROOVE: {                                    // dos "fantasmas" de los ojos se quedan atrás en el deslizamiento
+      float c = fmodf(f, 2) / 2, al = c < 0.88f ? 1 : 0;
+      for (int k2 = 1; k2 <= 2; k2++) for (int s = -1; s <= 1; s += 2) {
+        const Ojo &o = s < 0 ? oL : oR;
+        float x = o.x - 24 * k2, y0 = o.y - o.h / 2 + o.tapa * o.h, rad = fminf(o.w, o.h) * 0.5f;
+        figura(x - o.w / 2, y0, x + o.w / 2, o.y + o.h / 2, solido(BL, al * 0.28f / k2), [=](float px, float py) {
+          return fmaxf(dCaja(px, py, x, o.y, o.w / 2, o.h / 2, rad), y0 - py);
+        });
+      }
+      if (e.pulso < 0.2f) chispa(oR.x + oR.w / 2 + 40, oR.y - 50, 8 + 14 * g, g, BL);   // chasquido
+      break;
+    }
+    case R_GUITARRA: {                                  // la cuerda vibra con cada rasgueo y suelta ondas
+      float rasga = expf(-fmodf(e.pulso * 2, 1.f) * 6), y = H - 46, amp = 16 * rasga;
+      const int N = 24;
       for (int i = 0; i < N; i++) {
-        float x = CX + (i - (N - 1) / 2.f) * sep, a = 0.45f + 0.55f * fabsf(sinf(u * (2.6f + 0.37f * i) + i * 1.7f));
-        float h = 8 + alto * lim(e.nivel * 1.4f, 0.15f, 1) * a * (0.65f + 0.35f * g);
-        figura(x - 6, H - 12 - h, x + 6, H - 10, solido(BL, 0.9f, 6), [=](float px, float py) { return dCaja(px, py, x, H - 11 - h / 2, 5, h / 2 + 1, 5); });
+        float x0 = 40 + i * (W - 80.f) / N, x1 = x0 + (W - 80.f) / N, e0 = sinf(PI * i / N), e1 = sinf(PI * (i + 1) / N);
+        linea(x0, y + amp * e0 * sinf(u * 40 + i), x1, y + amp * e1 * sinf(u * 40 + i + 1), 2.5f, BL, 0.85f);
+      }
+      for (int j = 0; j < 2; j++) {
+        float p = fmodf(e.pulso * 2 + j * 0.5f, 1.f), R = 20 + 70 * p;
+        figura(CX - R - 3, y - R - 3, CX + R + 3, y, solido(BL, 0.5f * (1 - p)), [=](float px, float py) {
+          return fmaxf(fabsf(dCirculo(px, py, CX, y, R)) - 2.5f, py - y + 8);
+        });
       }
       break;
     }
-    case R_TROPICAL:                                    // maracas: bolita con palito que se sacude
-      for (int lado = -1; lado <= 1; lado += 2) {
-        float s2 = lado * sinf(f * PI), x = CX + lado * 165, y = H - 80 - 14 * s2;
-        circulo(x, y, 14, BL, 0.9f, 8); linea(x, y + 12, x - lado * 6, y + 46, 3, BL, 0.9f);
+    case R_DISFRUTA:                                    // burbujas que le dan la vuelta a la cabeza (adelante y atrás)
+      for (int i = 0; i < 3; i++) {
+        float a = u * 0.8f + i * 2.094f, prof = 0.5f + 0.5f * sinf(a);
+        circulo(CX + cosf(a) * 190, EY - 10 + sinf(a) * 40, 4 + 5 * prof, BL, 0.35f + 0.55f * prof, 8);
       }
+      puntitos(u, 0.3f, 0.7f);
       break;
-    case R_KPOP:                                        // destellos al guiñar
-      for (int lado = -1; lado <= 1; lado += 2) {
-        const Ojo &o = lado > 0 ? oR : oL;
-        chispa(o.x + lado * (o.w / 2 + 30), o.y - o.h / 2 - 10, 8 + 10 * g, 0.4f + 0.6f * g, BL);
+    case R_ROCK: {                                      // > < en el golpe, rayos y rayitas de velocidad al bajar la cabeza
+      float a = 1 - oL.alfa;
+      if (a > 0.02f) for (int s = -1; s <= 1; s += 2) {
+        const Ojo &o = s < 0 ? oL : oR;
+        float d = s < 0 ? 1 : -1, w2 = 30, h2 = 36;
+        linea(o.x - d * w2, o.y - h2, o.x + d * w2, o.y, 9, BL, a, 8);
+        linea(o.x + d * w2, o.y, o.x - d * w2, o.y + h2, 9, BL, a, 8);
       }
-      break;
-    case R_CORAZON: anillo(CX, EY, 130 + 60 * (1 - g), 2.5f, 0.6f * g); break;   // latido
-    case R_GROOVE: {                                    // anillo que sale del lado al que mira
-      float lado = (n % 2) ? -1 : 1;
-      anillo(CX + lado * 170, EY, 12 + 50 * (1 - g), 2.5f, 0.8f * g);
+      for (int s = -1; s <= 1; s += 2) {
+        float x = CX + s * 185, y = EY - 70;
+        linea(x, y, x - s * 16, y + 40, 4, BL, g, 8); linea(x - s * 16, y + 40, x + s * 10, y + 46, 4, BL, g, 8);
+        linea(x + s * 10, y + 46, x - s * 8, y + 96, 4, BL, g, 8);
+      }
+      float y0 = fminf(oL.y - oL.h / 2, oR.y - oR.h / 2) - 60;
+      for (int i = 0; i < 3; i++) linea(CX + (i - 1) * 60, y0 - 10 * (i % 2), CX + (i - 1) * 60, y0 + 28, 3, BL, 0.6f * g);
       break;
     }
-    case R_GUITARRA: {                                  // una cuerda que vibra con cada rasgueo
-      const int N = 24; float y = H - 46, amp = 14 * g;
-      for (int i = 0; i < N; i++) {
-        float x0 = 40 + i * (W - 80.f) / N, x1 = x0 + (W - 80.f) / N, env0 = sinf(PI * i / N), env1 = sinf(PI * (i + 1) / N);
-        linea(x0, y + amp * env0 * sinf(u * 40 + i), x1, y + amp * env1 * sinf(u * 40 + i + 1), 2.5f, BL, 0.85f);
-      }
-      break;
-    }
-    case R_ROCK:                                        // rayos a los lados con el golpe
-      for (int lado = -1; lado <= 1; lado += 2) {
-        float x = CX + lado * 180, y = EY - 70;
-        linea(x, y, x - lado * 16, y + 40, 4, BL, g, 8); linea(x - lado * 16, y + 40, x + lado * 10, y + 46, 4, BL, g, 8);
-        linea(x + lado * 10, y + 46, x - lado * 8, y + 96, 4, BL, g, 8);
-      }
-      break;
-    case R_JAZZ:                                        // humito que sube despacio
+    case R_JAZZ: {                                      // ceja que sube cada 4 golpes, chasquido al guiñar y humito
+      float alza = campana(fmodf(f, 4), 0, 1.2f), by = oR.y - oR.h / 2 + oR.tapa * oR.h - 16 - 22 * alza;
+      linea(oR.x - oR.w / 2, by + 6 * alza, oR.x + oR.w / 2, by - 4, 4.5f, BL, 0.9f, 6);
+      if (n % 8 == 4) chispa(oR.x + oR.w / 2 + 34, oR.y - 30, 8 + 12 * g, g, BL);
       for (int i = 0; i < 2; i++) {
         float q = fmodf(u * 0.25f + i / 2.f, 1.f), x = W - 70 - 30 * i, y0 = H - 40 - 200 * q;
         for (int s = 0; s < 6; s++) {
@@ -723,34 +876,64 @@ static void extrasMini(float u, const Entradas &e) {
         }
       }
       break;
-    case R_DJ: {                                        // audífonos (arco) y el disco que gira abajo
-      float y = (oL.y + oR.y) / 2, R = (oR.x - oL.x) / 2 + oR.w / 2 + 34;
-      figura(CX - R - 8, y - R - 8, CX + R + 8, y + 10, solido(BL, 0.9f, 6), [=](float px, float py) {
+    }
+    case R_DJ: {                                        // ojos-vinilo que giran (y rayan cada medio compás) con audífonos
+      float a = 1 - oL.alfa, Rv = oL.w * 0.62f;
+      for (int s = -1; s <= 1; s += 2) {
+        const Ojo &o = s < 0 ? oL : oR;
+        anillo(o.x, o.y, Rv, 3, a); anillo(o.x, o.y, Rv * 0.55f, 1.5f, 0.5f * a); circulo(o.x, o.y, 7, BL, a);
+        float giro = u * 5 * s + (n % 4 >= 2 ? 1.2f * sinf(f * PI * 2) : 0);
+        circulo(o.x + cosf(giro) * Rv * 0.8f, o.y + sinf(giro) * Rv * 0.8f, 6, BL, a, 6);
+        anillo(o.x, o.y, Rv + 10 + 20 * (1 - g), 1.5f, 0.5f * g * a);
+      }
+      float y = (oL.y + oR.y) / 2, R = (oR.x - oL.x) / 2 + Rv + 26;
+      figura(CX - R - 8, y - R - 8, CX + R + 8, y + 10, solido(BL, 0.9f * a, 6), [=](float px, float py) {
         return fmaxf(fabsf(dCirculo(px, py, CX, y, R)) - 4, py - y);
       });
-      for (int lado = -1; lado <= 1; lado += 2) {
-        float x = CX + lado * R;
-        figura(x - 14, y - 26, x + 14, y + 26, solido(BL, 0.9f, 6), [=](float px, float py) { return dCaja(px, py, x, y, 12, 24 + 4 * g, 10); });
+      for (int s = -1; s <= 1; s += 2) {
+        float x = CX + s * R;
+        figura(x - 14, y - 30, x + 14, y + 30, solido(BL, 0.9f * a, 6), [=](float px, float py) { return dCaja(px, py, x, y, 12, 24 + 4 * g, 10); });
       }
-      float a = u * 5;
-      anillo(CX, H - 44, 30, 2.5f, 0.8f);
-      circulo(CX + cosf(a) * 22, H - 44 + sinf(a) * 22, 4, BL, 0.9f);
       break;
     }
-    case R_PIANO: {                                     // teclitas: la del golpe se prende
+    case R_PIANO: {                                     // teclas que tocan una melodía; de la que suena sale un puntito
+      static const uint8_t MEL[8] = {0, 2, 4, 5, 4, 2, 1, 3};
       const int N = 9;
-      int t = (n * 3) % N;
+      int t = MEL[n % 8] + ((n / 8) % 2) * 3;
       for (int i = 0; i < N; i++) {
-        float x = CX + (i - 4) * 34, y = H - 40;
-        float a = i == t ? 0.4f + 0.6f * g : 0.3f;
+        float x = CX + (i - 4) * 34, y = H - 40, a = i == t ? 0.4f + 0.6f * g : 0.3f;
         figura(x - 15, y - 26, x + 15, y + 26, solido(BL, a, i == t ? 8 : 0), [=](float px, float py) { return dCaja(px, py, x, y, 13, 24, 5); });
+        if (i == t) circulo(x, y - 40 - 60 * (1 - g), 4, BL, g, 6);
       }
       break;
     }
-    case R_DISFRUTA: puntitos(u, 0.3f, 0.8f); break;
-    default: puntitos(u, 0.35f, 0.9f); break;           // pop
+    case R_BARRAS: {                                    // cada ojo es un ecualizador de tres barras
+      for (int s = -1; s <= 1; s += 2) {
+        const Ojo &o = s < 0 ? oL : oR;
+        float a = 1 - o.alfa, bw = o.w * 0.24f, sep = o.w * 0.38f, yb = o.y + o.h / 2;
+        for (int j = 0; j < 3; j++) {
+          float x = o.x + (j - 1) * sep;
+          float lvl = 0.3f + 0.7f * lim(e.nivel * 1.3f, 0.2f, 1) * (0.5f + 0.5f * fabsf(sinf(u * (3 + j * 0.7f + s) + j * 2))) * (0.7f + 0.3f * g);
+          float h = o.h * lvl;
+          figura(x - bw / 2 - 1, yb - h, x + bw / 2 + 1, yb, solido(BL, a, 8), [=](float px, float py) { return dCaja(px, py, x, yb - h / 2, bw / 2, h / 2, bw / 2); });
+        }
+      }
+      ecualizador(u, e, g, 11, 36, 70);
+      break;
+    }
+    default: {                                          // pop: estrellas que giran; polvito al caer; puntitos que suben
+      float a = 1 - oL.alfa;
+      if (a > 0.02f) for (int s = -1; s <= 1; s += 2) { const Ojo &o = s < 0 ? oL : oR; estrella(o.x, o.y, 44 * (0.85f + 0.3f * g), u * 2.5f * s, a); }
+      if (g > 0.3f) {
+        const Ojo &o = n % 2 ? oL : oR;   // el que acaba de caer
+        for (int i = 0; i < 3; i++) circulo(o.x + (i - 1) * 20, o.y + o.h / 2 + 14 + 10 * (1 - g), 3, BL, g * 0.8f);
+      }
+      puntitos(u, 0.35f, 0.6f);
+      break;
+    }
   }
 }
+
 static Rostro deBase(float t, const Entradas &e, float &vel) {
   Rostro r = neutro(AZUL);
   float lx = 0, ly = 0, bl = parpadeo(t);
