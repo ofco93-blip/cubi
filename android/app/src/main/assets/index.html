@@ -134,6 +134,7 @@ section[hidden] { display: none; }
   </div>
   <h2>Bailes</h2>
   <div class="grid2" id="bailes"></div>
+  <p class="note" id="cps"></p>
   <h2>Ajustar el canto</h2>
   <div class="card">
     <div class="row"><span>Reaccionar a la música</span><label class="sw"><input type="checkbox" id="mus"><i></i></label></div>
@@ -258,6 +259,7 @@ function pintarEstado(j) {
   document.querySelectorAll('.face').forEach(b => b.classList.toggle('sel', b.dataset.n === j.emo));
   $('conn').textContent = 'Conectado por Bluetooth' + (j.bat >= 0 ? ' · batería ' + j.bat + '%' : '');
   if (j.fw !== undefined) { vFw = j.fw; notaVersiones(); }
+  if (j.cps) $('cps').textContent = 'Ahora Cubi dibuja a ' + j.cps + ' cuadros por segundo (lo normal es 15 o más)';
   $('info').textContent = 'Cubi v' + j.ver + (j.carga ? ' · cargando' : j.usb ? ' · conectado al USB' : ' · con batería');
   if (ini) {
     ini = false;

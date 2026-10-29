@@ -1,3 +1,5 @@
+// el dibujo es casi todo cuentas con decimales: más rápido que el -Os de Arduino
+#pragma GCC optimize("O3", "fast-math")
 #include "caras.h"
 
 namespace caras {

@@ -10,7 +10,13 @@ using namespace caras;
 static int medir() {
   static uint16_t mem[dib::RW * dib::RH];
   dib::fb = mem; dib::giro = 0;
-  iniciar(7); base(CANTA);
+  iniciar(7);
+  for (int b : {REPOSO, HABLA}) {
+    base((Base)b); auto t0 = std::chrono::steady_clock::now();
+    for (int i = 0; i < 100; i++) { Entradas e; e.boca = 0.5f; dib::empezar(); cuadro(i * 0.04f, 0.04f, e); dib::terminar(); }
+    printf("%s - %.0f us\n", NOMBRE_BASE[b], std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count() / 100);
+  }
+  base(CANTA);
   for (int r = 0; r < N_RITMO; r++) for (int voz = 1; voz >= 0; voz--) {
     auto t0 = std::chrono::steady_clock::now();
     const int N = 100;

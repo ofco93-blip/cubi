@@ -25,7 +25,7 @@ jobs:
             ./vista_pc medir > medir.txt
           ) > log.txt 2>&1 || { grep -v "^+" log.txt | grep -m 12 . | tail -12 | while read -r l; do echo "::error::$l"; done; exit 1; }
       - name: Tiempos por baile
-        run: sort -t' ' -k3 -n -r medir.txt | head -30 | while read -r l; do echo "::notice::$l"; done
+        run: echo "::notice::$(sort -t' ' -k3 -n -r medir.txt | tr '\n' ';')"
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: vista
