@@ -167,11 +167,12 @@ ArduinoFFT<float> FFT(vR, vI, NF, SR);
 volatile uint8_t estilo = NADA;
 volatile uint32_t beatCnt = 0, hiCnt = 0;
 volatile bool aCanta = false;
-volatile float aNivel = 0, aVoz = 0, aBoca = 0, aAncho = 0.5f, aBajoP = 0, aBpm = 0, aReg = 0, aBajo = 0, aMedio = 0, aAgudo = 0, aRms = 0, aPiso = 0;
+volatile float aNivel = 0, aVoz = 0, aBoca = 0, aBocaCruda = 0, aAncho = 0.5f, aBajoP = 0, aBpm = 0, aReg = 0, aBajo = 0, aMedio = 0, aAgudo = 0, aRms = 0, aPiso = 0;
 const char *EST_NOM[N_EST] = { "nada", "voz", "balada", "tropical", "reggaeton", "electronica", "rock" };
 
 uint8_t clasificar(float bpm, float reg, float bajo, float medio, float agudo) {
-  if (reg < 0.4f) return bajo < 0.22f && medio > 0.35f ? VOZ : BALADA;  // sin golpe claro
+  // sin golpe parejo no es música (motor, viento, aire acondicionado): antes eso contaba como balada y bailaba en reposo
+  if (reg < 0.4f) return bajo < 0.22f && medio > 0.35f ? VOZ : NADA;
   if (bpm < 84) return BALADA;
   if (bajo > BAJO_ALTO && bpm >= 118 && bpm <= 140) return ELECTRO;
   if (agudo > AGUDO_ALTO && bajo < BAJO_ALTO) return ROCK;
@@ -182,6 +183,7 @@ uint8_t clasificar(float bpm, float reg, float bajo, float medio, float agudo) {
 
 float suma(int a, int b) { float s = 0; for (int i = a; i <= b; i++) s += vR[i]; return s; }
 
+extern uint8_t asis;  // si Gemini está hablando (lo avisa el celular)
 // Voz y boca a partir de la FFT del bloque (vR ya tiene magnitudes). Corre en la tarea de audio.
 void analizarVoz(bool hay) {
   static float vMod = 0, vPrev = 0, vozS = 0, vMax = 60, vMin = 60, boca = 0, ancho = 0.5f, hAvg = 0;
@@ -197,22 +199,37 @@ void analizarVoz(bool hay) {
   vMod += (fabsf(db - vPrev) - vMod) * 0.15f; vPrev = db;  // sube y baja como sílabas
   float fracN = constrain((frac - 0.30f) / 0.40f, 0.f, 1.f), tonN = constrain((0.62f - plano) / 0.32f, 0.f, 1.f);
   float modN = constrain((vMod - 0.6f) / 2.4f, 0.f, 1.f);
-  vozS += ((hay ? (0.5f * fracN + 0.5f * tonN) * modN : 0) - vozS) * 0.12f;  // ~250 ms
-  if (!canta && vozS > umbralVoz) { if (++sube >= 4) canta = true; } else sube = 0;  // 130 ms seguidos para arrancar
+  vozS += ((hay ? (0.5f * fracN + 0.5f * tonN) * modN : 0) - vozS) * 0.25f;  // ~120 ms
+  if (!canta && vozS > umbralVoz) { if (++sube >= 2) canta = true; } else sube = 0;  // 64 ms seguidos para arrancar
   if (canta && vozS < umbralVoz * 0.7f) canta = false;
 
-  // boca: envolvente de la banda de voz con control automático de nivel (dB)
+  // Vocal (como uLipSync, pero con formantes porque el español tiene 5 vocales claras): se busca F1 y F2 en el
+  // espectro suavizado. F1 alto = boca abierta (a), F1 bajo = cerrada (i, u). F2 alto = estirada (i, e), bajo = redonda (o, u).
+  static float abre = 0.8f;
+  if (hay && (canta || asis == HABLA)) {
+    auto suave = [](int k) { return vR[k - 2] + vR[k - 1] + vR[k] + vR[k + 1] + vR[k + 2]; };
+    int k1 = 9; float m1 = 0;
+    for (int k = 9; k <= 30; k++) { float v = suave(k); if (v > m1) { m1 = v; k1 = k; } }   // 280-940 Hz
+    int k2 = max(k1 + 8, 28); float m2 = 0;
+    for (int k = k2; k <= 80; k++) { float v = suave(k); if (v > m2) { m2 = v; k2 = k; } }  // hasta 2,5 kHz
+    float f1 = k1 * 31.25f, f2 = k2 * 31.25f;
+    abre += (constrain((f1 - 280) / 470, 0.f, 1.f) * 0.55f + 0.45f - abre) * 0.5f;
+    ancho += (constrain((f2 - 900) / 1300, 0.f, 1.f) - ancho) * 0.5f;
+  }
+
+  // boca: envolvente de la banda de voz con control automático de nivel (dB), por la vocal
   vMax = max(db, vMax - 0.02f); vMin = min(db, vMin + 0.03f);
   float o = constrain((db - vMin - 3) / max(6.f, vMax - vMin - 3), 0.f, 1.f);
-  o = min(1.f, powf(o, 1.4f) * ganBoca);
+  o = min(1.f, powf(o, 1.4f) * ganBoca) * abre;
+  static float cruda = 0;   // sin esperar a "¿es voz?": para cuando el celular ya avisó que Gemini habla
+  float tc = hay ? o : 0;
+  cruda += (tc - cruda) * (tc > cruda ? 0.85f : 0.45f);
   float t = canta ? o : 0;
-  boca += (t - boca) * (t > boca ? 0.7f : 0.35f);
-  float hz = ev > 1 ? cw / ev * 31.25f : 0;   // centro de la voz: grave = boca redonda (o/u), agudo = ancha (e/i)
-  ancho += (constrain((hz - 650) / 1300, 0.f, 1.f) - ancho) * 0.3f;
+  boca += (t - boca) * (t > boca ? 0.85f : 0.45f);
 
   hAvg += (eh - hAvg) * 0.05f;
   if (hay && eh > hAvg * 2.2f) hiCnt++;  // platillo / hi-hat: chispas
-  aVoz = vozS; aCanta = canta; aBoca = boca; aAncho = ancho;
+  aVoz = vozS; aCanta = canta; aBoca = boca; aAncho = ancho; aBocaCruda = cruda;
 }
 
 void tareaAudio(void *) {
@@ -416,7 +433,10 @@ void animar(uint32_t now) {
   if (asis) { musica = false; est = NADA; libre = true; despertar(now); }  // el asistente le gana a todo
   // solo mueve la boca con canciones, o cuando el asistente (Gemini) le está hablando a uno
   if (!libre || !(musica || asis == HABLA)) voz = false;
-  if (asis == HABLA && !voz) {  // si el micrófono no alcanza a oír a Gemini, habla igual (sílabas inventadas)
+  static uint32_t oyeGemini = 0;  // Gemini habla: la boca sigue lo que oye el micrófono, sin esperar a confirmar que es voz
+  if (asis == HABLA && aBocaCruda > 0.08f) oyeGemini = now + 1500;
+  if (asis == HABLA && now < oyeGemini) { voz = true; bIn = aBocaCruda; }
+  else if (asis == HABLA) {  // si el micrófono no alcanza a oír a Gemini (audífonos), habla igual (sílabas inventadas)
     float t = (now - asisT0) / 1000.f;
     voz = true; bIn = constrain((0.5f * sinf(t * 9.3f) + 0.3f * sinf(t * 3.7f) + 0.3f) * ganBoca / GANANCIA_BOCA, 0.f, 1.f); aIn = 0.5f + 0.4f * sinf(t * 1.7f);
   }
@@ -612,7 +632,7 @@ void pintar(uint32_t now) {
   else if (emoBase == SUENO) b = caras::DUERME;
   caras::base(b);
   caras::Entradas en;
-  en.boca = bocaV; en.canta = cantando; en.nivel = aNivel;
+  en.boca = bocaV; en.ancho = anchoV; en.canta = cantando; en.nivel = aNivel;
   if (b == caras::CANTA) {
     float bpm = now < demoHasta ? 126 : aBpm > 60 ? aBpm : 110;
     en.bpm = bpm; en.pulso = fmodf((now - tGolpe) * bpm / 60000.f, 1.f); en.ritmo = elegirRitmo(now);

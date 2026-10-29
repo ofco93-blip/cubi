@@ -25,6 +25,7 @@ struct Entradas {
   uint8_t ritmo = R_POP;
   bool canta = true;    // el artista está cantando (si no, la boca se cierra y solo baila)
   float nivel = 0;      // 0..1: qué tan fuerte suena (las barritas)
+  float ancho = 0.5f;   // 0 = boca redonda (o, u) .. 1 = estirada (i, e)
 };
 
 void iniciar(uint32_t semilla);

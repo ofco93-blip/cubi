@@ -600,13 +600,16 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
   vel = 7;
   switch (laBase) {
     case REPOSO:
-      mirada(t, lx, ly); mirar(r, lx, ly); tapas(r, fmaxf(bl, 0.38f));   // Cubi: en reposo, medio dormido
+      // Cubi: en reposo con ojitos de sueño que respiran, y la cara se pasea despacio (que no se queme el OLED)
+      mirada(t, lx, ly); mirar(r, 0.5f * lx, 0.5f * ly); tapas(r, fmaxf(bl, 0.58f + 0.06f * sinf(t * 0.8f)));
+      mover(r, 26 * sinf(t * 0.051f), 14 * sinf(t * 0.033f + 1));
+      vel = 3;
       break;
     case ESCUCHA:
       escalar(r, 1.08f, 1.08f); r.L.y -= 6; r.R.y += 6; mirar(r, 0.25f, -0.1f); tapas(r, bl * 0.9f);
       break;
     case HABLA:
-      r.boca = e.boca; mover(r, 0, -5 * e.boca); tapas(r, bl);
+      r.boca = e.boca; r.bAncho = 0.75f + 0.6f * e.ancho; mover(r, 0, -5 * e.boca); tapas(r, bl);
       mirar(r, 0.15f * sinf(t * 0.7f), 0);
       vel = 14;
       break;
@@ -616,7 +619,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       int n = (int)pulsosVistos;
       float g = expf(-e.pulso * 6), k = powf(1 - e.pulso, 3);
       float vaiven = sinf((n + e.pulso) * PI);               // un golpe hacia cada lado
-      r.boca = e.canta ? fmaxf(e.boca * 0.9f, 0.2f) : 0;
+      r.boca = e.canta ? fmaxf(e.boca, 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;   // entre sílabas se cierra
       switch (e.ritmo) {
         case R_URBANO:                                        // gorra, mirada tranquila, cabecea fuerte y rapea
           escalar(r, 0.92f, 0.86f - 0.06f * g); mover(r, 0, 26 + 12 * g); tapas(r, 0.38f);
@@ -699,11 +702,12 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
     case DUERME:
       tapas(r, 1);
       r.L.alfa = r.R.alfa = 0.6f;
+      mover(r, 26 * sinf(t * 0.051f), 14 * sinf(t * 0.033f + 1));   // también dormido se pasea
       vel = 4;
       break;
     case TELEFONO:                                            // hablando por teléfono: mira al lado del auricular
       mover(r, -30, 0); mirar(r, 0.35f, 0); tapas(r, bl);
-      r.boca = e.boca; vel = 14;
+      r.boca = e.boca; r.bAncho = 0.75f + 0.6f * e.ancho; vel = 14;
       break;
     default: break;
   }
