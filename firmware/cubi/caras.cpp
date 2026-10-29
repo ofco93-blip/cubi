@@ -611,6 +611,146 @@ static void piano(float y, int n, float g) {
 
 // ---------------------------------------------------------------- caras de fondo
 static float pulsosVistos = 0, ultimoPulso = 1;
+
+// ---------------------------------------------------------------- Robot minimalista: bailan solo los ojos
+// (nada de gorras, manitos ni instrumentos); cada ritmo lleva un detalle blanco y simple. Devuelve cuánto abre la boca.
+static float bailaMini(Rostro &r, const Entradas &e, int n, float g, float k, float vaiven, float bl) {
+  float f = n + e.pulso;
+  switch (e.ritmo) {
+    case R_URBANO: tapas(r, 0.45f); mover(r, 0, 4 + 18 * g); escalar(r, 1, 1 - 0.08f * g); return 0.8f;   // cabeceo con visera
+    case R_ELECTRO: {                                                                                    // salta
+      float s = 1 - (2 * e.pulso - 1) * (2 * e.pulso - 1);
+      mover(r, 0, 10 - 34 * s);
+      if (e.pulso < 0.12f) escalar(r, 1.15f, 0.8f);
+      if (s > 0.5f) feliz(r, 1); else tapas(r, bl);
+      return 0.8f;
+    }
+    case R_TROPICAL: feliz(r, 1); mover(r, 34 * vaiven, -6 * g); r.L.incl = r.R.incl = 0.12f * vaiven; return 0.8f;   // cadera
+    case R_KPOP: {                                                                                       // guiña a cada lado
+      float v = cosf(f * PI * 0.5f);
+      mover(r, 12 * sinf(f * PI * 0.5f), -8 * g);
+      if (v > 0.3f) r.L.feliz = 1; else if (v < -0.3f) r.R.feliz = 1;
+      return 0.7f;
+    }
+    case R_CORAZON: r.corazon = 1; escalar(r, 1 + 0.15f * g, 1 + 0.15f * g); mover(r, 10 * sinf(f * PI * 0.5f), -4 * g); return 0.7f;
+    case R_GROOVE: {                                                                                     // mira a un lado por golpe
+      float lado = (n % 2) ? -1 : 1, m = suave(fminf(1, e.pulso * 4));
+      mirar(r, 0.5f * lado * (2 * m - 1), 0); tapas(r, 0.4f); mover(r, 0, 6 * g);
+      return 0.7f;
+    }
+    case R_DISFRUTA: case R_GUITARRA: case R_PIANO:                                                      // ojitos felices que se mecen
+      feliz(r, 1); mirar(r, 0.35f * sinf(f * PI * 0.25f), 0); mover(r, 0, -6 * k);
+      return 0.65f;
+    case R_ROCK: tapas(r, 0.3f); r.L.incl = r.R.incl = 0.14f; mover(r, 0, 14 - 34 * k); escalar(r, 1.05f, 1 - 0.2f * k); return 1;
+    case R_JAZZ: tapas(r, 0.4f); mover(r, 22 * vaiven, 0); r.L.incl = r.R.incl = -0.06f * vaiven; return 0.8f;
+    case R_DJ: mover(r, 0, 4 + 14 * g); if (g > 0.5f) feliz(r, 1); else tapas(r, bl); return 0.7f;
+    case R_BARRAS: mover(r, 0, -34 - 8 * e.nivel); escalar(r, 1, 1 - 0.1f * g); tapas(r, bl); return 0.75f;
+    default:                                                                                             // pop: rebota
+      mover(r, 0, -16 * k); escalar(r, 1 + 0.06f * k, 1 - 0.1f * k); mirar(r, 0.3f * ((n % 4 < 2) ? -1 : 1), 0);
+      if (n % 8 >= 6) feliz(r, 0.85f); else tapas(r, bl);
+      return 1;
+  }
+}
+static void anillo(float x, float y, float R, float grosor, float alfa) {
+  figura(x - R - grosor, y - R - grosor, x + R + grosor, y + R + grosor, solido(BL, alfa, 6),
+         [=](float px, float py) { return fabsf(dCirculo(px, py, x, y, R)) - grosor; });
+}
+static void puntitos(float u, float vel, float alfa) {   // puntitos que suben a los lados (las "notas" del minimalista)
+  for (int i = 0; i < 4; i++) {
+    float q = fmodf(u * vel + i / 4.f, 1.f), lado = (i % 2) ? -1 : 1;
+    circulo(CX + lado * (175 + 8 * sinf(q * 7 + i)), H - 40 - 230 * q, 5 + 3 * (i / 2), BL, alfa * campana(q, 0, 1), 8);
+  }
+}
+static void extrasMini(float u, const Entradas &e) {
+  int n = (int)pulsosVistos;
+  float g = expf(-e.pulso * 6), f = n + e.pulso;
+  const Ojo &oL = ahora.L, &oR = ahora.R;
+  switch (e.ritmo) {
+    case R_URBANO: {                                    // visera: una raya encima de los ojos
+      float y = fminf(oL.y - oL.h / 2, oR.y - oR.h / 2) - 22;
+      linea(oL.x - oL.w / 2 - 14, y + 6, oR.x + oR.w / 2 + 44, y - 4, 5, BL, 0.9f, 6);
+      break;
+    }
+    case R_ELECTRO: case R_BARRAS: {                    // ecualizador
+      bool barras = e.ritmo == R_BARRAS;
+      int N = barras ? 11 : 15; float sep = barras ? 36 : 26, alto = barras ? 90 : 56;
+      for (int i = 0; i < N; i++) {
+        float x = CX + (i - (N - 1) / 2.f) * sep, a = 0.45f + 0.55f * fabsf(sinf(u * (2.6f + 0.37f * i) + i * 1.7f));
+        float h = 8 + alto * lim(e.nivel * 1.4f, 0.15f, 1) * a * (0.65f + 0.35f * g);
+        figura(x - 6, H - 12 - h, x + 6, H - 10, solido(BL, 0.9f, 6), [=](float px, float py) { return dCaja(px, py, x, H - 11 - h / 2, 5, h / 2 + 1, 5); });
+      }
+      break;
+    }
+    case R_TROPICAL:                                    // maracas: bolita con palito que se sacude
+      for (int lado = -1; lado <= 1; lado += 2) {
+        float s2 = lado * sinf(f * PI), x = CX + lado * 165, y = H - 80 - 14 * s2;
+        circulo(x, y, 14, BL, 0.9f, 8); linea(x, y + 12, x - lado * 6, y + 46, 3, BL, 0.9f);
+      }
+      break;
+    case R_KPOP:                                        // destellos al guiñar
+      for (int lado = -1; lado <= 1; lado += 2) {
+        const Ojo &o = lado > 0 ? oR : oL;
+        chispa(o.x + lado * (o.w / 2 + 30), o.y - o.h / 2 - 10, 8 + 10 * g, 0.4f + 0.6f * g, BL);
+      }
+      break;
+    case R_CORAZON: anillo(CX, EY, 130 + 60 * (1 - g), 2.5f, 0.6f * g); break;   // latido
+    case R_GROOVE: {                                    // anillo que sale del lado al que mira
+      float lado = (n % 2) ? -1 : 1;
+      anillo(CX + lado * 170, EY, 12 + 50 * (1 - g), 2.5f, 0.8f * g);
+      break;
+    }
+    case R_GUITARRA: {                                  // una cuerda que vibra con cada rasgueo
+      const int N = 24; float y = H - 46, amp = 14 * g;
+      for (int i = 0; i < N; i++) {
+        float x0 = 40 + i * (W - 80.f) / N, x1 = x0 + (W - 80.f) / N, env0 = sinf(PI * i / N), env1 = sinf(PI * (i + 1) / N);
+        linea(x0, y + amp * env0 * sinf(u * 40 + i), x1, y + amp * env1 * sinf(u * 40 + i + 1), 2.5f, BL, 0.85f);
+      }
+      break;
+    }
+    case R_ROCK:                                        // rayos a los lados con el golpe
+      for (int lado = -1; lado <= 1; lado += 2) {
+        float x = CX + lado * 180, y = EY - 70;
+        linea(x, y, x - lado * 16, y + 40, 4, BL, g, 8); linea(x - lado * 16, y + 40, x + lado * 10, y + 46, 4, BL, g, 8);
+        linea(x + lado * 10, y + 46, x - lado * 8, y + 96, 4, BL, g, 8);
+      }
+      break;
+    case R_JAZZ:                                        // humito que sube despacio
+      for (int i = 0; i < 2; i++) {
+        float q = fmodf(u * 0.25f + i / 2.f, 1.f), x = W - 70 - 30 * i, y0 = H - 40 - 200 * q;
+        for (int s = 0; s < 6; s++) {
+          float ya = y0 - s * 12, yb = ya - 12;
+          linea(x + 10 * sinf(ya * 0.06f + u * 2), ya, x + 10 * sinf(yb * 0.06f + u * 2), yb, 2.5f, BL, 0.7f * campana(q, 0, 1));
+        }
+      }
+      break;
+    case R_DJ: {                                        // audífonos (arco) y el disco que gira abajo
+      float y = (oL.y + oR.y) / 2, R = (oR.x - oL.x) / 2 + oR.w / 2 + 34;
+      figura(CX - R - 8, y - R - 8, CX + R + 8, y + 10, solido(BL, 0.9f, 6), [=](float px, float py) {
+        return fmaxf(fabsf(dCirculo(px, py, CX, y, R)) - 4, py - y);
+      });
+      for (int lado = -1; lado <= 1; lado += 2) {
+        float x = CX + lado * R;
+        figura(x - 14, y - 26, x + 14, y + 26, solido(BL, 0.9f, 6), [=](float px, float py) { return dCaja(px, py, x, y, 12, 24 + 4 * g, 10); });
+      }
+      float a = u * 5;
+      anillo(CX, H - 44, 30, 2.5f, 0.8f);
+      circulo(CX + cosf(a) * 22, H - 44 + sinf(a) * 22, 4, BL, 0.9f);
+      break;
+    }
+    case R_PIANO: {                                     // teclitas: la del golpe se prende
+      const int N = 9;
+      int t = (n * 3) % N;
+      for (int i = 0; i < N; i++) {
+        float x = CX + (i - 4) * 34, y = H - 40;
+        float a = i == t ? 0.4f + 0.6f * g : 0.3f;
+        figura(x - 15, y - 26, x + 15, y + 26, solido(BL, a, i == t ? 8 : 0), [=](float px, float py) { return dCaja(px, py, x, y, 13, 24, 5); });
+      }
+      break;
+    }
+    case R_DISFRUTA: puntitos(u, 0.3f, 0.8f); break;
+    default: puntitos(u, 0.35f, 0.9f); break;           // pop
+  }
+}
 static Rostro deBase(float t, const Entradas &e, float &vel) {
   Rostro r = neutro(AZUL);
   float lx = 0, ly = 0, bl = parpadeo(t);
@@ -639,7 +779,8 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       float g = expf(-e.pulso * 6), k = powf(1 - e.pulso, 3);
       float vaiven = sinf((n + e.pulso) * PI);               // un golpe hacia cada lado
       float abre = 1;   // cuánto abre la boca este baile cuando hay voz (0 = no canta)
-      switch (e.ritmo) {
+      if (elPaquete == MINIMALISTA) abre = bailaMini(r, e, n, g, k, vaiven, bl);
+      else switch (e.ritmo) {
         case R_URBANO:                                        // gorra, mirada tranquila, cabecea fuerte y rapea
           escalar(r, 0.92f, 0.86f - 0.06f * g); mover(r, 0, 26 + 12 * g); tapas(r, 0.38f);
           r.bx = CX - 24; r.by = MY + 14 + 6 * g;
@@ -735,6 +876,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
 static void extrasBase(float t, const Entradas &e, bool delante) {
   float u = t - baseDesde;
   if (!delante && laBase != CANTA) return;
+  if (laBase == CANTA && elPaquete == MINIMALISTA) { if (delante) extrasMini(u, e); return; }
   switch (laBase) {
     case ESCUCHA: {
       for (int i = 0; i < 3; i++) {      // ondas de sonido al lado
