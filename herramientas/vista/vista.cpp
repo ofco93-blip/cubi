@@ -20,8 +20,7 @@ static int medir() {
       dib::empezar(); cuadro(t, 0.04f, e); dib::terminar();
     }
     double us = std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now() - t0).count() / N;
-    printf("%s %s %.0f us
-", NOMBRE_RITMO[r], voz ? "voz" : "sin", us);
+    printf("%s %s %.0f us\n", NOMBRE_RITMO[r], voz ? "voz" : "sin", us);
   }
   return 0;
 }
