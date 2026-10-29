@@ -821,8 +821,9 @@ static void extrasMini(float u, const Entradas &e) {
         volumen(hx - 16, hy - 16, hx + 16, hy + 16, 0.95f, [=](float px, float py) { return dCirculo(px, py, hx, hy, 15); });
       }
       break;
-    case R_JAZZ: {                                      // saxofón con la manito: se mece de lado a lado con el golpe
-      const float sxx = W - 110 + 26 * vaiven, syy = H - 50 - 6 * fabsf(vaiven), ang = 0.2f * vaiven, se = 0.95f;
+    case R_JAZZ: {                                      // saxofón con la manito: se mece de lado a lado, más rápido en lo fuerte
+      const float vs = sinf((n * (veces > 1 ? 2 : 1) + e.pulso * (veces > 1 ? 2 : 1)) * PI);
+      const float sxx = W - 110 + 26 * vs, syy = H - 50 - 6 * fabsf(vs), ang = 0.2f * vs, se = 0.95f;
       float hx, hy;
       saxoLinea(sxx, syy, ang, se, 1);
       aPantalla(marco(sxx, syy, ang, se), -4, -28, hx, hy); manoBlanca(hx, hy, -0.3f + ang, 0.75f, false);
@@ -845,7 +846,7 @@ static void extrasMini(float u, const Entradas &e) {
     }
     case R_KPOP: {                                      // micrófono de línea frente a la boquita, con la manito
       // en el "¡aaah!" el micrófono se corre para que quepa la boca grande
-      float mx = ahora.bx + 56 + 46 * gritoAhora, my = ahora.by + 4, ang = 0.95f + 0.15f * sinf((n + e.pulso) * PI * 0.5f) - 0.2f * ahora.boca, hx, hy;   // lo mueve al cantar
+      float mx = ahora.bx + 56 + 46 * gritoAhora, my = ahora.by + 4, ang = 0.95f + 0.15f * sinf((n + e.pulso) * PI * 0.5f * veces) - 0.2f * ahora.boca, hx, hy;   // lo mueve al cantar, más rápido en lo fuerte
       microLinea(mx, my, ang, 1.3f, 1);
       aPantalla(marco(mx, my, ang, 1.3f), 42, 0, hx, hy);
       manoBlanca(hx, hy, ang - PI / 2, 0.85f, false);
