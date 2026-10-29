@@ -36,5 +36,6 @@
 #define UMBRAL_BACHE    0.50f
 #define GIRO_MAREO      70.0f
 #define MINUTOS_SUENO   5
+#define MINUTOS_APAGAR  10   // sin movimiento, sonido ni toque: apaga la pantalla (cuida el OLED)
 
 #define DEBUG_IMU 0

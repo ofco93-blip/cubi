@@ -165,7 +165,7 @@ bool sintetizar() {
 float vR[NF], vI[NF];
 ArduinoFFT<float> FFT(vR, vI, NF, SR);
 volatile uint8_t estilo = NADA;
-volatile uint32_t beatCnt = 0, hiCnt = 0;
+volatile uint32_t beatCnt = 0, hiCnt = 0, tSonido = 0;  // tSonido: última vez que oyó algo (lo despierta)
 volatile bool aCanta = false;
 volatile float aNivel = 0, aVoz = 0, aBoca = 0, aBocaCruda = 0, aAncho = 0.5f, aBajoP = 0, aBpm = 0, aReg = 0, aBajo = 0, aMedio = 0, aAgudo = 0, aRms = 0, aPiso = 0;
 const char *EST_NOM[N_EST] = { "nada", "voz", "balada", "tropical", "reggaeton", "electronica", "rock" };
@@ -264,6 +264,7 @@ void tareaAudio(void *) {
     pico = max(rms, pico * 0.998f);
     aNivel = hay ? constrain(rms / pico, 0.f, 1.f) : 0;
     aRms = rms; aPiso = piso;
+    if (hay) tSonido = now;
     analizarVoz(hay);
 
     bAvg += (b - bAvg) * 0.04f;
@@ -869,7 +870,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     for (int i = 0; i < caras::N_RITMO; i++) if (p.get("r") == caras::NOMBRE_RITMO[i]) ritmoFijo = i;
     return "ok";
   }
-  if (ruta == "/brillo") { brillo = constrain(p.get("v").toInt(), 0, 255); panel->setBrightness(brillo); return "ok"; }
+  if (ruta == "/brillo") { despertar(millis()); brillo = constrain(p.get("v").toInt(), 0, 255); panel->setBrightness(brillo); return "ok"; }
   if (ruta == "/ajuste") {
     if (p.has("vol")) { volumen = constrain(p.get("vol").toInt(), 0, 100); if (es) es8311_voice_volume_set(es, volumen, NULL); sonar(S_WHATSAPP); }
     if (p.has("son")) sonidoOn = p.get("son") == "1";
@@ -1086,6 +1087,19 @@ void loop() {
   imuUpdate(now);
   touchUpdate(now);
   energiaUpdate(now);
+  // Pantalla apagada tras MINUTOS_APAGAR sin nada; la despierta moverlo, tocarlo, un sonido o que se conecte el celular
+  static bool bleAntes = false, pantallaOff = false;
+  if (bleOn && !bleAntes) despertar(now);
+  bleAntes = bleOn;
+  uint32_t oyo = tSonido;
+  if (now - oyo < 1000 && oyo > lastMotion) despertar(now);
+  bool apagar = now - lastMotion > MINUTOS_APAGAR * 60000UL && modo == NORMAL && !asis && !otaTotal && !reinicioEn;
+  if (apagar != pantallaOff) {
+    pantallaOff = apagar;
+    panel->setBrightness(apagar ? 0 : brillo);
+    if (!apagar) dib::todo();  // al prender se manda la pantalla entera
+  }
+  if (pantallaOff) return;     // apagada no dibuja (ahorra batería); el audio, el movimiento y el Bluetooth siguen
   // El movimiento se calcula en pasos fijos de 33 ms (las animaciones están afinadas para ese ritmo)
   // y se dibuja lo más seguido que dé la pantalla (~15 cuadros/s): así todo va a la velocidad correcta.
   // ponytail: dibujar + enviar tardan ~65 ms; más cuadros pedirían dibujar en la orientación nativa del panel.
