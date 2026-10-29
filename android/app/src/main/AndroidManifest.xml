@@ -51,5 +51,15 @@
             android:name=".CubiService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|microphone" />
+        <!-- "Cubi, pon salsa": con acceso a notificaciones le pide a Spotify que busque y reproduzca -->
+        <service
+            android:name=".Oyente"
+            android:label="Cubi"
+            android:exported="true"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

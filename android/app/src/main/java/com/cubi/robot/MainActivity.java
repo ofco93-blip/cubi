@@ -284,6 +284,16 @@ public class MainActivity extends Activity {
 
         // abre los ajustes de texto a voz del celular (motor y voces); si no existen, el instalador de voces
         @JavascriptInterface
+        public boolean puedeTocarMusica() {
+            return CubiService.yo == null || CubiService.yo.puedeTocarMusica();
+        }
+
+        @JavascriptInterface
+        public void pedirTocarMusica() {
+            startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+        }
+
+        @JavascriptInterface
         public void abrirVoces() {
             try {
                 startActivity(new Intent("com.android.settings.TTS_SETTINGS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));

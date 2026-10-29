@@ -23,6 +23,7 @@ import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.Manifest;
+import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
@@ -37,6 +38,8 @@ import android.media.AudioPlaybackConfiguration;
 import android.media.AudioRecord;
 import android.media.AudioRecordingConfiguration;
 import android.media.MediaRecorder;
+import android.media.session.MediaController;
+import android.media.session.MediaSessionManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.speech.RecognitionListener;
@@ -648,6 +651,26 @@ public class CubiService extends Service {
         }
     }
 
+    // con "Acceso a notificaciones" se le habla directo al reproductor: "busca esto y ponlo" (como Android Auto)
+    boolean puedeTocarMusica() {
+        return getSystemService(NotificationManager.class).isNotificationListenerAccessGranted(new ComponentName(this, Oyente.class));
+    }
+
+    private boolean tocarEnSesion(String q) {
+        if (!puedeTocarMusica()) return false;
+        try {
+            for (MediaController c : getSystemService(MediaSessionManager.class).getActiveSessions(new ComponentName(this, Oyente.class))) {
+                String app = c.getPackageName();
+                if (app.equals("com.spotify.music") || app.equals("com.google.android.apps.youtube.music")) {
+                    c.getTransportControls().playFromSearch(q, new Bundle());
+                    return true;
+                }
+            }
+        } catch (SecurityException ignored) {
+        }
+        return false;
+    }
+
     private void teclaMedia(int k) {
         AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
         am.dispatchMediaKeyEvent(new KeyEvent(KeyEvent.ACTION_DOWN, k));
@@ -666,6 +689,8 @@ public class CubiService extends Service {
                     am.adjustStreamVolume(AudioManager.STREAM_MUSIC, accion.equals("volumen_subir") ? AudioManager.ADJUST_RAISE : AudioManager.ADJUST_LOWER, 0);
                 break;
             case "musica_buscar": {  // Spotify o YouTube Music buscan y ponen lo que se pidió
+                if (tocarEnSesion(busqueda)) break;  // ya estaba abierta: le pide que busque y reproduzca
+                ui.postDelayed(() -> tocarEnSesion(busqueda), 4000);  // la abre con la búsqueda y luego le pide reproducir
                 Intent i = new Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
                         .putExtra(SearchManager.QUERY, busqueda)
                         .putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
