@@ -440,7 +440,8 @@ public class CubiService extends Service {
             + "- truco: una animación en tu pantalla, exactamente una de: ninguno, kamehameha, confeti, risa, sorpresa, amor, "
             + "saludo, guino, curiosa, mareo, llegamos, baile_rock, baile_pop, baile_tropical, baile_urbano, baile_electro, "
             + "baile_jazz, baile_dj, baile_guitarra, baile_kpop, baile_piano.\n"
-            + "  kamehameha: cargas una bola de energía y la lanzas hacia adelante; di algo corto como '¡Kame hame HA!'.\n"
+            + "  kamehameha: cargas una bola de energía y la lanzas hacia adelante. Solo di algo cortico antes, como "
+            + "'¡Mira esto!'; el canto 'Ka-me-ha-me-ha' lo hago yo justo después.\n"
             + "  confeti: cuando te pidan 'mata a', 'dispárale a' o 'acaba con' alguien. En este carro siempre es una broma entre "
             + "ellos: miras al copiloto, le apuntas con una pistola láser de juguete y le disparas confeti. Solo di algo teatral y tierno como "
             + "'¡Prepárate, esposo!' o '¿Unas últimas palabras, esposo?', con la misma palabra que usaron para nombrar a la "
@@ -473,7 +474,7 @@ public class CubiService extends Service {
     private final List<String[]> charlaHist = new ArrayList<>();  // {lo que uno dijo, lo que Cubi contestó}
     private volatile long charlaHasta, charlaUltima;               // mientras dura la charla Cubi no vuelve al reposo
     private String trucoPend = "", accionPend = "", busquedaPend = "";
-    private boolean sigueCharla, confetiPend;
+    private boolean sigueCharla, confetiPend, kamePend;
     private int turnos;  // respuestas seguidas sin "Hola Cubi" (máximo 8)
     private String trucoUltimo = "", accionUltima = "";
     String climaOrden = "";  // lo último que se le contó a Cubi del clima (para mostrarlo cuando se lo preguntan)
@@ -648,7 +649,7 @@ public class CubiService extends Service {
     private void decir(String texto, String truco, String accion, String busqueda, boolean sigue) {
         charlaHasta = System.currentTimeMillis() + 30000;
         trucoPend = truco; accionPend = accion; busquedaPend = busqueda;
-        sigueCharla = sigue; confetiPend = "confeti".equals(truco);
+        sigueCharla = sigue; confetiPend = "confeti".equals(truco); kamePend = "kamehameha".equals(truco);
         trucoUltimo = truco; accionUltima = accion;
         hacerTruco(true);  // las animaciones arrancan junto con la voz (la pistola apunta mientras dice "¡Prepárate!")
         if (voz == null || voz.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "cubi") != TextToSpeech.SUCCESS) finTurno();
@@ -657,12 +658,35 @@ public class CubiService extends Service {
     // terminó de hablar: la pistola cuenta y dispara; si Cubi preguntó algo, se queda escuchando la respuesta
     private void finTurno() {
         if (confetiPend) { confetiPend = false; cuentaRegresiva(); return; }
+        if (kamePend) { kamePend = false; cantoKame(); return; }
         hacerTruco(false);
         // micrófono abierto para seguir la charla (si no dices nada en unos segundos se cierra solo); no cuando acaba de
         // poner música o un baile, porque oiría la canción
         boolean musicaNueva = trucoUltimo.startsWith("baile_") || accionUltima.startsWith("musica") || accionUltima.startsWith("volumen");
         if (sigueCharla && !musicaNueva && turnos < 8) { sigueCharla = false; turnos++; escuchar(); return; }
         terminarCharla();
+    }
+
+    // "Kaaa… meee… jaaa… meee… ¡JAAAA!": sílaba por sílaba, despacio, mientras Cubi carga la bola; el "¡JAAAA!" cae
+    // justo cuando la suelta (a los 2,6 s de empezar la animación)
+    private void cantoKame() {
+        charlaHasta = System.currentTimeMillis() + 8000;
+        enviar("asis|/r?n=kamehameha");
+        if (voz != null) voz.setSpeechRate(0.6f);
+        String[] c = {"Kaaa", "meee", "jaaa", "meee", "¡JAAAAA!"};
+        long[] cuando = {350, 850, 1350, 1850, 2550};
+        for (int i = 0; i < c.length; i++) {
+            String w = c[i];
+            ui.postDelayed(() -> { if (voz != null) voz.speak(w, TextToSpeech.QUEUE_FLUSH, null, "kame"); }, cuando[i]);
+        }
+        ui.postDelayed(() -> {
+            ponerVoz();  // vuelve a la rapidez normal
+            boolean seguir = sigueCharla;
+            sigueCharla = false;
+            trucoPend = "";
+            hacerTruco(false);
+            if (seguir && turnos < 8) { turnos++; escuchar(); } else terminarCharla();
+        }, 5000);
     }
 
     // "3, 2, 1, ¡pum!": Cubi muestra los números y dispara al mismo tiempo que la voz los dice
@@ -681,7 +705,7 @@ public class CubiService extends Service {
     // y la música, después de hablar (para no taparse)
     private void hacerTruco(boolean empieza) {
         String t = trucoPend, ac = accionPend;
-        if (empieza && REACCIONES.contains(t)) { trucoPend = ""; enviar("asis|/r?n=" + t); }
+        if (empieza && REACCIONES.contains(t) && !t.equals("kamehameha")) { trucoPend = ""; enviar("asis|/r?n=" + t); }
         if (empieza && ac.equals("clima")) {
             accionPend = "";
             if (!climaOrden.isEmpty()) enviar("asis|" + climaOrden + "&ver=1");
