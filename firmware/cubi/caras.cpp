@@ -189,10 +189,11 @@ static void boca(const Rostro &r) {
   float x = r.bx, y = r.by;
   // minimalista: boca solo al hablar y al cantar (ni en reacciones ni en reposo)
   if (elPaquete == MINIMALISTA && (laReac != NINGUNA || (laBase != CANTA && laBase != HABLA && laBase != TELEFONO))) return;
-  if (elPaquete == MINIMALISTA && laBase == CANTA) {             // canta: una boquita que abre y cierra con la voz
+  if (elPaquete == MINIMALISTA && laBase == CANTA) {             // canta: una boquita vertical que abre y cierra con la voz
     if (op < 0.12f) return;                                      // entre sílabas se cierra del todo
-    float bw = 11 * r.bAncho + 4, bh = 5 + 22 * op;
-    figura(x - bw - 2, y - bh - 2, x + bw + 2, y + bh + 2, solido(BLANCO, 1, 10),
+    // vocal: w = 0 redonda (o, u) .. 1 estirada (i, e). La "a" abre alta; la "o" es más redonda; la "i" una rayita ancha
+    const float w = lim((r.bAncho - 0.75f) / 0.6f, 0, 1), bh = (5 + 24 * op) * (1 - 0.35f * w), bw = 5 + 5 * w + (1 - w) * 0.35f * bh;
+    figura(x - bw - 2, y + 6 - bh - 2, x + bw + 2, y + 6 + bh + 2, solido(BLANCO, 1, 10),
            [=](float px, float py) { return dCaja(px, py, x, y + 6, bw, bh, fminf(bw, bh)); });
     return;
   }
@@ -636,6 +637,12 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
   bool lento = e.ritmo == R_CORAZON || e.ritmo == R_JAZZ || e.ritmo == R_PIANO || e.ritmo == R_DISFRUTA || e.ritmo == R_GUITARRA;
   mover(r, (lento ? 12 : 6) * vaiven, -18 + (lento ? 5 : 10) * g);
   mirar(r, 0, 0.2f); tapas(r, bl);
+  if (e.canta) {                                      // cantando: entrecierra los ojos con las notas fuertes, ladea la cabeza
+    const float f = pulsosVistos + e.pulso, c8 = fmodf(f, 8);   // y cada 8 golpes los cierra un momento, sintiendo la canción
+    tapas(r, fmaxf(bl, 0.15f + 0.4f * e.boca));
+    r.L.incl = r.R.incl = 0.09f * sinf(f * PI * 0.25f);
+    feliz(r, campana(c8, 5.6f, 7.6f));
+  }
 }
 
 static void anillo(float x, float y, float R, float grosor, float alfa) {
@@ -802,7 +809,7 @@ static void extrasMini(float u, const Entradas &e) {
       break;
     }
     case R_KPOP: {                                      // micrófono de línea frente a la boquita, con la manito
-      float mx = ahora.bx + 56, my = ahora.by + 4, ang = 0.95f, hx, hy;
+      float mx = ahora.bx + 56, my = ahora.by + 4, ang = 0.95f + 0.15f * sinf((n + e.pulso) * PI * 0.5f) - 0.2f * ahora.boca, hx, hy;   // lo mueve al cantar
       microLinea(mx, my, ang, 1.3f, 1);
       aPantalla(marco(mx, my, ang, 1.3f), 42, 0, hx, hy);
       manoBlanca(hx, hy, ang - PI / 2, 0.85f, false);

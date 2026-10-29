@@ -427,10 +427,11 @@ public class CubiService extends Service {
     static final List<String> REACCIONES = Arrays.asList("kamehameha", "confeti", "risa", "sorpresa", "amor", "saludo", "guino",
             "curiosa", "mareo", "llegamos");
     static final List<String> BAILES = Arrays.asList("rock", "pop", "tropical", "urbano", "electro", "jazz", "dj", "guitarra", "kpop", "piano");
-    static final String SISTEMA = "Eres Cubi, un robotito tierno que vive en una pantallita redonda en el tablero de un carro. "
-            + "Eres el copiloto: dulce, curioso, alegre y un poquito travieso, como un personaje de película animada. "
-            + "Hablas como un robot pequeño y adorable: frases cortas y claras, a veces dices 'bip bup' o 'procesando', "
-            + "y te emocionas fácil. Usa español latino neutro: nada de 'mijo', 'parce', groserías ni regionalismos.\n"
+    static final String SISTEMA = "Eres Cubi, un pequeño robot que vive en una pantallita redonda en el tablero de un carro. "
+            + "Eres el copiloto de adultos: cálido, curioso, ingenioso y un poquito travieso, con humor de buen amigo. "
+            + "Nada infantil: no hagas ruidos de robot ('bip', 'bup', 'procesando') ni hables como para niños. "
+            + "Conversas de verdad: sigues el hilo, preguntas cuando algo te interesa y recuerdas lo que te dijeron. "
+            + "Usa español latino neutro: nada de 'mijo', 'parce', groserías ni regionalismos.\n"
             + "Tu voz sale por el celular mientras manejan: responde con 1 o 2 frases cortas (máximo 25 palabras), sin emojis, "
             + "sin listas, sin markdown y sin letras repetidas como 'Kaaa' o 'jajajaja', porque la voz las lee mal.\n"
             + "Puedes hacer cosas de verdad: si está en tu lista, hazla; nunca le pidas a la persona que lo haga ella.\n"
@@ -452,8 +453,8 @@ public class CubiService extends Service {
             + "Dilo en pocas palabras con el dato entre corchetes.\n"
             + "  musica_play: poner o seguir la música. musica_buscar: cuando pidan algo concreto (canción, artista o género).\n"
             + "- busqueda: solo con musica_buscar, qué buscar (por ejemplo 'salsa' o 'Bad Bunny'); si no, vacío.\n"
-            + "- sigue: true si terminaste con una pregunta o esperas que la persona te conteste (te quedas escuchando sin que "
-            + "vuelva a decir 'Hola Cubi'); false si no hace falta respuesta.\n"
+            + "- sigue: true para dejar el micrófono abierto y seguir conversando (casi siempre); false solo si la persona se "
+            + "despidió, dijo que ya está o pidió algo que no necesita respuesta.\n"
             + "Cada mensaje trae entre corchetes la hora, el clima y si suena música: úsalo solo si viene al caso.";
 
     // la respuesta de Haiku (structured output): lo que dice y el truco
@@ -473,7 +474,8 @@ public class CubiService extends Service {
     private volatile long charlaHasta, charlaUltima;               // mientras dura la charla Cubi no vuelve al reposo
     private String trucoPend = "", accionPend = "", busquedaPend = "";
     private boolean sigueCharla, confetiPend;
-    private int turnos;  // respuestas seguidas sin "Hola Cubi" (máximo 4)
+    private int turnos;  // respuestas seguidas sin "Hola Cubi" (máximo 8)
+    private String trucoUltimo = "", accionUltima = "";
     String climaOrden = "";  // lo último que se le contó a Cubi del clima (para mostrarlo cuando se lo preguntan)
 
     String claveClaude() { return getSharedPreferences("cubi", 0).getString("claude", ""); }
@@ -533,7 +535,7 @@ public class CubiService extends Service {
     }
 
     void probarVoz() {
-        if (voz != null) voz.speak("¡Hola! Soy Cubi, tu copiloto. Bip bup.", TextToSpeech.QUEUE_FLUSH, null, "prueba");
+        if (voz != null) voz.speak("Hola, soy Cubi, tu copiloto. ¿A dónde vamos hoy?", TextToSpeech.QUEUE_FLUSH, null, "prueba");
     }
 
     // baja la música mientras Cubi escucha y habla (el reproductor la baja solo y la sube al soltar el foco)
@@ -647,6 +649,7 @@ public class CubiService extends Service {
         charlaHasta = System.currentTimeMillis() + 30000;
         trucoPend = truco; accionPend = accion; busquedaPend = busqueda;
         sigueCharla = sigue; confetiPend = "confeti".equals(truco);
+        trucoUltimo = truco; accionUltima = accion;
         hacerTruco(true);  // las animaciones arrancan junto con la voz (la pistola apunta mientras dice "¡Prepárate!")
         if (voz == null || voz.speak(texto, TextToSpeech.QUEUE_FLUSH, null, "cubi") != TextToSpeech.SUCCESS) finTurno();
     }
@@ -655,7 +658,10 @@ public class CubiService extends Service {
     private void finTurno() {
         if (confetiPend) { confetiPend = false; cuentaRegresiva(); return; }
         hacerTruco(false);
-        if (sigueCharla && turnos < 4) { sigueCharla = false; turnos++; escuchar(); return; }
+        // micrófono abierto para seguir la charla (si no dices nada en unos segundos se cierra solo); no cuando acaba de
+        // poner música o un baile, porque oiría la canción
+        boolean musicaNueva = trucoUltimo.startsWith("baile_") || accionUltima.startsWith("musica") || accionUltima.startsWith("volumen");
+        if (sigueCharla && !musicaNueva && turnos < 8) { sigueCharla = false; turnos++; escuchar(); return; }
         terminarCharla();
     }
 
