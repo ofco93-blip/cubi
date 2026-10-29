@@ -657,6 +657,41 @@ public class CubiService extends Service {
         }
     }
 
+    // ---------- Google Maps / Waze: la notificación de navegación trae el próximo giro; cerca del giro Cubi muestra la flecha ----------
+    static final Pattern DISTANCIA = Pattern.compile("(\d+(?:[.,]\d+)?)\s*(km|m|mi|ft|pies)\b");
+    private String giroAvisado = "";
+    private long llegadaAvisada;
+
+    void indicacion(String t) {
+        String s = t.toLowerCase(Locale.ROOT);
+        long ahora = System.currentTimeMillis();
+        if ((s.contains("llegaste") || s.contains("has llegado") || s.contains("you have arrived") || s.contains("arrived at"))
+                && ahora - llegadaAvisada > 60000) {
+            llegadaAvisada = ahora;
+            enviar("asis|/r?n=llegamos");
+            return;
+        }
+        int i = primero(s, "izquierda", "left"), d = primero(s, "derecha", "right");
+        String dir = i >= 0 && (d < 0 || i < d) ? "maps_izq" : d >= 0 ? "maps_der" : "";
+        if (dir.isEmpty()) return;
+        double metros = -1;
+        Matcher m = DISTANCIA.matcher(s);
+        if (m.find()) {
+            double v = Double.parseDouble(m.group(1).replace(',', '.'));
+            String u = m.group(2);
+            metros = u.equals("km") ? v * 1000 : u.equals("mi") ? v * 1609 : u.equals("m") ? v : v * 0.3048;
+        }
+        String giro = dir + DISTANCIA.matcher(s).replaceAll("").replaceAll("\s+", " ").trim();  // el giro sin la distancia
+        if (giro.equals(giroAvisado) || metros > 250) return;  // cada giro se muestra una vez, ya cerquita
+        giroAvisado = giro;
+        enviar("asis|/r?n=" + dir);
+    }
+
+    private static int primero(String s, String a, String b) {
+        int i = s.indexOf(a), j = s.indexOf(b);
+        return i < 0 ? j : j < 0 ? i : Math.min(i, j);
+    }
+
     // ---------- Cubi canta cuando canta el artista: letra sincronizada (LRCLIB, gratis) + posición de la canción ----------
     private MediaController reproductor;
     private long reproductorVisto, vozMandada;

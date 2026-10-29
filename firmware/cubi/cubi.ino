@@ -668,7 +668,16 @@ void pintar(uint32_t now) {
   en.boca = bocaV; en.ancho = anchoV; en.canta = cantando; en.nivel = aNivel; en.curva = curvaLook / 60;
   if (b == caras::CANTA) {
     float bpm = now < demoHasta ? 126 : aBpm > 60 ? aBpm : 110;
-    en.bpm = bpm; en.pulso = fmodf((now - tGolpe) * bpm / 60000.f, 1.f); en.ritmo = elegirRitmo(now);
+    static float fase = 0; static uint32_t antesF = now, golpeVisto = 0; static uint8_t fuera = 0;
+    fase += (now - antesF) * bpm / 60000.f; antesF = now;
+    if (tGolpe != golpeVisto) {           // oyó un golpe: si cae cerca del pulso lo acerca; si no, quizá es un contratiempo
+      golpeVisto = tGolpe;
+      float err = fase - roundf(fase);
+      if (fabsf(err) < 0.3f) { fase -= 0.4f * err; fuera = 0; }
+      else if (++fuera >= 4) { fase -= err; fuera = 0; }   // 4 golpes seguidos fuera del pulso: se re-engancha a ellos
+    }
+    fase = fmodf(fase, 1000.f);
+    en.bpm = bpm; en.pulso = fase - floorf(fase); en.ritmo = elegirRitmo(now);
   }
   bool libreR = caras::reaccionActual() == caras::NINGUNA;
   if (b == caras::REPOSO && libreR && now > proxGesto) {  // en reposo, de vez en cuando un guiño o cara de curiosa
