@@ -201,6 +201,7 @@ section[hidden] { display: none; }
     <button class="btn main" id="actApp">Actualizar la app</button>
     <button class="btn main" id="actCubi">Actualizar a Cubi (firmware)</button>
     <p class="note">El firmware va por Bluetooth: tarda unos minutos y la app queda bloqueada hasta que termine.</p>
+    <button class="btn" id="buscarVer">Buscar versión nueva</button>
     <button class="btn" id="subir">Subir un firmware desde un archivo</button>
   </div>
   <p class="note" id="info" style="margin:18px 2px"></p>
@@ -457,7 +458,15 @@ etiquetas();
 conectar();
 revisarPermisoGemini();
 if (window.Android) setTimeout(() => holaEstado(Android.holaActivo()), 500);
-if (window.Android) Android.buscarVersion();
+// revisa GitHub al abrir, al volver a la app (máximo cada minuto) y con el botón
+let verRevisada = 0;
+function buscarVersion(forzar) {
+  if (!window.Android || (!forzar && Date.now() - verRevisada < 60000)) return;
+  verRevisada = Date.now(); Android.buscarVersion();
+}
+$('buscarVer').onclick = () => { $('verNota').textContent = 'Revisando si hay versión nueva…'; buscarVersion(true); };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) buscarVersion(false); });
+buscarVersion(true);
 setInterval(estado, 2000);
 setInterval(audio, 150);
 </script>

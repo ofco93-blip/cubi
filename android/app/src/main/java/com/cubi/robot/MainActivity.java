@@ -168,6 +168,7 @@ public class MainActivity extends Activity {
     private JSONObject ultimaVersion() throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(VERSIONES).openConnection();
         c.setRequestProperty("Accept", "application/vnd.github+json");
+        c.setUseCaches(false);  // que siempre pregunte de nuevo
         c.setConnectTimeout(10000);
         c.setReadTimeout(15000);
         if (c.getResponseCode() == 404) throw new Exception("No veo las versiones en GitHub (¿el proyecto es privado?)");
