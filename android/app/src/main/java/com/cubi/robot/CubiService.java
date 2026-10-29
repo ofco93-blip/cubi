@@ -965,6 +965,12 @@ public class CubiService extends Service {
         }, ui);
     }
 
+    // Los oídos que esperan un nombre ("Cubi", y el de Copi si lo usa) graban con la fuente MIC; Gemini y Google usan
+    // las de voz. Así cada robot no confunde el oído del otro con un asistente escuchando (Copi se quedaba "escuchando").
+    private static boolean oidoDeRobot(AudioRecordingConfiguration c) {
+        return Build.VERSION.SDK_INT >= 29 && c.getClientAudioSource() == MediaRecorder.AudioSource.MIC;
+    }
+
     private void revisarAsistente() {
         ui.removeCallbacks(revisar);
         AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
@@ -972,7 +978,7 @@ public class CubiService extends Service {
         boolean ventana = ahora - asisDesde < 120000;
         boolean graba = false;  // la grabación de "Hola Cubi" (la nuestra) no cuenta
         for (AudioRecordingConfiguration c : am.getActiveRecordingConfigurations())
-            if (c.getClientAudioSessionId() != miSesion) graba = true;
+            if (c.getClientAudioSessionId() != miSesion && !oidoDeRobot(c)) graba = true;
         graba &= am.getMode() != AudioManager.MODE_IN_CALL;
         boolean suenaAsis = false, suenaNav = false, suenaVoz = false, suenaMedia = false;
         if (Build.VERSION.SDK_INT >= 26) for (AudioPlaybackConfiguration c : am.getActivePlaybackConfigurations()) {
@@ -1084,7 +1090,8 @@ public class CubiService extends Service {
             AudioRecord r = null;
             try (org.vosk.Recognizer rec = new org.vosk.Recognizer(modelo, 16000, GRAMATICA)) {
                 int tam = Math.max(AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), 8192);
-                r = new AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, tam);
+                // fuente MIC: así Copi (y Cubi mismo) saben que es el oído de un robot y no un asistente escuchando
+                r = new AudioRecord(MediaRecorder.AudioSource.MIC, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, tam);
                 miSesion = r.getAudioSessionId();
                 r.startRecording();
                 short[] b = new short[2048];
