@@ -22,7 +22,7 @@ jobs:
             python3 -m pip install -q --break-system-packages pillow
             g++ -std=c++17 herramientas/vista/tempo_prueba.cpp -o tempo_prueba && ./tempo_prueba
             g++ -O2 -std=c++17 -I herramientas/vista herramientas/vista/vista.cpp firmware/cubi/caras.cpp firmware/cubi/dibujo.cpp -o vista_pc
-            python3 herramientas/vista/hoja.py ./vista_pc salida canta_jazz baila_jazz canta_pop baila_pop canta_urbano baila_urbano canta_dj canta_piano canta_barras canta_tropical canta_electro reposo escucha habla frenazo bache
+            python3 herramientas/vista/hoja.py ./vista_pc salida canta_jazz baila_jazz canta_pop baila_pop canta_urbano baila_urbano canta_dj canta_piano canta_barras canta_tropical canta_electro reposo escucha habla frenazo bache mini_reposo mini_habla mini_canta_pop mini_baila_urbano mini_risa mini_amor mini_frenazo mini_izq mini_sorpresa
             ./vista_pc medir > medir.txt
           ) > log.txt 2>&1 || { grep -v "^+" log.txt | grep -m 12 . | tail -12 | while read -r l; do echo "::error::$l"; done; exit 1; }
       - name: Tiempos por baile

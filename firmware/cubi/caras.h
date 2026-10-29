@@ -28,6 +28,11 @@ struct Entradas {
   float ancho = 0.5f;   // 0 = boca redonda (o, u) .. 1 = estirada (i, e)
 };
 
+// paquetes de caras (se escogen desde la app)
+enum Paquete : uint8_t { CUBI_AZUL, MINIMALISTA, N_PAQ };
+extern const char *NOMBRE_PAQ[N_PAQ];
+void paquete(uint8_t p);
+
 void iniciar(uint32_t semilla);
 void base(Base b);
 Base baseActual();

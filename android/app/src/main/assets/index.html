@@ -55,6 +55,13 @@ input[type=text], input[type=password] { width: 100%; background: var(--panel2);
 .face .eyes { display: flex; gap: 9px; height: 26px; align-items: center; }
 .face .eyes i { width: 13px; height: 22px; border-radius: 7px; background: var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 50%, transparent); }
 .face.sel { outline: 2px solid var(--accent); }
+.paqs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.paq { background: var(--panel2); border: 0; color: var(--ink); border-radius: 14px; padding: 14px 8px 12px; display: grid; justify-items: center; gap: 6px; font: inherit; }
+.paq .eyes { display: flex; gap: 10px; height: 34px; align-items: center; }
+.paq .eyes i { width: 15px; height: 28px; border-radius: 8px; background: var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 50%, transparent); }
+.paq[data-paq="1"] .eyes i { width: 11px; height: 20px; border-radius: 6px; }
+.paq small { color: var(--muted); font-size: 12px; }
+.paq.sel { outline: 2px solid var(--accent); }
 
 /* música en vivo */
 .live { display: grid; gap: 14px; }
@@ -152,6 +159,13 @@ section[hidden] { display: none; }
 
 <!-- ================= AJUSTES ================= -->
 <section id="tab-ajustes" hidden>
+  <h2>Paquete de caras</h2>
+  <div class="card">
+    <div class="paqs">
+      <button class="paq" data-paq="0"><span class="eyes" style="--c:#3c9bff"><i></i><i></i></span><b>Cubi azul</b><small>Ojos grandes de colores</small></button>
+      <button class="paq" data-paq="1"><span class="eyes" style="--c:#fff"><i></i><i></i></span><b>Robot minimalista</b><small>Estilo EVA, todo en blanco</small></button>
+    </div>
+  </div>
   <h2>Pantalla y sonido</h2>
   <div class="card">
     <label class="sl"><div class="row"><span>Brillo</span><span id="vBri"></span></div><input type="range" id="bri" min="10" max="255"></label>
@@ -259,6 +273,7 @@ function pintarEstado(j) {
   document.querySelectorAll('.face').forEach(b => b.classList.toggle('sel', b.dataset.n === j.emo));
   $('conn').textContent = 'Conectado por Bluetooth' + (j.bat >= 0 ? ' · batería ' + j.bat + '%' : '');
   if (j.fw !== undefined) { vFw = j.fw; notaVersiones(); }
+  if (j.paq !== undefined) document.querySelectorAll('.paq').forEach(b => b.classList.toggle('sel', +b.dataset.paq === j.paq));
   if (j.cps) $('cps').textContent = 'Ahora Cubi dibuja a ' + j.cps + ' cuadros por segundo (lo normal es 15 o más)';
   $('info').textContent = 'Cubi v' + j.ver + (j.carga ? ' · cargando' : j.usb ? ' · conectado al USB' : ' · con batería');
   if (ini) {
@@ -316,6 +331,12 @@ $('bri').onchange = e => mandar('/brillo?v=' + e.target.value);
 $('vol').onchange = e => mandar('/ajuste?vol=' + e.target.value);
 $('son').onchange = e => mandar('/ajuste?son=' + (e.target.checked ? 1 : 0));
 $('rot').onclick = () => mandar('/ajuste?rot=1');
+document.querySelectorAll('.paq').forEach(b => b.onclick = () => {
+  if (!vivo) return toast('Primero conecta a Cubi por Bluetooth');
+  mandar('/ajuste?paq=' + b.dataset.paq);
+  document.querySelectorAll('.paq').forEach(o => o.classList.toggle('sel', o === b));
+  toast('Listo: Cubi ahora es ' + b.querySelector('b').textContent);
+});
 $('fr').onchange = e => mandar('/ajuste?fr=' + (e.target.value / 100));
 $('adl').onclick = () => { mandar('/ajuste?adl=1'); toast('Listo: frenar y arrancar quedaron al revés'); };
 document.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => mandar('/evento?tipo=' + b.dataset.ev));

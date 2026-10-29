@@ -58,8 +58,11 @@ float anchoTexto(const char *s, float tam) {
   return w;
 }
 
-void texto(const char *s, float cx, float cy, float tam, const Col &c, float alfa) {
+bool blanco = false;
+
+void texto(const char *s, float cx, float cy, float tam, const Col &c0, float alfa) {
   if (alfa <= 0.01f) return;
+  const Col c = blanco ? sinColor(c0) : c0;
   float esc = tam / FUENTE_ALTO;
   float x = cx - anchoTexto(s, tam) / 2;
   float base = cy + 20.f * esc;                   // las mayúsculas quedan centradas en cy

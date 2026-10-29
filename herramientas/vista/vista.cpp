@@ -39,6 +39,7 @@ int main(int argc, char **argv) {
   FILE *o = fopen(argv[3], "wb");
   iniciar(7);
   bool esBase = false; int ritmo = 0;
+  if (que.rfind("mini_", 0) == 0) { paquete(MINIMALISTA); que = que.substr(5); }   // mini_x = la misma cara en el paquete minimalista
   bool voz = que.rfind("baila_", 0) != 0;   // baila_x = el mismo baile en una parte sin voz
   if (!voz) que = "canta_" + que.substr(6);
   if (que.rfind("canta_", 0) == 0) { for (int k = 0; k < N_RITMO; k++) if (que.substr(6) == NOMBRE_RITMO[k]) ritmo = k; que = "canta"; }

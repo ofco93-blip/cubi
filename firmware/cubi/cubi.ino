@@ -899,6 +899,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     if (p.has("uv")) umbralVoz = constrain(p.get("uv").toFloat(), 0.05f, 0.95f);
     if (p.has("gb")) ganBoca = constrain(p.get("gb").toFloat(), 0.3f, 3.f);
     if (p.has("sk")) sensK = constrain(p.get("sk").toFloat(), 1.3f, 8.f);
+    if (p.has("paq")) { caras::paquete(p.get("paq").toInt()); prefs.putUChar("paq", p.get("paq").toInt()); dib::todo(); }
     if (p.has("mg")) { micGan = constrain(p.get("mg").toInt(), 0, 7); if (es) es8311_microphone_gain_set(es, (es8311_mic_gain_t)micGan); }
     guardar(); return "ok";
   }
@@ -909,7 +910,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
       ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn +
       ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
       ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"fw\":" + VERSION_FW +
-      ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + "}";  // cuadros por segundo del último cuadro
+      ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + ",\"paq\":" + prefs.getUChar("paq", 0) + "}";  // cuadros por segundo del último cuadro
   }
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
     char b[300];
@@ -1062,6 +1063,7 @@ void setup() {
   prefs.begin("robot");
   rotacion = prefs.getUChar("rot", ROTACION_INICIAL); volumen = prefs.getUChar("vol", VOLUMEN_INICIAL);
   sonidoOn = prefs.getBool("son", true); musicaOn = prefs.getBool("mus", true);
+  caras::paquete(prefs.getUChar("paq", caras::CUBI_AZUL));
   umbralVoz = prefs.getFloat("uv", UMBRAL_VOZ); ganBoca = prefs.getFloat("gb", GANANCIA_BOCA);
   sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = prefs.getFloat("fr", UMBRAL_FRENO);
 

@@ -104,6 +104,10 @@ struct Pintura {
   Col haloCol{255, 255, 255};
   float alfa = 1;
 };
+// paquete "Robot minimalista": todo en blanco (se quita el color y se deja qué tan claro es)
+extern bool blanco;
+inline Col sinColor(const Col &c) { float v = fmaxf(c.r, fmaxf(c.g, c.b)); return {v, v, v}; }
+
 inline Pintura solido(const Col &c, float alfa = 1, float halo = 0) {
   Pintura p; p.arriba = p.abajo = p.haloCol = c; p.alfa = alfa; p.halo = halo; return p;
 }
@@ -111,8 +115,10 @@ inline Pintura solido(const Col &c, float alfa = 1, float halo = 0) {
 // se recorre en cuadritos de 8x8: los que quedan del todo adentro se pintan sin calcular nada y los de afuera
 // se saltan; solo los del borde (y el brillo) se calculan pixel por pixel
 template <typename F>
-void figura(float bx0, float by0, float bx1, float by1, const Pintura &p, F d) {
-  if (p.alfa <= 0.01f) return;
+void figura(float bx0, float by0, float bx1, float by1, const Pintura &p0, F d) {
+  if (p0.alfa <= 0.01f) return;
+  Pintura p = p0;
+  if (blanco) { p.arriba = sinColor(p.arriba); p.abajo = sinColor(p.abajo); p.haloCol = sinColor(p.haloCol); }
   float m = p.halo + 1.5f;
   int x0 = (int)fmaxf(0, floorf(bx0 - m)), y0 = (int)fmaxf(0, floorf(by0 - m));
   int x1 = (int)fminf(W, ceilf(bx1 + m)), y1 = (int)fminf(H, ceilf(by1 + m));

@@ -38,6 +38,9 @@ struct Rostro {
 static_assert(sizeof(Rostro) % sizeof(float) == 0, "Rostro debe ser solo floats");
 
 static Rostro ahora, meta;
+const char *NOMBRE_PAQ[N_PAQ] = {"Cubi azul", "Robot minimalista"};
+static uint8_t elPaquete = CUBI_AZUL;
+void paquete(uint8_t p) { elPaquete = p < N_PAQ ? p : CUBI_AZUL; }
 static Base laBase = REPOSO;
 static Reac laReac = NINGUNA;
 static float reacDesde = -1, tAhora = 0, baseDesde = 0;
@@ -57,6 +60,10 @@ static Rostro neutro(int tono = AZUL) {
   r.R = {CX + EX, EY, EW, EH, 0, 0, 0, 1};
   r.a = TONOS[tono].a; r.b = TONOS[tono].b;
   r.boca = 0; r.bx = CX; r.by = MY; r.bAncho = 1; r.mejillas = 0; r.corazon = 0;
+  if (elPaquete == MINIMALISTA) {  // ojitos de píldora, más chicos y juntos (estilo EVA); la boca más cerca
+    r.L.x = CX - EX * 0.72f; r.R.x = CX + EX * 0.72f; r.L.w = r.R.w = EW * 0.62f; r.L.h = r.R.h = EH * 0.7f;
+    r.by = MY - 34;
+  }
   return r;
 }
 // mirar a un lado (lx, ly en -1..1): el ojo del lado al que mira crece un poquito
@@ -112,7 +119,8 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
   if (o.alfa < 0.02f || o.w < 2 || o.h < 2) return;
   float top = fminf(o.tapa, 0.98f);
   if (top >= 0.97f) return;
-  const float x = o.x, y = o.y, hw = o.w / 2, hh = o.h / 2, rad = fminf(o.w, o.h) * 0.46f;
+  const bool mini = elPaquete == MINIMALISTA;
+  const float x = o.x, y = o.y, hw = o.w / 2, hh = o.h / 2, rad = fminf(o.w, o.h) * (mini ? 0.5f : 0.46f);
   const float y0 = y - hh + top * o.h, tn = tanf(o.incl) * lado, co = cosf(o.incl);
   const float fz = o.feliz, cy = y + o.h * (0.95f - 0.55f * fz), crx = o.w * 0.78f, cry = o.h * 0.62f;
   if (r.corazon > 0.5f) {
@@ -128,7 +136,7 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
     return d;
   });
   // brillito
-  if (top < 0.3f && fz < 0.3f) {
+  if (top < 0.3f && fz < 0.3f && !mini) {
     float bx = x - o.w * 0.2f, by = y - o.h * 0.27f;
     figura(bx - o.w * .1f, by - o.h * .07f, bx + o.w * .1f, by + o.h * .07f, solido(BLANCO, 0.35f * o.alfa),
            [=](float px, float py) { return dElipse(px, py, bx, by, o.w * .1f, o.h * .07f); });
@@ -140,6 +148,15 @@ static void boca(const Rostro &r) {
   if (op < 0.05f) return;
   float w = (26 + 14 * op) * r.bAncho, h = 16 + 62 * op;
   float x = r.bx, y = r.by;
+  if (elPaquete == MINIMALISTA) {  // ondita de sonido: 5 barritas que bailan con la voz
+    for (int i = 0; i < 5; i++) {
+      float f = (i == 2 ? 1 : i == 1 || i == 3 ? 0.7f : 0.42f) * (0.7f + 0.3f * sinf(tAhora * 13 + i * 1.9f));
+      float hb = 9 + 54 * op * f, xb = x + (i - 2) * 15 * fminf(r.bAncho, 1.4f);
+      figura(xb - 5, y - hb / 2, xb + 5, y + hb / 2, tonoP(r, y - hb / 2, y + hb / 2, 8),
+             [=](float px, float py) { return dCaja(px, py, xb, y, 4.5f, hb / 2, 4.5f); });
+    }
+    return;
+  }
   figura(x - w / 2, y - h / 2, x + w / 2, y + h / 2, tonoP(r, y - h / 2, y + h / 2, 12),
          [=](float px, float py) { return dCaja(px, py, x, y, w / 2, h / 2, fminf(w, h) / 2); });
 }
@@ -1291,6 +1308,7 @@ Reac reaccionActual() { return laReac; }
 
 void cuadro(float t, float dt, const Entradas &e) {
   tAhora = t;
+  dib::blanco = elPaquete == MINIMALISTA;
   if (laReac != NINGUNA && t - reacDesde >= DURA[laReac]) laReac = NINGUNA;
   float vel;
   float u = t - reacDesde;
@@ -1308,10 +1326,12 @@ void cuadro(float t, float dt, const Entradas &e) {
   ojo(ahora, ahora.R, 1);
   boca(ahora);
   if (laReac != NINGUNA) extrasReac(u, true); else extrasBase(t, e, true);
+  dib::blanco = false;
 }
 
 void progreso(float t, float p) {
   // dos ojitos cerrados que respiran y un anillo que se va llenando
+  dib::blanco = elPaquete == MINIMALISTA;
   Rostro r = neutro(AZUL);
   arco(r, CX - EX, EY + 10 + 3 * sinf(t * 2), EW, false, 0.8f);
   arco(r, CX + EX, EY + 10 + 3 * sinf(t * 2), EW, false, 0.8f);
@@ -1325,6 +1345,7 @@ void progreso(float t, float p) {
   char pct[8]; snprintf(pct, sizeof(pct), "%d%%", (int)(lim(p, 0, 1) * 100));
   dib::texto(pct, x, y, 22, TONOS[AZUL].a, 1);
   dib::texto("Actualizando…", CX, H - 26, 30, TONOS[AZUL].a, 0.6f + 0.4f * sinf(t * 3));
+  dib::blanco = false;
 }
 
 }  // namespace caras
