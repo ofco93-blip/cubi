@@ -456,9 +456,12 @@ void animar(uint32_t now) {
     uint32_t b = (now - demoT0) / 476; if (b != demoBeat) { demoBeat = b; enGolpe(now); }
   }
   bool musica = est >= BALADA;
-  if (musicaCel && musica && now < celVozHasta) {  // con la letra: canta justo cuando canta el artista; la boca sigue lo que oye
+  if (musica && now >= demoHasta) {
+    // con la letra canta justo cuando canta el artista; sin letra canta mientras suena la música (con respiros cada
+    // tantos segundos), salvo que el oído ya esté oyendo la voz. La boca sigue lo que oye y unas sílabas inventadas.
     float t = now / 1000.f;
-    voz = celVoz;
+    if (musicaCel && now < celVozHasta) voz = celVoz;
+    else if (!voz) voz = aNivel > 0.12f && fmodf(t, 5.f) < 4.f;
     bIn = voz ? fmaxf(aBocaCruda, 0.6f * constrain(0.5f * sinf(t * 9.3f) + 0.3f * sinf(t * 3.7f) + 0.3f, 0.f, 1.f)) : 0;
   }
   if (asis && now > asisHasta) asis = NO_ASIS;
