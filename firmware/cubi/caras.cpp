@@ -643,6 +643,7 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
     r.L.incl = r.R.incl = 0.09f * sinf(f * PI * 0.25f);
     feliz(r, campana(c8, 5.6f, 7.6f));
   }
+  if (e.ritmo == R_KPOP) { feliz(r, 1); mover(r, 0, 8 * g); }   // con el micrófono: ojos cerrados, cabecea "tun, tun" y canta
 }
 
 static void anillo(float x, float y, float R, float grosor, float alfa) {

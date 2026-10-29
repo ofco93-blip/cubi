@@ -592,9 +592,10 @@ uint8_t elegirRitmo(uint32_t now) {
   using namespace caras;
   static const uint8_t BAL[] = { R_DISFRUTA, R_PIANO, R_JAZZ, R_GUITARRA, R_CORAZON }, TRO[] = { R_TROPICAL, R_POP, R_GUITARRA },
     REG[] = { R_URBANO, R_KPOP, R_DJ }, ELE[] = { R_ELECTRO, R_DJ, R_BARRAS }, ROC[] = { R_ROCK, R_POP, R_GROOVE };
-  static uint8_t r = R_POP, estR = NADA;
+  static uint8_t r = R_KPOP, estR = NADA;
   if (ritmoFijo >= 0) return ritmoFijo;
-  if (musicaCel && celRitmo >= 0 && celPlay) return celRitmo;
+  // con el celular en play: el instrumento que dijo Haiku; si no se sabe, no improvisa: micrófono y ojos cerrados
+  if (musicaCel && celPlay) return celRitmo >= 0 ? celRitmo : R_KPOP;
   if (est < BALADA) estR = NADA;
   if (musicaCel && celPlay && estR != NADA) return r;  // con el celular en play no cambia de baile a mitad de la canción
   if (est >= BALADA && est != estR) {
