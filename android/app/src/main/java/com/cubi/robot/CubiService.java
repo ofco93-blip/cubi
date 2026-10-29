@@ -1007,8 +1007,9 @@ public class CubiService extends Service {
             asisEstado = nuevo;
             ultimoEnvio = ahora;
         }
-        // música en play (Spotify, YouTube...): Cubi baila de una y deja de bailar apenas se pausa
-        boolean play = suenaMedia && am.isMusicActive();
+        // música en play: Cubi baila de una y deja de bailar apenas se pausa. Con el permiso de música solo cuentan
+        // las apps de música (los reels y videos no lo ponen a bailar)
+        boolean play = suenaMedia && am.isMusicActive() && (!puedeTocarMusica() || suenaAppDeMusica());
         if (play != musicaPlay) { musicaPlay = play; enviar("musica|/musica?play=" + (play ? 1 : 0)); }
         if (musicaPlay && !siguiendo) seguirLetra();
         // los callbacks no avisan cuando pasa el tiempo: mientras algo esté en juego se vuelve a mirar
@@ -1019,11 +1020,25 @@ public class CubiService extends Service {
         else pararOido();
     }
 
+    static final List<String> APPS_MUSICA = Arrays.asList("com.spotify.music", "com.google.android.apps.youtube.music",
+            "deezer.android.app", "com.apple.android.music", "com.amazon.mp3", "com.soundcloud.android", "com.aspiro.tidal");
+
+    private boolean suenaAppDeMusica() {
+        try {
+            for (MediaController c : getSystemService(MediaSessionManager.class).getActiveSessions(new ComponentName(this, Oyente.class)))
+                if (APPS_MUSICA.contains(c.getPackageName()) && c.getPlaybackState() != null
+                        && c.getPlaybackState().getState() == PlaybackState.STATE_PLAYING) return true;
+        } catch (SecurityException ignored) {
+        }
+        return false;
+    }
+
     // ---------- "Hola Cubi": el celular escucha sin internet (Vosk, modelo español de ~40 MB) y abre Gemini ----------
     static final String MODELO = "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip";
-    // el modelo no conoce "Cubi": lo oye como cuba, cubo, cubil… Basta una palabra cortica así (sirve también "Hola Cubi")
-    static final String GRAMATICA = "[\"cubi\", \"cuba\", \"cubo\", \"cubil\", \"hola cuba\", \"hola cubo\", \"oye cuba\", \"[unk]\"]";
-    static final Pattern HOLA = Pattern.compile("\\b(cu|ku)[bv]\\w{0,2}\\b");
+    // el modelo no conoce "Cubi": lo oye como cuba o cubo. Solo despierta con "Hola" + eso: con "Cubi" solo,
+    // cualquier video o canción (reels) lo despertaba de la nada
+    static final String GRAMATICA = "[\"hola cubi\", \"hola cuba\", \"hola cubo\", \"[unk]\"]";
+    static final Pattern HOLA = Pattern.compile("\\bh?ola\\s+(cu|ku)[bv]\\w{0,2}\\b");
     private volatile boolean oidoQuiere;
     private volatile Thread oido;
     private volatile int miSesion = -1;
@@ -1053,7 +1068,7 @@ public class CubiService extends Service {
                     bajarModelo(dir);
                 }
                 modelo = new org.vosk.Model(dir.getAbsolutePath());
-                js("toast('Listo: di “Cubi”')");
+                js("toast('Listo: di “Hola Cubi”')");
                 ui.post(this::revisarAsistente);
             } catch (Exception e) {
                 js("toast(" + JSONObject.quote("No pude preparar “Hola Cubi”: " + e.getMessage()) + ")");
