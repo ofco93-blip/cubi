@@ -822,7 +822,8 @@ static void extrasMini(float u, const Entradas &e) {
       break;
     }
     case R_KPOP: {                                      // micrófono de línea frente a la boquita, con la manito
-      float mx = ahora.bx + 56 + 46 * gritoAhora, my = ahora.by + 4,   // en el "¡aaah!" se corre para que quepa la boca ang = 0.95f + 0.15f * sinf((n + e.pulso) * PI * 0.5f) - 0.2f * ahora.boca, hx, hy;   // lo mueve al cantar
+      // en el "¡aaah!" el micrófono se corre para que quepa la boca grande
+      float mx = ahora.bx + 56 + 46 * gritoAhora, my = ahora.by + 4, ang = 0.95f + 0.15f * sinf((n + e.pulso) * PI * 0.5f) - 0.2f * ahora.boca, hx, hy;   // lo mueve al cantar
       microLinea(mx, my, ang, 1.3f, 1);
       aPantalla(marco(mx, my, ang, 1.3f), 42, 0, hx, hy);
       manoBlanca(hx, hy, ang - PI / 2, 0.85f, false);
