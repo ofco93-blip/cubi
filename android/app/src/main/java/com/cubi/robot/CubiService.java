@@ -653,7 +653,8 @@ public class CubiService extends Service {
 
     // con "Acceso a notificaciones" se le habla directo al reproductor: "busca esto y ponlo" (como Android Auto)
     boolean puedeTocarMusica() {
-        return getSystemService(NotificationManager.class).isNotificationListenerAccessGranted(new ComponentName(this, Oyente.class));
+        return Build.VERSION.SDK_INT >= 27  // Android 8.0 no sabe preguntarlo
+                && getSystemService(NotificationManager.class).isNotificationListenerAccessGranted(new ComponentName(this, Oyente.class));
     }
 
     private boolean tocarEnSesion(String q) {
