@@ -148,6 +148,7 @@ section[hidden] { display: none; }
   <div class="card live">
     <div class="state"><span class="chip" id="chip">Silencio</span><span class="bpm" id="bpm"></span></div>
     <div class="mouth"><div id="mouth"></div></div>
+    <p class="note" id="letraNota"></p>
     <div class="meter"><div class="row"><span>Volumen que escucha</span></div><div class="bar"><b id="mNivel"></b></div></div>
     <div class="meter"><div class="row"><span>Parecido a voz</span><span class="note">la línea es desde dónde canta</span></div><div class="bar"><b id="mVoz" style="background:var(--sing)"></b><u id="mUmbral"></u></div></div>
   </div>
@@ -319,6 +320,8 @@ async function audio() {
   if (tab !== 'musica' || !vivo || audioEnCurso) return;
   audioEnCurso = true;
   try {
+    if (window.Android) $('letraNota').textContent = 'Letra: ' + (Android.estadoLetra() || '…')
+      + (vFw > 0 && vFw < 49 ? ' · Actualiza a Cubi: su firmware no sabe cantar con la letra' : '');
     const a = await api('/audio', 1000);
     const chip = $('chip');
     chip.textContent = ESTADOS[a.estado] || 'Silencio';

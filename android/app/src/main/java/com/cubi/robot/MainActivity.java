@@ -284,6 +284,11 @@ public class MainActivity extends Activity {
 
         // abre los ajustes de texto a voz del celular (motor y voces); si no existen, el instalador de voces
         @JavascriptInterface
+        public String estadoLetra() {
+            return CubiService.yo == null ? "" : CubiService.yo.estadoLetra;
+        }
+
+        @JavascriptInterface
         public boolean puedeTocarMusica() {
             return CubiService.yo == null || CubiService.yo.puedeTocarMusica();
         }

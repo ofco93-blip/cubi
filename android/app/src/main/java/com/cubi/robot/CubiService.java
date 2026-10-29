@@ -665,6 +665,8 @@ public class CubiService extends Service {
     private volatile long[] letraT;        // cuándo empieza cada línea (ms)
     private volatile boolean[] letraVoz;   // si esa línea tiene letra (las vacías son partes sin voz)
     private int vozEnviada = -1;
+    private boolean siguiendo;
+    volatile String estadoLetra = "";      // lo que pasa con la letra, para verlo en la app
     private final Runnable seguirLetraR = this::seguirLetra;
     static final Pattern LINEA = Pattern.compile("\\[(\\d+):(\\d+(?:\\.\\d+)?)\\](.*)");
 
@@ -684,12 +686,17 @@ public class CubiService extends Service {
         if (!musicaPlay || !puedeTocarMusica()) {
             if (vozEnviada == 1) enviar("asis|/musica?voz=0");
             vozEnviada = -1;
+            siguiendo = false;
+            estadoLetra = !musicaPlay ? "No suena música en el celular"
+                    : "Falta el permiso: toca “Permitir que Cubi controle la música” en la pestaña Cara";
             return;
         }
+        siguiendo = true;
         if (reproductor == null || ahora - reproductorVisto > 3000) { reproductor = buscarReproductor(); reproductorVisto = ahora; }
         MediaController c = reproductor;
         MediaMetadata m = c == null ? null : c.getMetadata();
         PlaybackState st = c == null ? null : c.getPlaybackState();
+        if (m == null || st == null) estadoLetra = "No veo qué canción suena (¿Spotify o YouTube Music en play?)";
         if (m != null && st != null) {
             String titulo = m.getString(MediaMetadata.METADATA_KEY_TITLE), artista = m.getString(MediaMetadata.METADATA_KEY_ARTIST);
             String id = artista + "|" + titulo;
@@ -697,6 +704,7 @@ public class CubiService extends Service {
                 cancionId = id;
                 cancionTexto = titulo + (artista != null ? " de " + artista : "");
                 letraT = null;
+                estadoLetra = cancionTexto + ": buscando la letra…";
                 bajarLetra(titulo, artista == null ? "" : artista, m.getLong(MediaMetadata.METADATA_KEY_DURATION), id);
             }
             long[] t = letraT; boolean[] v = letraVoz;
@@ -706,6 +714,7 @@ public class CubiService extends Service {
                 for (int k = 0; k < t.length && t[k] <= pos + 150; k++) i = k;  // 150 ms antes: lo que tarda en llegar a Cubi
                 int s = i >= 0 && v[i] && pos - t[i] < 7000 ? 1 : 0;           // una línea sin la siguiente dura 7 s máximo
                 if (s != vozEnviada || ahora - vozMandada > 4000) { enviar("asis|/musica?voz=" + s); vozEnviada = s; vozMandada = ahora; }
+                estadoLetra = cancionTexto + ": " + (s == 1 ? "canta ahora" : "parte sin voz");
             }
         }
         ui.postDelayed(seguirLetraR, 250);
@@ -737,7 +746,8 @@ public class CubiService extends Service {
                     double d = durMs > 0 ? Math.abs(r.optDouble("duration", 0) - durMs / 1000.0) : 0;
                     if (d < dif) { dif = d; mejor = sync; }
                 }
-                if (mejor == null || dif > 10 || !id.equals(cancionId)) return;  // sin letra sincronizada: queda el micrófono
+                if (!id.equals(cancionId)) return;
+                if (mejor == null || dif > 10) { estadoLetra = cancionTexto + ": sin letra sincronizada (usa el micrófono)"; return; }
                 ArrayList<Long> ts = new ArrayList<>(); ArrayList<Boolean> vs = new ArrayList<>();
                 for (String linea : mejor.split("\n")) {
                     Matcher mt = LINEA.matcher(linea.trim());
@@ -749,7 +759,8 @@ public class CubiService extends Service {
                 for (int i = 0; i < t.length; i++) { t[i] = ts.get(i); v[i] = vs.get(i); }
                 letraVoz = v;
                 letraT = t;
-            } catch (Exception ignored) {  // sin internet o sin letra: Cubi sigue con lo que oye
+            } catch (Exception e) {  // sin internet o sin letra: Cubi sigue con lo que oye
+                if (id.equals(cancionId)) estadoLetra = cancionTexto + ": no pude bajar la letra (" + e.getMessage() + ")";
             }
         }).start();
     }
@@ -927,7 +938,8 @@ public class CubiService extends Service {
         }
         // música en play (Spotify, YouTube...): Cubi baila de una y deja de bailar apenas se pausa
         boolean play = suenaMedia && am.isMusicActive();
-        if (play != musicaPlay) { musicaPlay = play; enviar("musica|/musica?play=" + (play ? 1 : 0)); if (play) seguirLetra(); }
+        if (play != musicaPlay) { musicaPlay = play; enviar("musica|/musica?play=" + (play ? 1 : 0)); }
+        if (musicaPlay && !siguiendo) seguirLetra();
         // los callbacks no avisan cuando pasa el tiempo: mientras algo esté en juego se vuelve a mirar
         if (!asisEstado.isEmpty() || hablaDesde != 0 || ahora < pitidoHasta || ventana || musicaPlay || ahora < charlaHasta) ui.postDelayed(revisar, 400);
         // "Hola Cubi" escucha solo cuando nadie más usa el micrófono ni hay llamada
