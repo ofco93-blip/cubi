@@ -195,7 +195,9 @@ static void boca(const Rostro &r) {
     // vocal: w = 0 redonda (o, u) .. 1 estirada (i, e). La "a" abre alta; la "o" es más redonda; la "i" una rayita ancha
     const float w = lim((r.bAncho - 0.75f) / 0.6f, 0, 1), G = gritoAhora;
     const float bh0 = (5 + 24 * op) * (1 - 0.35f * w), bw0 = 5 + 5 * w + (1 - w) * 0.35f * bh0;
-    const float bh = bh0 + (38 - bh0) * G, bw = bw0 + (48 - bw0) * G;   // en el "¡aaah!" la boca crece a lo ancho de la pantalla
+    // en el "¡aaah!" la boca crece vertical hasta ocupar casi toda la pantalla; el ancho sigue la vocal
+    const float bhG = 120 * (1 - 0.3f * w), bwG = bhG * (0.42f + 0.3f * (1 - w) * 0.6f + 0.22f * w);
+    const float bh = bh0 + (bhG - bh0) * G, bw = bw0 + (bwG - bw0) * G;
     figura(x - bw - 2, y + 6 - bh - 2, x + bw + 2, y + 6 + bh + 2, solido(BLANCO, 1, 10),
            [=](float px, float py) { return dCaja(px, py, x, y + 6, bw, bh, fminf(bw, bh)); });
     return;
@@ -655,7 +657,13 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
   alto = e.canta && (e.boca > 0.78f || e.voz > 0.85f) ? alto + dt : 0;   // voz muy fuerte, o la barra rosada al tope
   const bool grita = alto > 0.25f;
   gritoAhora += ((grita ? 1.f : 0.f) - gritoAhora) * lim(dt * (grita ? 10 : 4), 0, 1);
-  if (gritoAhora > 0.01f) { escalar(r, 1 - 0.45f * gritoAhora, 1 - 0.55f * gritoAhora); feliz(r, fmaxf(r.L.feliz, gritoAhora)); mover(r, 0, -16 * gritoAhora); }
+  if (gritoAhora > 0.01f) {                            // la boca gigante empuja los ojos arriba y a los lados (caricatura)
+    const float G = gritoAhora;
+    escalar(r, 1 - 0.5f * G, 1 - 0.6f * G); feliz(r, fmaxf(r.L.feliz, G));
+    r.L.x -= 70 * G; r.R.x += 70 * G; r.L.y -= 80 * G; r.R.y -= 80 * G;
+    r.L.incl = -0.25f * G; r.R.incl = -0.25f * G;
+    r.by -= 70 * G;                                     // la boca sube al centro de la pantalla
+  }
 }
 
 static void anillo(float x, float y, float R, float grosor, float alfa) {
@@ -774,6 +782,7 @@ static void telefonoIcono(float x, float y, float R, float u, float alfa) {
 }
 
 static void extrasMini(float u, const Entradas &e) {
+  if (gritoAhora > 0.4f) return;                        // en el "¡aaah!" gigante el instrumento se esconde
   int n = (int)pulsosVistos;
   float g = expf(-e.pulso * 6), f = n + e.pulso, vaiven = sinf(f * PI);
   switch (e.ritmo) {
