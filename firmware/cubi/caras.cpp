@@ -719,15 +719,15 @@ static void bateria(int n, float g, float alfa) {
     float abajo = fmaxf(fabsf(dElipse(px, py, sx, sy + 28, 34, 9)) - 2.4f, sy + 28 - py);
     return fminf(arriba, fminf(lados, abajo));
   });
-  const float cx = CX + 112, cy = H - 126, inc = izq ? 0 : 0.14f * g;          // platillo que se mece al golpearlo
+  const float cx = CX + 112, cy = H - 104, inc = izq ? 0 : 0.14f * g;          // platillo que se mece al golpearlo
   linea(cx - 42, cy + 5 - 42 * inc, cx + 42, cy - 5 + 42 * inc, 3, BL, alfa, 6);
   linea(cx, cy, cx, H - 14, 2, BL, 0.6f * alfa);
   for (int lado = -1; lado <= 1; lado += 2) {
     float sube = (lado < 0) == izq ? 1 - g : 0.75f;
-    float tx = lado < 0 ? sx + 6 : cx - 14, ty = (lado < 0 ? sy - 4 : cy - 4) - 36 * sube;
-    float hx = tx - lado * 34, hy = ty - 24;
+    float tx = lado < 0 ? sx + 6 : cx - 14, ty = (lado < 0 ? sy - 4 : cy - 4) - 20 * sube;
+    float hx = tx + lado * 40, hy = ty - 14;                                    // las manitos por fuera: no tapan los ojos
     linea(tx, ty, hx, hy, 2.6f, BL, alfa);
-    manoBlanca(hx, hy, lado < 0 ? 0.6f : PI - 0.6f, 0.75f, false, alfa);
+    manoBlanca(hx, hy, lado < 0 ? PI - 0.6f : 0.6f, 0.75f, false, alfa);
   }
 }
 
@@ -756,14 +756,14 @@ static void extrasMini(float u, const Entradas &e) {
   float g = expf(-e.pulso * 6), f = n + e.pulso, vaiven = sinf(f * PI);
   switch (e.ritmo) {
     case R_ROCK: case R_GROOVE: {                       // guitarra eléctrica: la manito rasguea en cada golpe
-      float gx = CX - 62, gy = H - 58, ang = -0.5f - 0.1f * g, hx, hy;
+      float gx = CX - 62, gy = H - 48, ang = -0.3f - 0.08f * g, hx, hy;   // más acostada: el mástil pasa debajo de la boquita
       guitarraLinea(gx, gy, ang, 1, true, 4 * g, 1);
       aPantalla(marco(gx, gy, ang, 1), 0, -14 + 26 * (1 - g), hx, hy);
       manoBlanca(hx, hy, ang + 1.9f, 0.85f, false);
       break;
     }
     case R_GUITARRA: case R_DISFRUTA: {                 // guitarra acústica: rasguea dos veces por golpe
-      float rasga = expf(-fmodf(e.pulso * 2, 1.f) * 6), gx = CX - 70, gy = H - 62, ang = -0.42f, hx, hy;
+      float rasga = expf(-fmodf(e.pulso * 2, 1.f) * 6), gx = CX - 70, gy = H - 50, ang = -0.28f, hx, hy;
       guitarraLinea(gx, gy, ang, 1.05f, false, 3 * rasga, 1);
       aPantalla(marco(gx, gy, ang, 1.05f), 22, -16 + 26 * (1 - rasga), hx, hy);
       manoBlanca(hx, hy, ang + 1.9f, 0.85f, false);
@@ -778,7 +778,7 @@ static void extrasMini(float u, const Entradas &e) {
       }
       break;
     case R_JAZZ: {                                      // saxofón con la manito, se mece con el golpe
-      const float sxx = W - 110 + 4 * vaiven, syy = H - 82, se = 0.95f;
+      const float sxx = W - 110 + 4 * vaiven, syy = H - 64, se = 0.95f;
       float hx, hy;
       saxoLinea(sxx, syy, se, 1);
       aPantalla(marco(sxx, syy, 0, se), -4, -28, hx, hy); manoBlanca(hx, hy, -0.3f, 0.75f, false);
