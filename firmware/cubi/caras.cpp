@@ -866,7 +866,7 @@ static void extrasMini(float u, const Entradas &e) {
   const int nv = n * veces + (int)fv;                                  // cuántos toques van
   switch (e.ritmo) {
     case R_ROCK: case R_GROOVE: {                       // guitarra eléctrica: la manito rasguea a la velocidad del nivel
-      float gx = CX - 62, gy = H - 48, ang = -0.3f - 0.08f * gv, hx, hy;   // más acostada: el mástil pasa debajo de la boquita
+      float gx = CX - 62, gy = H - 36, ang = -0.22f - 0.08f * gv, hx, hy;   // abajo y acostada: el mástil pasa debajo de la boquita
       guitarraLinea(gx, gy, ang, 1, true, 4 * gv, 1);
       aPantalla(marco(gx, gy, ang, 1), 0, -14 + 26 * (1 - gv), hx, hy);
       manoBlanca(hx, hy, ang + 1.9f, 0.85f, false);
@@ -875,7 +875,7 @@ static void extrasMini(float u, const Entradas &e) {
       break;
     }
     case R_GUITARRA: case R_DISFRUTA: {                 // guitarra acústica: rasguea a la velocidad del nivel
-      float rasga = gv, gx = CX - 70, gy = H - 50, ang = -0.28f, hx, hy;
+      float rasga = gv, gx = CX - 70, gy = H - 38, ang = -0.2f, hx, hy;
       guitarraLinea(gx, gy, ang, 1.05f, false, 3 * rasga, 1);
       aPantalla(marco(gx, gy, ang, 1.05f), 22, -16 + 26 * (1 - rasga), hx, hy);
       manoBlanca(hx, hy, ang + 1.9f, 0.85f, false);
@@ -885,7 +885,7 @@ static void extrasMini(float u, const Entradas &e) {
     }
     case R_TROPICAL:                                    // maracas a los lados: se sacuden en el 2 y el 4
       for (int s2 = -1; s2 <= 1; s2 += 2) {
-        float sh = (nv + (s2 > 0)) % 2 ? gv : 0.25f * gv, x = CX + s2 * 172, y = EY + 70;   // se turnan, a la velocidad del nivel
+        float sh = (nv + (s2 > 0)) % 2 ? gv : 0.25f * gv, x = CX + s2 * 150, y = EY + 70;   // más adentro: no se salen   // se turnan, a la velocidad del nivel
         float ang = s2 * 0.35f + 0.5f * sh * sinf(u * 40), hx = x + sinf(ang) * 38, hy = y - cosf(ang) * 38;
         linea(x, y, hx, hy, 4, BL, 0.95f);
         volumen(hx - 16, hy - 16, hx + 16, hy + 16, 0.95f, [=](float px, float py) { return dCirculo(px, py, hx, hy, 15); });
