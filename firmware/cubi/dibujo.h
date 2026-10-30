@@ -166,11 +166,12 @@ void figura1(float bx0, float by0, float bx1, float by1, const Pintura &p0, F d)
 template <typename F>
 void figura(float bx0, float by0, float bx1, float by1, const Pintura &p0, F d) {
   if (zoom == 1) { figura1(bx0, by0, bx1, by1, p0, d); return; }
-  const float z = zoom, cx = zx, cy = zy;
+  // el brillo no crece con el zoom (sale más barato y casi no se nota); la cuenta va con el inverso, sin dividir
+  const float z = zoom, iz = 1.f / z, ox = zx - zx * iz, oy = zy - zy * iz;
   Pintura p = p0;
-  p.halo *= z; p.y0 = cy + (p0.y0 - cy) * z; p.y1 = cy + (p0.y1 - cy) * z;
-  figura1(cx + (bx0 - cx) * z, cy + (by0 - cy) * z, cx + (bx1 - cx) * z, cy + (by1 - cy) * z, p,
-          [&](float x, float y) { return d(cx + (x - cx) / z, cy + (y - cy) / z) * z; });
+  p.y0 = zy + (p0.y0 - zy) * z; p.y1 = zy + (p0.y1 - zy) * z;
+  figura1(zx + (bx0 - zx) * z, zy + (by0 - zy) * z, zx + (bx1 - zx) * z, zy + (by1 - zy) * z, p,
+          [&](float x, float y) { return d(ox + x * iz, oy + y * iz) * z; });
 }
 // para lo que va pegado al borde de la pantalla (números, grados, el sol de la esquina): sin zoom mientras exista
 struct SinZoom { float z; SinZoom() : z(zoom) { zoom = 1; } ~SinZoom() { zoom = z; } };
