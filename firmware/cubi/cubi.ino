@@ -785,7 +785,9 @@ void imuUpdate(uint32_t now) {
   if (emoBase != SUENO && now - lastMotion > MINUTOS_SUENO * 60000UL && modo == NORMAL) { emoBase = SUENO; setEmo(SUENO, 0); }
 
   // Frenón y arranque: deben durar 0,3 s (un hueco no cuenta) y le ganan a la música un ratico.
-  static uint32_t frenaDesde = 0, aceleraDesde = 0;
+  static uint32_t frenaDesde = 0, aceleraDesde = 0, ultimoBache = 0;
+  static float vibra = 0.05f;                 // vibración normal del camino (~1 s): un bache es un salto muy por encima
+  vibra += (fabsf(vert) - vibra) * 0.01f;
   frenaDesde = lon < -umbralFreno ? (frenaDesde ? frenaDesde : now) : 0;
   aceleraDesde = lon > UMBRAL_ACEL ? (aceleraDesde ? aceleraDesde : now) : 0;
   // mientras suena su parlante (y un ratico después) la caja vibra: no cuenta como movimiento
@@ -795,10 +797,12 @@ void imuUpdate(uint32_t now) {
     static uint32_t ultimoEvento = 0;
     // frenazo: medio segundo frenando duro, y no más de uno cada 20 s (el vidrio rajado cansa)
     static uint32_t ultimoFrenazo = 0;
-    if (frenaDesde && now - frenaDesde > 500 && (!ultimoFrenazo || now - ultimoFrenazo > 20000)) { reac(caras::FRENAZO); cdEvento = now + 4500; ultimoEvento = ultimoFrenazo = now; }
+    if (frenaDesde && now - frenaDesde > 300 && (!ultimoFrenazo || now - ultimoFrenazo > 20000)) { reac(caras::FRENAZO); cdEvento = now + 4500; ultimoEvento = ultimoFrenazo = now; }
     else if (aceleraDesde && now - aceleraDesde > 300) {  // arrancar después de un buen rato quieto: entra "a toda velocidad"
       reac(now - ultimoEvento > 60000 ? caras::ARRANQUE : caras::ACELERON); cdEvento = now + 4000; ultimoEvento = now;
-    } else if (fabsf(vert) > UMBRAL_BACHE && estilo < BALADA) { reac(caras::BACHE); cdEvento = now + 3000; ultimoEvento = now; }  // con música no la corta
+    } else if (fabsf(vert) > fmaxf(UMBRAL_BACHE, vibra * 5) && now - ultimoBache > 8000) {   // también con música
+      reac(caras::BACHE); cdEvento = now + 3000; ultimoEvento = ultimoBache = now;
+    }
   }
   // curva larga (sin música): mira y se inclina hacia la curva
   static uint32_t curvaDesde = 0;
@@ -1144,7 +1148,9 @@ void setup() {
   sonidoOn = prefs.getBool("son", true); musicaOn = prefs.getBool("mus", true); musicaCel = prefs.getBool("mc", true);
   caras::paquete(prefs.getUChar("paq", caras::CUBI_AZUL));
   umbralVoz = prefs.getFloat("uv", UMBRAL_VOZ); ganBoca = prefs.getFloat("gb", GANANCIA_BOCA);
-  sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = prefs.getFloat("fr", UMBRAL_FRENO);
+  sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = UMBRAL_FRENO;
+  // la app ya no tiene estos ajustes de prueba: vuelven a los de fábrica (la boca, el brillo y el volumen sí se guardan)
+  umbralVoz = UMBRAL_VOZ; sensK = SONIDO_K; micGan = GANANCIA_MIC;
 
   // Reset de pantalla y táctil por el expansor TCA9554 (pines 0..2), misma secuencia que el firmware de fábrica V2.
   // Con pulsos cortos (20 ms) el panel puede quedar trabado tras regrabar: ver github.com/waveshareteam/ESP32-S3-Touch-AMOLED-1.8/issues/12

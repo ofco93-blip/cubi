@@ -128,6 +128,7 @@ section[hidden] { display: none; }
     <button class="btn main" id="hablarCubi">Hablarle a Cubi</button>
     <p class="note">Toca dos veces la pantalla de Cubi (o “Hablarle a Cubi”), espera su carita de escuchar y pide lo que quieras: “haz un kamehameha”, “cuéntame un chiste”. Mientras escucha y habla, la música se baja sola. Sin clave, el doble toque abre Gemini como antes.</p>
   </div>
+  <div hidden>
   <h2>Reacciones</h2>
   <div class="grid" id="caras"></div>
   <h2>Avisos</h2>
@@ -139,6 +140,7 @@ section[hidden] { display: none; }
   </div>
   <h2>Sonidos</h2>
   <div class="grid" id="sonidos"></div>
+  </div>
 </section>
 
 <!-- ================= MÚSICA ================= -->
@@ -151,6 +153,7 @@ section[hidden] { display: none; }
     <div class="meter"><div class="row"><span>Volumen que escucha</span></div><div class="bar"><b id="mNivel"></b></div></div>
     <div class="meter"><div class="row"><span>Parecido a voz</span><span class="note">la línea es desde dónde canta</span></div><div class="bar"><b id="mVoz" style="background:var(--sing)"></b><u id="mUmbral"></u></div></div>
   </div>
+  <div hidden>
   <h2>Probar sin música</h2>
   <div class="grid2">
     <button class="btn main" data-demo="canto">Que cante</button>
@@ -159,20 +162,20 @@ section[hidden] { display: none; }
   <h2>Bailes</h2>
   <div class="grid2" id="bailes"></div>
   <p class="note" id="cps"></p>
+  </div>
   <h2>Ajustar el canto</h2>
   <div class="card">
     <div class="row"><span>Reaccionar a la música</span><label class="sw"><input type="checkbox" id="mus"><i></i></label></div>
     <div class="row"><span>Esperar a que el celular reproduzca</span><label class="sw"><input type="checkbox" id="mc"><i></i></label></div>
     <p class="note">Prendido: baila solo cuando Spotify (o tu app de música) está en play, también por Android Auto, y usa la letra y el instrumento de la canción; su micrófono sigue el ritmo y la voz. Apagado: se guía solo por lo que oye su micrófono (sirve con radio o música de otro celular).</p>
-    <label class="sl"><div class="row"><span>Empieza a cantar con</span><span id="vUv"></span></div>
-      <input type="range" id="uv" min="5" max="95" step="1"></label>
+    <div hidden><label class="sl"><div class="row"><span>Empieza a cantar con</span><span id="vUv"></span></div>
+      <input type="range" id="uv" min="5" max="95" step="1"></label></div>
     <label class="sl"><div class="row"><span>Qué tanto abre la boca</span><span id="vGb"></span></div>
       <input type="range" id="gb" min="30" max="300" step="5"></label>
-    <label class="sl"><div class="row"><span>Sensibilidad a la música</span><span id="vSk"></span></div>
+    <div hidden><label class="sl"><div class="row"><span>Sensibilidad a la música</span><span id="vSk"></span></div>
       <input type="range" id="sk" min="0" max="100" step="1"></label>
     <label class="sl"><div class="row"><span>Micrófono</span><span id="vMg"></span></div>
-      <input type="range" id="mg" min="0" max="7" step="1"></label>
-    <p class="note">Pon una canción con voz cerca del robot. Si mueve la boca cuando solo suenan instrumentos, sube "Empieza a cantar con". Si no canta nunca, bájalo.</p>
+      <input type="range" id="mg" min="0" max="7" step="1"></label></div>
   </div>
 </section>
 
@@ -196,9 +199,9 @@ section[hidden] { display: none; }
     <label class="sl"><div class="row"><span>Volumen</span><span id="vVol"></span></div><input type="range" id="vol" min="0" max="100"></label>
     <div class="row"><span>Sonidos del robot</span><label class="sw"><input type="checkbox" id="son"><i></i></label></div>
     <button class="btn" id="rot">Girar la pantalla 180°</button>
-    <label class="sl"><div class="row"><span>Qué tan duro hay que frenar para que se estrelle</span><span id="vFr"></span></div>
-      <input type="range" id="fr" min="15" max="90" step="1"></label>
-    <button class="btn" id="adl">Al frenar se alegra en vez de asustarse: invertir</button>
+    <div hidden><label class="sl"><div class="row"><span>Qué tan duro hay que frenar para que se estrelle</span><span id="vFr"></span></div>
+      <input type="range" id="fr" min="15" max="90" step="1"></label></div>
+    <button class="btn" id="adl">Si al frenar se alegra en vez de asustarse, toca aquí</button>
   </div>
   <h2>Bluetooth</h2>
   <div class="card">
@@ -212,7 +215,7 @@ section[hidden] { display: none; }
     <button class="btn main" id="actCubi">Actualizar a Cubi (firmware)</button>
     <p class="note">El firmware va por Bluetooth: tarda unos minutos y la app queda bloqueada hasta que termine.</p>
     <button class="btn" id="buscarVer">Buscar versión nueva</button>
-    <button class="btn" id="subir">Subir un firmware desde un archivo</button>
+    <button class="btn" id="subir" hidden>Subir un firmware desde un archivo</button>
   </div>
   <p class="note" id="info" style="margin:18px 2px"></p>
 </section>

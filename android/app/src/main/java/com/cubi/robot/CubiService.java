@@ -605,7 +605,16 @@ public class CubiService extends Service {
                 + (musicaPlay ? ". Está sonando " + (cancionTexto.isEmpty() ? "música" : cancionTexto) : "") + "]\n";
     }
 
+    // "Cubi, cállate": se cierra el micrófono de una, sin contestar ni despedirse
+    static final Pattern CALLA = Pattern.compile("\\b(c[aá]llate|callate|silencio|basta|no hables|shh+)\\b");
+
     private void preguntar(String texto) {
+        if (CALLA.matcher(texto.toLowerCase(Locale.ROOT)).find()) {
+            if (voz != null) voz.stop();
+            sigueCharla = false;
+            terminarCharla();
+            return;
+        }
         charlaHasta = System.currentTimeMillis() + 30000;
         js("toast(" + JSONObject.quote("Le dijiste: " + texto) + ")");
         new Thread(() -> {
