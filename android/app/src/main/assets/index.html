@@ -211,6 +211,7 @@ section[hidden] { display: none; }
   </div>
   <h2>Pantalla y sonido</h2>
   <div class="card">
+    <label class="sl"><div class="row"><span>Tamaño de la cara</span><span id="vTam"></span></div><input type="range" id="tam" min="100" max="150" step="5"></label>
     <label class="sl"><div class="row"><span>Brillo</span><span id="vBri"></span></div><input type="range" id="bri" min="10" max="255"></label>
     <label class="sl"><div class="row"><span>Volumen</span><span id="vVol"></span></div><input type="range" id="vol" min="0" max="100"></label>
     <div class="row"><span>Sonidos del robot</span><label class="sw"><input type="checkbox" id="son"><i></i></label></div>
@@ -322,6 +323,7 @@ function pintarEstado(j) {
   $('info').textContent = 'Cubi v' + j.ver + (j.carga ? ' · cargando' : j.usb ? ' · conectado al USB' : ' · con batería');
   if (ini) {
     ini = false;
+    if (j.tam !== undefined) $('tam').value = j.tam;
     $('bri').value = j.bri; $('vol').value = j.vol; $('son').checked = !!j.son; $('mus').checked = !!j.mus; if (j.mc !== undefined) $('mc').checked = !!j.mc;
     $('uv').value = Math.round(j.uv * 100); $('gb').value = Math.round(j.gb * 100);
     $('sk').value = Math.round((8 - j.sk) / 6.7 * 100); $('mg').value = j.mg;
@@ -368,6 +370,7 @@ function etiquetas() {
   $('vMg').textContent = $('mg').value + ' de 7';
   $('vFr').textContent = $('fr').value < 30 ? 'suave' : $('fr').value < 50 ? 'normal' : $('fr').value < 70 ? 'fuerte' : 'muy fuerte';
   $('vBri').textContent = Math.round($('bri').value / 2.55) + '%';
+  $('vTam').textContent = $('tam').value + '%';
   $('vVol').textContent = $('vol').value + '%';
 }
 document.querySelectorAll('input[type=range]').forEach(r => r.addEventListener('input', etiquetas));
@@ -378,6 +381,7 @@ $('mg').onchange = e => mandar('/ajuste?mg=' + e.target.value);
 $('mus').onchange = e => mandar('/ajuste?mus=' + (e.target.checked ? 1 : 0));
 $('mc').onchange = e => mandar('/ajuste?mc=' + (e.target.checked ? 1 : 0));
 $('bri').onchange = e => mandar('/brillo?v=' + e.target.value);
+$('tam').onchange = e => mandar('/ajuste?tam=' + e.target.value);
 $('vol').onchange = e => mandar('/ajuste?vol=' + e.target.value);
 $('son').onchange = e => mandar('/ajuste?son=' + (e.target.checked ? 1 : 0));
 $('rot').onclick = () => mandar('/ajuste?rot=1');

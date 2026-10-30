@@ -107,6 +107,9 @@ struct Pintura {
 // paquete "Robot minimalista": todo en blanco (se quita el color y se deja qué tan claro es)
 extern bool blanco;
 inline Col sinColor(const Col &c) { float v = fmaxf(c.r, fmaxf(c.g, c.b)); return {v, v, v}; }
+// zoom de la cara (para el acrílico que la agranda): lo que se dibuja se escala alrededor de (zx, zy).
+// Las figuras se siguen describiendo en las medidas de siempre; figura() y texto() hacen la cuenta.
+extern float zoom, zx, zy;
 
 inline Pintura solido(const Col &c, float alfa = 1, float halo = 0) {
   Pintura p; p.arriba = p.abajo = p.haloCol = c; p.alfa = alfa; p.halo = halo; return p;
@@ -115,7 +118,7 @@ inline Pintura solido(const Col &c, float alfa = 1, float halo = 0) {
 // se recorre en cuadritos de 8x8: los que quedan del todo adentro se pintan sin calcular nada y los de afuera
 // se saltan; solo los del borde (y el brillo) se calculan pixel por pixel
 template <typename F>
-void figura(float bx0, float by0, float bx1, float by1, const Pintura &p0, F d) {
+void figura1(float bx0, float by0, float bx1, float by1, const Pintura &p0, F d) {
   if (p0.alfa <= 0.01f) return;
   Pintura p = p0;
   if (blanco) { p.arriba = sinColor(p.arriba); p.abajo = sinColor(p.abajo); p.haloCol = sinColor(p.haloCol); }
@@ -159,6 +162,18 @@ void figura(float bx0, float by0, float bx1, float by1, const Pintura &p0, F d) 
     }
   }
 }
+
+template <typename F>
+void figura(float bx0, float by0, float bx1, float by1, const Pintura &p0, F d) {
+  if (zoom == 1) { figura1(bx0, by0, bx1, by1, p0, d); return; }
+  const float z = zoom, cx = zx, cy = zy;
+  Pintura p = p0;
+  p.halo *= z; p.y0 = cy + (p0.y0 - cy) * z; p.y1 = cy + (p0.y1 - cy) * z;
+  figura1(cx + (bx0 - cx) * z, cy + (by0 - cy) * z, cx + (bx1 - cx) * z, cy + (by1 - cy) * z, p,
+          [&](float x, float y) { return d(cx + (x - cx) / z, cy + (y - cy) / z) * z; });
+}
+// para lo que va pegado al borde de la pantalla (números, grados, el sol de la esquina): sin zoom mientras exista
+struct SinZoom { float z; SinZoom() : z(zoom) { zoom = 1; } ~SinZoom() { zoom = z; } };
 
 // ---------------------------------------------------------------- texto (Baloo 2, centrado)
 inline const Letra *letra(uint32_t cod) {

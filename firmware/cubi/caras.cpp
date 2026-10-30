@@ -41,6 +41,8 @@ static Rostro ahora, meta;
 const char *NOMBRE_PAQ[N_PAQ] = {"Cubi azul", "Robot minimalista"};
 static uint8_t elPaquete = CUBI_AZUL;
 void paquete(uint8_t p) { elPaquete = p < N_PAQ ? p : CUBI_AZUL; }
+static float elTamano = 1.2f;  // la cara más grande (con el acrílico encima se ve aún más): 1 = como antes
+void tamano(float z) { elTamano = lim(z, 1.f, 1.5f); }
 static Base laBase = REPOSO;
 static Reac laReac = NINGUNA;
 static float reacDesde = -1, tAhora = 0, baseDesde = 0, curvaAhora = 0;
@@ -1302,6 +1304,7 @@ static void lluviaVidrio(float u) {
 // El destello sale del sol (arriba a la derecha) y cruza la pantalla; cuando el carro gira, el sol se corre y el destello con él.
 static void solDestello(float u, float a) {
   ConColor cc;
+  SinZoom sz;                                                         // el sol va en la esquina: sin zoom
   const float sx = W - 46 - curvaAhora * 150, sy = 30;
   figura(sx - 70, sy - 70, sx + 70, sy + 70, solido(Col{255, 214, 90}, a, 46), [=](float px, float py) { return dCirculo(px, py, sx, sy, 22 + 2 * sinf(u * 3)); });
   for (int k = 0; k < 8; k++) {                                      // rayitos que giran despacio
@@ -1396,6 +1399,7 @@ static void pistolaConfeti(float u) {
   if (k >= 0 && k < 3) {                                              // 3 · 2 · 1 arriba
     const float f = k - floorf(k);
     const char c[2] = {char('3' - (int)k), 0};
+    SinZoom sz;                                                       // los números arriba, sin zoom
     dib::texto(c, CX, 52, 70 + 30 * (1 - tramo(f, 0, 0.25f)), BLANCO, 1 - tramo(f, 0.8f, 1));
   }
   if (tiro > 0 && tiro < 0.45f) {                                     // ¡pum!: el rayo cruza hasta el copiloto
@@ -1860,6 +1864,7 @@ Reac reaccionActual() { return laReac; }
 void cuadro(float t, float dt, const Entradas &e) {
   tAhora = t; curvaAhora = e.curva;
   dib::blanco = elPaquete == MINIMALISTA;
+  dib::zoom = elTamano; dib::zx = CX; dib::zy = 250;   // crece hacia arriba y a los lados; abajo casi no se corta
   if (laReac != NINGUNA && t - reacDesde >= DURA[laReac]) laReac = NINGUNA;
   if (laReac == PUM && pumCuenta >= 0 && t - reacDesde - pumCuenta > 5.6f) laReac = NINGUNA;   // terminó de reírse
   float vel;
@@ -1876,12 +1881,9 @@ void cuadro(float t, float dt, const Entradas &e) {
   if (laReac != NINGUNA) extrasReac(u, false); else extrasBase(t, e, false);
   ojo(ahora, ahora.L, -1);
   ojo(ahora, ahora.R, 1);
-  if (elPaquete == MINIMALISTA) for (int s = -1; s <= 1; s += 2) {   // los puntitos a los lados de los ojos
-    const Ojo &o = s < 0 ? ahora.L : ahora.R;
-    circulo(o.x + s * (o.w / 2 + 24), o.y + o.h * 0.08f, 6, BL, 0.9f, 6);
-  }
   boca(ahora);
   if (laReac != NINGUNA) extrasReac(u, true); else extrasBase(t, e, true);
+  dib::zoom = 1;                                                  // lo de arriba (los grados) va sin zoom, pegado al borde
   if (t < gradosHasta) {                                          // "24°" arriba, entra y sale suave
     float a = fminf(lim((t - gradosDesde) / 0.3f, 0, 1), lim((gradosHasta - t) / 0.4f, 0, 1));
     char b[8]; snprintf(b, sizeof b, "%d", gradosN);

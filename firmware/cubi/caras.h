@@ -36,6 +36,7 @@ struct Entradas {
 enum Paquete : uint8_t { CUBI_AZUL, MINIMALISTA, N_PAQ };
 extern const char *NOMBRE_PAQ[N_PAQ];
 void paquete(uint8_t p);
+void tamano(float z);                   // qué tan grande se dibuja la cara (1 = como antes, hasta 1,5)
 
 void iniciar(uint32_t semilla);
 void base(Base b);
