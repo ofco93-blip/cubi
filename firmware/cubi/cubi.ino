@@ -69,8 +69,8 @@ es8311_handle_t es = nullptr;
 
 uint8_t rotacion = ROTACION_INICIAL, volumen = VOLUMEN_INICIAL, micGan = GANANCIA_MIC;
 bool sonidoOn = true, musicaOn = true;
-uint8_t tamCara = 120;
-bool apagarConCarro = true;  // al cortarse la corriente del USB (se apagó el carro) se apaga a los 20 s  // % del tamaño de la cara (para el acrílico)
+uint8_t tamCara = 120;  // % del tamaño de la cara (para el acrílico)
+bool apagarConCarro = true;  // al cortarse la corriente del USB (se apagó el carro) se apaga al minuto (APAGAR_SIN_USB_SEG)
 bool musicaCel = true;  // true: baila solo cuando el celular reproduce (y usa la letra y el instrumento que manda);
                         // false: solo con lo que oye su micrófono, sin mirar el celular
 float umbralVoz = UMBRAL_VOZ, ganBoca = GANANCIA_BOCA, sensK = SONIDO_K, umbralFreno = UMBRAL_FRENO;
@@ -948,8 +948,7 @@ void energiaUpdate(uint32_t now) {
   if (pmu.getBatteryPercent() < 15 && (!avisoBat || now - avisoBat > 600000)) { avisoBat = now; reac(caras::BATERIA); }
   if (!sinUsb) sinUsb = now;
   bool vacia = pmu.getBatteryPercent() < 5;
-  const uint32_t espera = APAGAR_SIN_USB_SEG ? APAGAR_SIN_USB_SEG * 1000UL : 20000UL;
-  if (vacia || (apagarConCarro && usbVisto && now - sinUsb > espera)) {   // se apagó el carro: se despide y se apaga
+  if (vacia || (apagarConCarro && usbVisto && now - sinUsb > APAGAR_SIN_USB_SEG * 1000UL)) {   // se apagó el carro: se despide y se apaga
     // Se apaga del todo para cuidar la batería; el AXP2101 lo vuelve a prender al conectar el USB (o con el botón PWR).
     emoBase = SUENO; setEmo(SUENO, 0); sonar(S_SUENO);
     for (uint32_t t0 = millis(); millis() - t0 < 2500;) { animar(millis()); pintar(millis()); delay(30); }

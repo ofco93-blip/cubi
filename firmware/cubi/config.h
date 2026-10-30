@@ -11,7 +11,7 @@
 
 // --- Energía y batería (chip AXP2101) ---
 // Funciona con la batería sin USB. Siempre se apaga solo si la batería baja del 5 % (y prende al conectar el USB).
-#define APAGAR_SIN_USB_SEG 0        // si es más de 0: también se apaga N s después de quitar el USB (útil en el carro)
+#define APAGAR_SIN_USB_SEG 60       // cuando el carro corta el USB, se apaga a los N s (si está activado en la app)
 
 // --- Sonido (parlante de la placa) ---
 #define VOLUMEN_INICIAL 70          // 0..100
