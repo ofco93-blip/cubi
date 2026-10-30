@@ -45,7 +45,8 @@ static Base laBase = REPOSO;
 static Reac laReac = NINGUNA;
 static float reacDesde = -1, tAhora = 0, baseDesde = 0, curvaAhora = 0;
 static float gritoAhora = 0;  // 0..1: qué tan grande abre la boca en la parte fuerte (sigue cada sílaba, por niveles)
-static float gritoZona = 0;   // 0..1: está en una parte fuerte de la canción (sube rápido, baja en ~1 s)
+static float gritoZona = 0;
+static float bailaAhora = 0;  // 0..1: la canción es bailable (tempo de baile y suena con fuerza): baila y usa la mano libre   // 0..1: está en una parte fuerte de la canción (sube rápido, baja en ~1 s)
 static int gradosN = 0; static float gradosDesde = -1, gradosHasta = -1;
 void mostrarGrados(int g, float seg) { gradosN = g; gradosDesde = tAhora; gradosHasta = tAhora + seg; }
 
@@ -643,6 +644,19 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
   bool lento = e.ritmo == R_CORAZON || e.ritmo == R_JAZZ || e.ritmo == R_PIANO || e.ritmo == R_DISFRUTA || e.ritmo == R_GUITARRA;
   mover(r, (lento ? 12 : 6) * vaiven, -18 + (lento ? 5 : 10) * g);
   mirar(r, 0, 0.2f); tapas(r, bl);
+  // canción bailable (tempo de baile y suena con fuerza, sostenido unos segundos): además de tocar, baila: se mece más,
+  // rebota con el golpe y se ladea de un lado al otro
+  static float tB = 0, nivelB = 0;
+  const float dtB = lim(tAhora - tB, 0, 0.1f);
+  tB = tAhora;
+  nivelB += (e.nivel - nivelB) * lim(dtB * 0.6f, 0, 1);
+  const bool bailable = e.bpm >= 92 && e.bpm <= 145 && nivelB > 0.32f;
+  bailaAhora += ((bailable ? 1.f : 0.f) - bailaAhora) * lim(dtB * 0.8f, 0, 1);
+  if (bailaAhora > 0.01f) {
+    const float B = bailaAhora;
+    mover(r, 16 * B * vaiven, -10 * B * g);
+    r.L.incl += 0.12f * B * vaiven; r.R.incl += 0.12f * B * vaiven;
+  }
   if (e.canta) {                                      // cantando: entrecierra los ojos con las notas fuertes, ladea la cabeza
     const float f = pulsosVistos + e.pulso, c8 = fmodf(f, 8);   // y cada 8 golpes los cierra un momento, sintiendo la canción
     tapas(r, fmaxf(bl, 0.15f + 0.4f * e.boca));
@@ -784,6 +798,18 @@ static void telefonoIcono(float x, float y, float R, float u, float alfa) {
   });
 }
 
+// la mano libre, a la izquierda de la cara: 0 puño arriba con el golpe, 1 saluda de lado a lado, 2 apunta al cielo
+static void manoLibre(const Entradas &e, int n, float g, int paso, float a) {
+  const Ojo &o = ahora.L;
+  const float f = n + e.pulso, x0 = o.x - o.w / 2 - 58, y0 = o.y + o.h / 2 + 10;
+  float x = x0, y = y0, ang = -PI / 2;
+  bool apunta = false;
+  if (paso == 0) { y = y0 - 50 * (1 - g); ang = -PI / 2 - 0.2f; }                       // puño que sube y baja
+  else if (paso == 1) { ang = -PI / 2 + 0.6f * sinf(f * PI); x = x0 + 10 * sinf(f * PI); y = y0 - 40; }   // saludo
+  else { apunta = true; ang = -PI / 2 + 0.25f; y = y0 - 30 - 30 * (1 - g); x = x0 + 8; }   // apunta arriba
+  manoBlanca(x, y, ang, 0.9f, apunta, a);
+}
+
 static void extrasMini(float u, const Entradas &e) {
   int n = (int)pulsosVistos;
   float g = expf(-e.pulso * 6), f = n + e.pulso, vaiven = sinf(f * PI);
@@ -833,6 +859,7 @@ static void extrasMini(float u, const Entradas &e) {
       float scratch = (n % 4 >= 2) ? sinf(f * PI * veces) : 0, x = CX + 122, y = H - 66;   // raya más rápido en lo fuerte
       disco(x, y, 48, u * 4 + 0.9f * scratch, 1);
       manoBlanca(x - 44 + 10 * scratch, y - 30 + 6 * scratch, 0.45f, 1.15f, true);
+      if (bailaAhora > 0.05f) manoLibre(e, n, gv, 0, bailaAhora);   // la otra mano: puño arriba con el golpe
       break;
     }
     case R_PIANO: case R_CORAZON: {                     // teclas que tocan una melodía: la que suena se ilumina
@@ -850,6 +877,7 @@ static void extrasMini(float u, const Entradas &e) {
       microLinea(mx, my, ang, 1.3f, 1);
       aPantalla(marco(mx, my, ang, 1.3f), 42, 0, hx, hy);
       manoBlanca(hx, hy, ang - PI / 2, 0.85f, false);
+      if (e.canta || bailaAhora > 0.05f) manoLibre(e, n, gv, (n / 8) % 3, fmaxf(bailaAhora, 0.6f));   // la otra mano baila
       break;
     }
     default: bateria(nv, gv, 1); break;                 // batería: más golpes por compás en lo fuerte
