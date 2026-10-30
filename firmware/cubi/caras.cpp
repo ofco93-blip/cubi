@@ -685,8 +685,13 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
   static float tAntes = 0;
   const float dt = lim(tAhora - tAntes, 0, 0.1f);
   tAntes = tAhora;
+  // tiene que sostenerse un cuarto de segundo: si no, cada sílaba fuerte la prendía un poquito y los ojos quedaban
+  // medio cerrados todo el tiempo
+  static float alto = 0;
   const bool fuerte = e.canta && (e.boca > 0.78f || e.voz > 0.85f);
-  gritoZona += ((fuerte ? 1.f : 0.f) - gritoZona) * lim(dt * (fuerte ? 4 : 1.2f), 0, 1);
+  alto = fuerte ? alto + dt : 0;
+  const bool zona = alto > 0.25f;
+  gritoZona += ((zona ? 1.f : 0.f) - gritoZona) * lim(dt * (zona ? 4 : 1.2f), 0, 1);
   // cuánto abre ahora: dos golpecitos de boca por cada golpe de la música, mezclados con lo que oye; nunca baja de un
   // tercio del tamaño grande, así abre y cierra mucho sin salirse del rango grande
   const float silaba = 0.5f - 0.5f * cosf(e.pulso * 4 * PI);
@@ -694,7 +699,8 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
   gritoAhora += (meta - gritoAhora) * lim(dt * 14, 0, 1);
   if (gritoZona > 0.01f) {                             // en la parte fuerte cierra los ojitos (felices) para que quepa la boca;
     const float Z = gritoZona;                          // los ojos no se mueven de su sitio y el instrumento sigue tocando
-    feliz(r, fmaxf(r.L.feliz, Z)); escalar(r, 1 - 0.15f * Z, 1);
+    if (Z > 0.4f) feliz(r, 1);                          // cerrados del todo o normales: nada de medio cerrados
+    escalar(r, 1 - 0.15f * Z, 1);
     r.by -= 22 * Z;                                     // la boca sube un poquito, hacia los ojos
   }
   if (rockeroAhora > 0.01f) {                         // roquero: ojos apretados, cejas bravas, cabecea duro con el golpe
