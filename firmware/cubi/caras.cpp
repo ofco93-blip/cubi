@@ -663,7 +663,17 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
     r.L.incl = r.R.incl = 0.09f * sinf(f * PI * 0.25f);
     feliz(r, campana(c8, 5.6f, 7.6f));
   }
-  if (e.ritmo == R_KPOP) { feliz(r, 1); mover(r, 0, 8 * g); }   // con el micrófono: ojos cerrados, cabecea "tun, tun" y canta
+  if (e.ritmo == R_KPOP) {                             // con el micrófono: cada 4 golpes cambia de expresión
+    const float fk = pulsosVistos + e.pulso;
+    switch ((int)(fk / 4) % 5) {
+      case 0: feliz(r, 1); mover(r, 0, 8 * g); break;                                   // ojos cerrados, sintiéndola
+      case 1: mirar(r, 0, -0.6f); escalar(r, 1.05f, 1.05f); mover(r, 0, -6 * g); break;   // le canta al cielo
+      case 2: r.R.feliz = 1; r.R.tapa = 0; mirar(r, -0.3f, 0); mover(r, 0, 6 * g); break; // guiño
+      case 3: mirar(r, 0.5f * sinf(fk * PI * 0.5f), 0); tapas(r, 0.25f); break;          // mira de lado a lado al público
+      default: feliz(r, 1); mover(r, 0, 14 * g); r.L.incl = r.R.incl = 0.15f * sinf(fk * PI); break;   // rebota con todo
+    }
+    if (r.L.feliz < 0.5f) tapas(r, 0.35f * e.boca);    // en las notas fuertes entrecierra
+  }
   // "¡aaah!": en la parte fuerte de la canción (voz muy fuerte o la barra rosada al tope) la boca crece, pero sigue
   // abriendo y cerrando con cada sílaba por niveles: no se queda pegada abierta. Los ojos se vuelven chiquitos.
   static float tAntes = 0;
