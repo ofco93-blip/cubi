@@ -192,26 +192,16 @@ static void boca(const Rostro &r) {
   float x = r.bx, y = r.by;
   // minimalista: boca solo al hablar y al cantar (ni en reacciones ni en reposo)
   if (elPaquete == MINIMALISTA && (laReac != NINGUNA || (laBase != CANTA && laBase != HABLA && laBase != TELEFONO))) return;
-  if (elPaquete == MINIMALISTA && laBase == CANTA) {             // canta: una boquita vertical que abre y cierra con la voz
+  if (elPaquete == MINIMALISTA) {                                // canta y habla: una boquita vertical que abre y cierra con la voz
     if (op < 0.12f) return;                                      // entre sílabas se cierra del todo
     // vocal: w = 0 redonda (o, u) .. 1 estirada (i, e). La "a" abre alta; la "o" es más redonda; la "i" una rayita ancha
-    const float w = lim((r.bAncho - 0.75f) / 0.6f, 0, 1), G = gritoAhora;
+    const float w = lim((r.bAncho - 0.75f) / 0.6f, 0, 1), G = laBase == CANTA ? gritoAhora : 0;
     const float bh0 = (5 + 24 * op) * (1 - 0.35f * w), bw0 = 5 + 5 * w + (1 - w) * 0.35f * bh0;
     // en el "¡aaah!" la boca crece vertical hasta ocupar casi toda la pantalla; el ancho sigue la vocal
     const float bhG = 64 * (1 - 0.25f * w), bwG = bhG * (0.5f + 0.2f * (1 - w) + 0.2f * w);   // grande, pero cabe con los ojos en su sitio
     const float bh = bh0 + (bhG - bh0) * G, bw = bw0 + (bwG - bw0) * G;
     figura(x - bw - 2, y + 6 - bh - 2, x + bw + 2, y + 6 + bh + 2, solido(BLANCO, 1, 10),
            [=](float px, float py) { return dCaja(px, py, x, y + 6, bw, bh, fminf(bw, bh)); });
-    return;
-  }
-  if (elPaquete == MINIMALISTA) {  // habla: ondita de sonido chiquita abajo a la derecha (5 barritas que bailan con la voz)
-    x += 96; y += 26;
-    for (int i = 0; i < 5; i++) {
-      float f = (i == 2 ? 1 : i == 1 || i == 3 ? 0.7f : 0.42f) * (0.7f + 0.3f * sinf(tAhora * 13 + i * 1.9f));
-      float hb = 8 + 40 * op * f, xb = x + (i - 2) * 13 * fminf(r.bAncho, 1.4f);
-      figura(xb - 5, y - hb / 2, xb + 5, y + hb / 2, tonoP(r, y - hb / 2, y + hb / 2, 8),
-             [=](float px, float py) { return dCaja(px, py, xb, y, 4.5f, hb / 2, 4.5f); });
-    }
     return;
   }
   figura(x - w / 2, y - h / 2, x + w / 2, y + h / 2, tonoP(r, y - h / 2, y + h / 2, 12),
@@ -1016,8 +1006,31 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
   return r;
 }
 
+static void haloEscucha(float u, const Entradas &e) {
+  ConColor cc;
+  static const Col TONOS_HALO[3] = {{60, 220, 255}, {170, 110, 255}, {255, 100, 200}};   // turquesa, violeta, rosado
+  const float h = fmodf(u * 0.35f, 3.f);
+  const int i = (int)h;
+  const Col &c0 = TONOS_HALO[i], &c1 = TONOS_HALO[(i + 1) % 3];
+  const float k = h - i;
+  const Col c{uint8_t(c0.r + (c1.r - c0.r) * k), uint8_t(c0.g + (c1.g - c0.g) * k), uint8_t(c0.b + (c1.b - c0.b) * k)};
+  const float entra = tramo(u, 0, 0.4f), late = 0.55f + 0.25f * sinf(u * 4) + 0.6f * e.nivel;
+  for (int s = -1; s <= 1; s += 2) {                    // un aro brillante alrededor de cada ojo
+    const Ojo &o = s < 0 ? ahora.L : ahora.R;
+    const float hw = o.w / 2 + 12 + 4 * e.nivel, hh = o.h / 2 + 12 + 4 * e.nivel;
+    figura(o.x - hw - 30, o.y - hh - 30, o.x + hw + 30, o.y + hh + 30, solido(c, entra * fminf(late, 1.f), 26),
+           [=](float px, float py) { return fabsf(dPildora(px, py, o.x, o.y, hw, hh)) - 3; });
+  }
+  for (int j = 0; j < 2; j++) {                         // ondas que salen de la cara, como si oyera
+    const float p = fmodf(u * 0.6f + j * 0.5f, 1.f), Rx = 150 + 120 * p, Ry = 95 + 80 * p, cy = (ahora.L.y + ahora.R.y) / 2;
+    figura(CX - Rx - 8, cy - Ry - 8, CX + Rx + 8, cy + Ry + 8, solido(c, entra * 0.5f * campana(p, 0, 1), 10),
+           [=](float px, float py) { return fabsf(dElipse(px, py, CX, cy, Rx, Ry)) - 2.5f; });
+  }
+}
+
 static void extrasBase(float t, const Entradas &e, bool delante) {
   float u = t - baseDesde;
+  if (laBase == ESCUCHA && elPaquete == MINIMALISTA) { if (delante) haloEscucha(u, e); return; }
   if (!delante && laBase != CANTA) return;
   if (laBase == CANTA && elPaquete == MINIMALISTA) { if (delante) extrasMini(u, e); return; }
   switch (laBase) {

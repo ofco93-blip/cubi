@@ -325,12 +325,13 @@ void tareaAudio(void *) {
         int8_t c = -1;
         if (V > 0.55f) c = caras::R_KPOP;                                    // manda la voz: micrófono
         else if (B > 0.42f && O >= 1.5f) c = caras::R_DJ;                    // bajo electrónico con golpe parejo
-        else if (A > 0.22f && F > 0.45f) c = O > 3 ? caras::R_TROPICAL : caras::R_POP;   // agudos ruidosos: shaker o batería
-        else if (M + A > 0.45f && F > 0.25f && B < 0.3f) c = caras::R_ROCK;  // medios llenos y algo ruidosos: distorsión
+        else if (A > 0.22f && F > 0.45f && B > 0.18f && O >= 1.5f) c = caras::R_POP;    // platillos y caja CON bombo: batería
+        else if (A > 0.25f && F > 0.5f && B < 0.18f && O > 3) c = caras::R_TROPICAL;   // agudos rapidísimos sin bombo: maracas
+        else if (F > 0.4f && M > 0.3f && B < 0.3f && O < 2.5f) c = caras::R_ROCK;        // medios llenos y ruidosos, sostenidos: distorsión
+        else if (L + M > 0.45f && B < 0.25f && O >= 1) c = caras::R_GUITARRA;          // medios con rasgueos, poco bajo: guitarra
         else if (F < 0.22f && O < 1.2f) c = M > 0.35f ? caras::R_JAZZ : caras::R_PIANO;  // limpio y sostenido: saxo o piano
         else if (F < 0.3f && O >= 1.2f) c = A < 0.08f ? caras::R_PIANO : caras::R_GUITARRA;  // limpio con ataques: piano o guitarra
         aInsF = F; aInsO = O;
-        (void)L;
         if (c == insCand) { if (insN < 9) insN++; } else { insCand = c; insN = 1; }
         if (insCand >= 0 && insN >= 2 && insCand != instrumentoOido && now - insDesde > 8000) { instrumentoOido = insCand; insDesde = now; }
       }
