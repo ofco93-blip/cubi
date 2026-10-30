@@ -838,7 +838,19 @@ static void manoLibre(const Entradas &e, int n, float g, int paso, float a) {
   manoBlanca(x, y, ang, 1.1f, apunta, fminf(1.f, a * 1.6f));   // blanca sólida y más grande: que se vea el paso
 }
 
+// Los instrumentos van abajo: crecen con la cara pero un poco menos y anclados al borde de abajo, para no salirse de la
+// pantalla. El micrófono y la mano libre siguen pegados a la cara (con su mismo tamaño).
+struct ZoomInstrumento {
+  float z, x, y; bool activo;
+  explicit ZoomInstrumento(bool a) : z(dib::zoom), x(dib::zx), y(dib::zy), activo(a) {
+    if (a) { dib::zoom = 1 + (z - 1) * 0.6f; dib::zx = CX; dib::zy = H; }
+  }
+  void soltar() { if (activo) { dib::zoom = z; dib::zx = x; dib::zy = y; activo = false; } }
+  ~ZoomInstrumento() { soltar(); }
+};
+
 static void extrasMini(float u, const Entradas &e) {
+  ZoomInstrumento zi(e.ritmo != R_KPOP);
   int n = (int)pulsosVistos;
   float g = expf(-e.pulso * 6), f = n + e.pulso, vaiven = sinf(f * PI);
   // velocidad por niveles según qué tan fuerte suena: suave 1 toque por golpe, normal 2, fuerte 4 (con un margen para
@@ -891,6 +903,7 @@ static void extrasMini(float u, const Entradas &e) {
       float scratch = (n % 4 >= 2) ? sinf(f * PI * veces) : 0, x = CX + 122 + 20 * vaiven, y = H - 66 - 8 * gv;   // se mece con el golpe
       disco(x, y, 48, u * 4 + 0.9f * scratch, 1);
       manoBlanca(x - 44 + 10 * scratch, y - 30 + 6 * scratch, 0.45f, 1.15f, true);
+      zi.soltar();                                      // la otra mano va con la cara
       if (bailaAhora > 0.05f) manoLibre(e, n, gv, 0, bailaAhora);   // la otra mano: puño arriba con el golpe
       break;
     }

@@ -836,8 +836,18 @@ void imuUpdate(uint32_t now) {
   static uint32_t frenaDesde = 0, aceleraDesde = 0, ultimoBache = 0;
   static float vibra = 0.05f;                 // vibración normal del camino (~1 s): un bache es un salto muy por encima
   vibra += (fabsf(vert) - vibra) * 0.01f;
-  frenaDesde = lon < -umbralFreno ? (frenaDesde ? frenaDesde : now) : 0;
-  aceleraDesde = lon > UMBRAL_ACEL ? (aceleraDesde ? aceleraDesde : now) : 0;
+  // Quieto en la mesa o recién acomodado no es arrancar ni frenar: lo que queda fijo (la gravedad todavía mal estimada
+  // tras moverlo de sitio) se descuenta, y si lo inclinan con la mano (giro que no es de curva) se espera 8 s.
+  static float lonBase = 0;
+  static uint32_t manoseado = 0;
+  lonBase += (lon - lonBase) * 0.001f;                     // ~10 s
+  const float lonN = lon - lonBase;
+  const float yawG = dot(gyr, g);
+  const float inclina = sqrtf(fmaxf(0.f, dot(gyr, gyr) - yawG * yawG));   // giro que no es alrededor de la vertical
+  if (inclina > 25) manoseado = now;
+  const bool calmo = now - manoseado > 8000;
+  frenaDesde = calmo && lonN < -umbralFreno ? (frenaDesde ? frenaDesde : now) : 0;
+  aceleraDesde = calmo && lonN > UMBRAL_ACEL ? (aceleraDesde ? aceleraDesde : now) : 0;
   // mientras suena su parlante (y un ratico después) la caja vibra: no cuenta como movimiento
   static uint32_t parlanteHasta = 0;
   if (sonando) parlanteHasta = now + 700;
