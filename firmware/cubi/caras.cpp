@@ -188,18 +188,18 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
 
 static void boca(const Rostro &r) {
   float op = r.boca;
-  if (op < 0.05f) return;
-  float w = (26 + 14 * op) * r.bAncho, h = 16 + 62 * op;
   float x = r.bx, y = r.by;
-  // minimalista: boca solo al hablar y al cantar (ni en reacciones ni en reposo)
-  if (elPaquete == MINIMALISTA && (laReac != NINGUNA || (laBase != CANTA && laBase != HABLA && laBase != TELEFONO))) return;
-  if (elPaquete == MINIMALISTA && laBase == CANTA && rockeroAhora > 0.5f && op < 0.45f) {   // roquero: se muerde el labio
+  if (laReac == NINGUNA && elPaquete == MINIMALISTA && laBase == CANTA && rockeroAhora > 0.5f && op < 0.45f) {   // roquero: se muerde el labio
     figura(x - 30, y - 6, x + 30, y + 22, solido(BLANCO, rockeroAhora, 10),
            [=](float px, float py) { return dCaja(px, py, x, y + 8, 24, 8, 8); });           // el labio
     figura(x - 12, y - 4, x + 12, y + 8, solido(Col{8, 8, 14}, rockeroAhora),
            [=](float px, float py) { return dCaja(px, py, x, y + 2, 9, 4, 1.5f); });         // los dientes encima
     return;
   }
+  if (op < 0.05f) return;
+  float w = (26 + 14 * op) * r.bAncho, h = 16 + 62 * op;
+  // minimalista: boca solo al hablar y al cantar (ni en reacciones ni en reposo)
+  if (elPaquete == MINIMALISTA && (laReac != NINGUNA || (laBase != CANTA && laBase != HABLA && laBase != TELEFONO))) return;
   if (elPaquete == MINIMALISTA) {                                // canta y habla: una boquita vertical que abre y cierra con la voz
     if (op < 0.12f) return;                                      // entre sílabas se cierra del todo
     // vocal: w = 0 redonda (o, u) .. 1 estirada (i, e). La "a" abre alta; la "o" es más redonda; la "i" una rayita ancha
