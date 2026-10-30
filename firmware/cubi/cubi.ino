@@ -401,6 +401,7 @@ bool hayMusica = false, cantando = false;  // lo que animar() decide y las caras
 extern volatile bool bleOn;
 bool celPlay = false; uint8_t estPlay = TROPICAL;
 bool celVoz = false; uint32_t celVozHasta = 0;
+bool celVideo = false;  // el celular está con un video (reels, Facebook): con eso no baila
 int celRitmo = -1;  // el instrumento que se destaca en la canción (lo dice Haiku por el título): se toca ese  // el celular sabe por la letra cuándo canta el artista (caduca si deja de avisar)  // el celular avisa play/pausa; estPlay = el último estilo que se oyó
 uint32_t tGolpe = 0;  // pedida desde la app o tocando: le gana a la música; las del movimiento no
 uint8_t anim = NINGUNA; uint32_t animT0 = 0, animProx = 8000, animPaso = 0;
@@ -490,7 +491,12 @@ void animar(uint32_t now) {
   bool voz = aCanta; float bIn = aBoca, aIn = aAncho;
   est = libre ? estilo : NADA;
   if (estilo >= BALADA) estPlay = estilo;
-  if (musicaCel) est = libre && celPlay && bleOn ? (estilo >= BALADA ? estilo : estPlay) : NADA;   // espera al celular; el oído pone el estilo
+  // con el celular conectado: en play baila de una (el oído pone el estilo); si el celular no reproduce nada, se guía
+  // por lo que oye (música de otro lado, como en la oficina o la radio); si el celular está con un video, no baila con eso
+  if (musicaCel && bleOn) {
+    if (celPlay) est = libre ? (estilo >= BALADA ? estilo : estPlay) : NADA;
+    else if (celVideo) est = NADA;
+  }
   if (now < demoHasta) {  // simulación para probar sin música (desde la app o por serie)
     float t = (now - demoT0) / 1000.f;
     est = TROPICAL; libre = true;
@@ -990,6 +996,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
   if (ruta == "/musica") {  // el celular avisa play o pausa (con play baila de una) y, por la letra, si el artista canta
     if (p.has("play")) { celPlay = p.get("play") == "1"; if (!celPlay) { estilo = NADA; celVozHasta = 0; } }
     if (p.has("voz")) { celVoz = p.get("voz") == "1"; celVozHasta = millis() + 6000; }
+    if (p.has("video")) celVideo = p.get("video") == "1";
     if (p.has("ritmo")) { celRitmo = -1; for (int i = 0; i < caras::N_RITMO; i++) if (p.get("ritmo") == caras::NOMBRE_RITMO[i]) celRitmo = i; }
     if (p.has("play") && !celPlay) celRitmo = -1;
     return "ok";

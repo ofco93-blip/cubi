@@ -293,7 +293,7 @@ public class CubiService extends Service {
                 }
                 avisar("conectado");
                 ui.post(CubiService.this::clima);
-                ui.post(() -> { musicaPlay = false; revisarAsistente(); });  // al reconectar le cuenta si hay música
+                ui.post(() -> { musicaPlay = false; videoMandado = false; enviar("musica|/musica?video=0"); revisarAsistente(); });  // al reconectar le cuenta si hay música
                 siguiente();
             }
 
@@ -1094,6 +1094,7 @@ public class CubiService extends Service {
     private long asisDesde;
     private String asisEstado = "";
     private boolean musicaPlay;  // lo último que se le dijo a Cubi: suena música en el celular
+    private boolean videoMandado;  // lo último que se le dijo: el celular está con un video (reels, Facebook)
 
     // Abre el asistente del celular (Gemini), como "Hey Google". Con la pantalla apagada necesita el permiso
     // "Mostrar sobre otras apps". En Samsung el comando de voz genérico abre Bixby: primero se le pide a Google.
@@ -1192,6 +1193,9 @@ public class CubiService extends Service {
         // Con el permiso de música se mira el estado de Spotify (o la app de música) directamente: así funciona igual
         // cuando suena por Android Auto, donde el celular no siempre reporta audio propio. Sin permiso, el audio del celular.
         boolean play = puedeTocarMusica() ? suenaAppDeMusica() : suenaMedia && am.isMusicActive();
+        // suena algo en el celular que no es una app de música (reels, Facebook): Cubi no baila con eso
+        boolean video = suenaMedia && am.isMusicActive() && !play;
+        if (video != videoMandado) { videoMandado = video; enviar("musica|/musica?video=" + (video ? 1 : 0)); }
         if (play != musicaPlay) { musicaPlay = play; ritmoMandado = ""; enviar("musica|/musica?play=" + (play ? 1 : 0)); }  // al volver, se manda otra vez el instrumento
         if (musicaPlay && !siguiendo) seguirLetra();
         // los callbacks no avisan cuando pasa el tiempo: mientras algo esté en juego se vuelve a mirar
