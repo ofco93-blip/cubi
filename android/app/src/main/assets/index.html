@@ -126,6 +126,15 @@ section[hidden] { display: none; }
     <button class="btn" id="permisoMusica" hidden>Permitir que Cubi controle la música y cante con la letra</button>
     <p class="note">Abre los ajustes de voz del celular: elige “Servicios de voz de Google”, toca el engranaje → Instalar datos de voz → Español. Al volver, las voces nuevas aparecen aquí.</p>
     <button class="btn main" id="hablarCubi">Hablarle a Cubi</button>
+  </div>
+  <h2>Personalidad</h2>
+  <div class="card">
+    <p class="note">Elige cómo es Cubi. Puedes cambiar sus reglas o crear una nueva; los trucos, la música y el clima funcionan igual con todas.</p>
+    <select id="persona" style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font:inherit;margin:6px 0"></select>
+    <input id="pNombre" placeholder="Nombre de la personalidad" style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font:inherit;margin:6px 0">
+    <textarea id="pReglas" rows="7" placeholder="Cómo es y cómo habla Cubi" style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font:inherit;margin:6px 0;resize:vertical"></textarea>
+    <button class="btn main" id="pGuardar">Usar y guardar</button>
+    <div class="grid2"><button class="btn" id="pNueva">Nueva</button><button class="btn" id="pBorrar">Borrar</button></div>
     <p class="note">Toca dos veces la pantalla de Cubi (o “Hablarle a Cubi”), espera su carita de escuchar y pide lo que quieras: “haz un kamehameha”, “cuéntame un chiste”. Mientras escucha y habla, la música se baja sola. Sin clave, el doble toque abre Gemini como antes.</p>
   </div>
   <div hidden>
@@ -439,6 +448,32 @@ $('guardarClaude').onclick = () => {
   Android.claudeClave(k); $('claveClaude').value = ''; claudeEstado(); toast('Clave guardada');
 };
 $('hablarCubi').onclick = () => { if (window.Android) Android.hablarCubi(); };
+// ---------- personalidades ----------
+let personas = [], pSel = 0;
+function pintarPersonas() {
+  const s = $('persona'); s.innerHTML = '';
+  personas.forEach((p, i) => { const o = document.createElement('option'); o.value = i; o.textContent = p.n + (i === pSel ? ' (la que usa)' : ''); s.appendChild(o); });
+  s.value = pSel; $('pNombre').value = personas[pSel] ? personas[pSel].n : ''; $('pReglas').value = personas[pSel] ? personas[pSel].r : '';
+}
+function cargarPersonas() {
+  if (!window.Android) return;
+  const d = JSON.parse(Android.personasCubi() || '{}');
+  if (!d.lista) { setTimeout(cargarPersonas, 1000); return; }
+  personas = d.lista; pSel = Math.min(d.sel || 0, personas.length - 1); pintarPersonas();
+}
+const guardarPersonas = () => Android.guardarPersonasCubi(JSON.stringify(personas), pSel);
+$('persona').onchange = e => { pSel = +e.target.value; pintarPersonas(); guardarPersonas(); toast('Ahora Cubi es: ' + personas[pSel].n); };
+$('pGuardar').onclick = () => {
+  const n = $('pNombre').value.trim() || 'Sin nombre', r = $('pReglas').value.trim();
+  if (!r) { toast('Escribe cómo es Cubi'); return; }
+  personas[pSel] = {n, r}; pintarPersonas(); guardarPersonas(); toast('Guardada: Cubi ahora es ' + n);
+};
+$('pNueva').onclick = () => { personas.push({n: 'Nueva personalidad', r: 'Eres Cubi, un robot copiloto en el tablero de un carro. '}); pSel = personas.length - 1; pintarPersonas(); $('pReglas').focus(); };
+$('pBorrar').onclick = () => {
+  if (personas.length <= 1) { toast('Tiene que quedar al menos una'); return; }
+  personas.splice(pSel, 1); pSel = 0; pintarPersonas(); guardarPersonas(); toast('Borrada');
+};
+setTimeout(cargarPersonas, 900);
 function cargarVoces() {
   if (!window.Android) return;
   const d = JSON.parse(Android.vocesCubi() || '{}'), sel = $('vozCubi');

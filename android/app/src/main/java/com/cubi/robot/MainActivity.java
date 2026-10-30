@@ -303,6 +303,19 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String personasCubi() {  // {"lista": [{n: nombre, r: reglas}], "sel": índice}
+            if (CubiService.yo == null) return "{}";
+            try {
+                return new JSONObject().put("lista", CubiService.yo.personas()).put("sel", CubiService.yo.personaElegida()).toString();
+            } catch (Exception e) { return "{}"; }
+        }
+
+        @JavascriptInterface
+        public void guardarPersonasCubi(String json, int sel) {
+            if (CubiService.yo != null) CubiService.yo.guardarPersonas(json, sel);
+        }
+
+        @JavascriptInterface
         public boolean spotifyConectado() {
             return new SpotifyApi(MainActivity.this).conectado();
         }

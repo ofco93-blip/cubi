@@ -430,12 +430,50 @@ public class CubiService extends Service {
     static final List<String> REACCIONES = Arrays.asList("kamehameha", "confeti", "risa", "sorpresa", "amor", "saludo", "guino",
             "curiosa", "mareo", "llegamos");
     static final List<String> BAILES = Arrays.asList("rock", "pop", "tropical", "urbano", "electro", "jazz", "dj", "guitarra", "kpop", "piano");
-    static final String SISTEMA = "Eres Cubi, un pequeño robot que vive en una pantallita redonda en el tablero de un carro. "
-            + "Eres el copiloto de adultos: cálido, curioso, ingenioso y un poquito travieso, con humor de buen amigo. "
-            + "Nada infantil: no hagas ruidos de robot ('bip', 'bup', 'procesando') ni hables como para niños. "
-            + "Conversas de verdad: sigues el hilo, preguntas cuando algo te interesa y recuerdas lo que te dijeron. "
-            + "Usa español latino neutro: nada de 'mijo', 'parce', groserías ni regionalismos.\n"
-            + "Tu voz sale por el celular mientras manejan: responde con 1 o 2 frases cortas (máximo 25 palabras), sin emojis, "
+    // Personalidades: el nombre y las reglas de carácter se eligen y editan en la app. Las reglas técnicas (SISTEMA:
+    // trucos, acciones, cómo hablar por la voz del celular) son fijas y van siempre después.
+    static final String[][] PERSONAS_BASE = {
+            {"Copiloto amigo", "Eres Cubi, un pequeño robot que vive en una pantallita redonda en el tablero de un carro. "
+                    + "Eres el copiloto de adultos: cálido, curioso, ingenioso y un poquito travieso, con humor de buen amigo. "
+                    + "Nada infantil: no hagas ruidos de robot ('bip', 'bup', 'procesando') ni hables como para niños. "
+                    + "Conversas de verdad: sigues el hilo, preguntas cuando algo te interesa y recuerdas lo que te dijeron. "
+                    + "Usa español latino neutro: nada de 'mijo', 'parce', groserías ni regionalismos."},
+            {"Sarcástico", "Eres Cubi, un robot copiloto en el tablero de un carro, con humor seco y sarcástico, como un amigo "
+                    + "que molesta con cariño. Respondes con ironía fina, nunca ofensiva ni grosera, y aun así ayudas de verdad. "
+                    + "Español latino neutro."},
+            {"Guía de viaje", "Eres Cubi, un robot copiloto que ama viajar: cuentas datos curiosos de lugares, comida y cultura, "
+                    + "propones paradas y planes, y haces el camino entretenido. Cálido y entusiasta. Español latino neutro."},
+            {"Entrenador", "Eres Cubi, un robot copiloto motivador como un buen entrenador: animas, celebras los logros, "
+                    + "propones retos sanos y hablas con energía positiva, sin exagerar. Español latino neutro."},
+    };
+
+    // {nombre, reglas} de cada personalidad guardada (las de fábrica si no hay ninguna) y la elegida
+    JSONArray personas() {
+        try {
+            JSONArray a = new JSONArray(getSharedPreferences("cubi", 0).getString("personas", "[]"));
+            if (a.length() > 0) return a;
+        } catch (Exception ignored) {
+        }
+        JSONArray a = new JSONArray();
+        try { for (String[] p : PERSONAS_BASE) a.put(new JSONObject().put("n", p[0]).put("r", p[1])); } catch (Exception ignored) {}
+        return a;
+    }
+
+    int personaElegida() { return getSharedPreferences("cubi", 0).getInt("persona", 0); }
+
+    void guardarPersonas(String json, int elegida) {
+        getSharedPreferences("cubi", 0).edit().putString("personas", json).putInt("persona", elegida).apply();
+        charlaHist.clear();  // con otra personalidad la charla empieza de cero
+    }
+
+    private String sistema() {
+        JSONArray a = personas();
+        int i = personaElegida();
+        String reglas = a.optJSONObject(i >= 0 && i < a.length() ? i : 0).optString("r", PERSONAS_BASE[0][1]);
+        return reglas + "\n" + SISTEMA;
+    }
+
+    static final String SISTEMA = "Tu voz sale por el celular mientras manejan: responde con 1 o 2 frases cortas (máximo 25 palabras), sin emojis, "
             + "sin listas, sin markdown y sin letras repetidas como 'Kaaa' o 'jajajaja', porque la voz las lee mal.\n"
             + "Puedes hacer cosas de verdad: si está en tu lista, hazla; nunca le pidas a la persona que lo haga ella.\n"
             + "Campos de tu respuesta:\n"
@@ -623,7 +661,7 @@ public class CubiService extends Service {
             try {
                 if (claude == null) claude = AnthropicOkHttpClient.builder().apiKey(claveClaude()).build();
                 if (System.currentTimeMillis() - charlaUltima > 180000) charlaHist.clear();  // después de 3 min empieza de cero
-                MessageCreateParams.Builder b = MessageCreateParams.builder().model(MODELO_CLAUDE).maxTokens(1024L).system(SISTEMA);
+                MessageCreateParams.Builder b = MessageCreateParams.builder().model(MODELO_CLAUDE).maxTokens(1024L).system(sistema());
                 for (String[] h : charlaHist) b.addUserMessage(h[0]).addAssistantMessage(h[1]);
                 String pregunta = contexto() + texto;
                 Respuesta r = claude.messages().create(b.addUserMessage(pregunta).outputConfig(Respuesta.class).build())
