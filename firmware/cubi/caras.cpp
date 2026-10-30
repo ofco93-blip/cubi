@@ -1389,6 +1389,26 @@ static void kame(float u) {
 static Rostro deReac(float u, const Entradas &e, float &vel) {
   Rostro r = neutro(AZUL);
   vel = 1000;        // las de caricatura van "de golpe"
+  if (elPaquete == MINIMALISTA && laReac == FRENAZO) {  // minimalista: la inercia lo tira adelante, ojos redondos de susto,
+    vel = 30;                                           // tiembla y respira aliviado (sin vidrio roto)
+    const float tira = campana(u, 0.05f, 0.6f), asusta = tramo(u, 0.3f, 0.45f) * (1 - tramo(u, 1.8f, 2.2f));
+    const float alivio = tramo(u, 2.0f, 2.3f) * (1 - tramo(u, 3.5f, 4.0f));
+    if (u < 0.08f) escalar(r, 1.1f, 0.85f);             // se encoge un instante
+    mover(r, 0, 36 * tira); escalar(r, 1 + 0.2f * tira, 1 + 0.12f * tira);
+    escalar(r, 1 + 0.3f * asusta, 1 - 0.35f * asusta);  // ojos redondos y grandes
+    if (u > 0.4f && u < 1.4f) mover(r, 2.5f * sinf(u * 80), 0);
+    tapas(r, 0.5f * alivio); mover(r, 0, 8 * alivio);
+    return r;
+  }
+  if (elPaquete == MINIMALISTA && (laReac == GIRO_IZQ || laReac == GIRO_DER)) {   // minimalista: se ladea con la curva,
+    vel = 22;                                                                     // mira hacia donde va y vuelve
+    const float lado = laReac == GIRO_IZQ ? -1 : 1, ir = tramo(u, 0.05f, 0.3f) * (1 - tramo(u, 1.6f, 2.2f));
+    mover(r, lado * 60 * ir, 0); mirar(r, lado * 0.6f * ir, 0);
+    r.L.incl = r.R.incl = lado * 0.22f * ir;
+    if (u > 0.3f) mover(r, lado * 7 * expf(-(u - 0.3f) * 4) * sinf((u - 0.3f) * 20), 0);   // se mece al llegar
+    feliz(r, 0.8f * campana(u, 1.7f, 2.4f));
+    return r;
+  }
   switch (laReac) {
     case SALUDO: {
       float abre = tramo(u, 0.05f, 0.35f);
@@ -1600,6 +1620,27 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
 }
 
 static void extrasReac(float u, bool delante) {
+  if (elPaquete == MINIMALISTA && (laReac == FRENAZO || laReac == GIRO_IZQ || laReac == GIRO_DER)) {
+    if (!delante) return;
+    const Ojo &oL = ahora.L, &oR = ahora.R;
+    if (laReac == FRENAZO) {
+      const float a = campana(u, 0.15f, 0.9f);           // dos rayitas de susto arriba
+      if (a > 0.01f) for (int s2 = -1; s2 <= 1; s2 += 2) {
+        const Ojo &o = s2 < 0 ? oL : oR;
+        linea(o.x + s2 * 10, o.y - o.h / 2 - 18, o.x + s2 * 22, o.y - o.h / 2 - 40, 4, BL, a, 6);
+      }
+      const float alivio = tramo(u, 2.0f, 2.3f) * (1 - tramo(u, 3.5f, 4.0f));   // gotita de sudor
+      if (alivio > 0.01f) gota(oR.x + oR.w / 2 + 26, oR.y - oR.h / 2 + 50 * tramo(u, 2.1f, 3.4f), 11, alivio);
+    } else {
+      const float lado = laReac == GIRO_IZQ ? -1 : 1, a = campana(u, 0.05f, 0.7f);   // rayitas de velocidad detrás
+      if (a > 0.01f) for (int i = 0; i < 3; i++) {
+        const Ojo &o = lado > 0 ? oL : oR;
+        const float x = o.x - lado * (o.w / 2 + 22 + 8 * i), y = o.y - 30 + i * 30;
+        linea(x, y, x - lado * (36 - 8 * i), y, 4, BL, a * 0.85f, 6);
+      }
+    }
+    return;
+  }
   switch (laReac) {
     case KAME:
       if (delante) kame(u);
