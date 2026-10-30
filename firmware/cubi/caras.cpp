@@ -659,23 +659,27 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
     mover(r, 16 * B * vaiven, -10 * B * g);
     r.L.incl += 0.12f * B * vaiven; r.R.incl += 0.12f * B * vaiven;
   }
-  if (e.canta) {                                      // cantando: entrecierra los ojos con las notas fuertes, ladea la cabeza
-    const float f = pulsosVistos + e.pulso, c8 = fmodf(f, 8);   // y cada 8 golpes los cierra un momento, sintiendo la canción
-    tapas(r, fmaxf(bl, 0.15f + 0.4f * e.boca));
-    r.L.incl = r.R.incl = 0.09f * sinf(f * PI * 0.25f);
-    feliz(r, campana(c8, 5.6f, 7.6f));
-  }
-  if (e.ritmo == R_KPOP) {                             // con el micrófono: cada 4 golpes cambia de expresión
-    const float fk = pulsosVistos + e.pulso;
-    switch ((int)(fk / 4) % 5) {
-      case 0: feliz(r, 1); mover(r, 0, 8 * g); break;                                   // ojos cerrados, sintiéndola
-      case 1: mirar(r, 0, -0.6f); escalar(r, 1.05f, 1.05f); mover(r, 0, -6 * g); break;   // le canta al cielo
-      case 2: r.R.feliz = 1; r.R.tapa = 0; mirar(r, -0.3f, 0); mover(r, 0, 6 * g); break; // guiño
-      case 3: mirar(r, 0.5f * sinf(fk * PI * 0.5f), 0); tapas(r, 0.25f); break;          // mira de lado a lado al público
-      default: feliz(r, 1); mover(r, 0, 14 * g); r.L.incl = r.R.incl = 0.15f * sinf(fk * PI); break;   // rebota con todo
+  if (e.canta) {                                      // cantando: cada 4 golpes una expresión distinta, en orden al azar
+    const float f = pulsosVistos + e.pulso;
+    const int barra = (int)(f / 4);
+    int ex = (int)(hash(barra, 9) * 8);
+    if (ex == 7 && hash(barra, 11) > 0.35f) ex = 0;    // los corazones salen solo de vez en cuando
+    r.L.incl = r.R.incl = 0.06f * sinf(f * PI * 0.25f);   // ladea la cabeza suave con la música
+    switch (ex) {
+      case 0: mover(r, 0, 6 * g); break;                                                    // ojos abiertos, rebotando
+      case 1: feliz(r, 1); mover(r, 0, 8 * g); break;                                       // felices ^^
+      case 2: mirar(r, 0, -0.6f); escalar(r, 1.06f, 1.06f); break;                          // le canta al cielo
+      case 3: mirar(r, 0.55f * sinf(f * PI * 0.5f), 0); break;                              // al público, de lado a lado
+      case 4: {                                                                              // guiño (un ojo y luego el otro)
+        Ojo &o = barra % 2 ? r.L : r.R;
+        o.feliz = 1; o.tapa = 0; mirar(r, barra % 2 ? 0.3f : -0.3f, 0);
+        break;
+      }
+      case 5: escalar(r, 1.18f, 1.0f + 0.12f * e.boca); break;                              // asombro: ojos grandes con la voz
+      case 6: r.L.incl = 0.32f; r.R.incl = -0.05f; r.L.y -= 6; mirar(r, 0.25f, 0); break;   // pícaro: una ceja arriba
+      default: r.corazon = 1; escalar(r, 1.05f, 1.05f); mover(r, 0, 6 * g); break;         // ojitos de corazón
     }
-    if (r.L.feliz < 0.5f) tapas(r, 0.35f * e.boca);    // en las notas fuertes entrecierra
-  }
+  } else if (e.ritmo == R_KPOP) { feliz(r, 1); mover(r, 0, 8 * g); }   // micrófono sin voz: ojos cerrados, "tun, tun"
   // "¡aaah!": en la parte fuerte de la canción (voz muy fuerte o la barra rosada al tope) la boca crece, pero sigue
   // abriendo y cerrando con cada sílaba por niveles: no se queda pegada abierta. Los ojos se vuelven chiquitos.
   static float tAntes = 0;
