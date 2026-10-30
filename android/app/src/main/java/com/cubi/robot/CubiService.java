@@ -344,6 +344,7 @@ public class CubiService extends Service {
                 entrada.delete(0, n + 1);
                 if (linea.startsWith("ota|")) respuestaOta(linea.substring(4));
                 else if (linea.startsWith("ev|")) evento(linea.substring(3));
+                else if (linea.startsWith("rasgos|")) anotarRasgos(linea.substring(7));
                 else if (!linea.startsWith("asis|")) js("bleRespuesta(" + JSONObject.quote(linea) + ")");
             }
         }
@@ -766,6 +767,29 @@ public class CubiService extends Service {
             accionPend = "";
             String q = busquedaPend;
             ui.postDelayed(() -> musica(ac, q), 400);  // después de soltar el foco: la música vuelve a su volumen
+        }
+    }
+
+    // ---------- Capturador: lo que Cubi oye cada 2 s, con la canción que sonaba, para afinar los instrumentos ----------
+    static final String CABECERA = "hora,cancion,genero,play,letra_canta,bajo,medio_bajo,medio,agudo,ruido,voz,golpes_seg,bpm,regular,nivel,canta,oye_ahora,instrumento\n";
+
+    File archivoCaptura() { return new File(getFilesDir(), "captura.csv"); }
+
+    boolean capturando() { return getSharedPreferences("cubi", 0).getBoolean("captura", false); }
+
+    void capturar(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("captura", si).apply(); }
+
+    private synchronized void anotarRasgos(String r) {
+        if (!capturando()) return;
+        File f = archivoCaptura();
+        if (f.length() > 8_000_000) return;  // tope de ~8 MB
+        String hora = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new java.util.Date());
+        String linea = hora + ",\"" + cancionTexto.replace("\"", "'") + "\"," + ritmoCancion + "," + (musicaPlay ? 1 : 0) + ","
+                + (vozEnviada == 1 ? 1 : 0) + "," + r.trim() + "\n";
+        try (FileOutputStream o = new FileOutputStream(f, true)) {
+            if (f.length() == 0) o.write(CABECERA.getBytes(StandardCharsets.UTF_8));
+            o.write(linea.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception ignored) {
         }
     }
 

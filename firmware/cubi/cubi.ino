@@ -174,7 +174,8 @@ bool sintetizar() {
 float vR[NF], vI[NF];
 ArduinoFFT<float> FFT(vR, vI, NF, SR);
 volatile uint8_t estilo = NADA;
-volatile int8_t instrumentoOido = -1;  // el instrumento que más se oye ahora (un ritmo de caras), -1 si no está claro
+volatile int8_t instrumentoOido = -1;
+char rasgosTxt[200]; volatile bool rasgosNuevo = false;  // capturador: lo que oyó en los últimos 2 s, para el celular  // el instrumento que más se oye ahora (un ritmo de caras), -1 si no está claro
 volatile uint32_t beatCnt = 0, hiCnt = 0, aplausoCnt = 0, tSonido = 0;  // tSonido: última vez que oyó algo (lo despierta)
 volatile bool aCanta = false;
 volatile float aInsF = 0, aInsO = 0;  // para ver en la app: qué tan ruidoso suena y golpes por segundo
@@ -196,6 +197,7 @@ float suma(int a, int b) { float s = 0; for (int i = a; i <= b; i++) s += vR[i];
 
 extern uint8_t asis;  // si Gemini está hablando (lo avisa el celular)
 extern bool celPlay;  // el celular dice que suena música
+extern bool cantando;  // lo que decidió animar(): está cantando
 // Voz y boca a partir de la FFT del bloque (vR ya tiene magnitudes). Corre en la tarea de audio.
 void analizarVoz(bool hay) {
   static float vMod = 0, vPrev = 0, vozS = 0, vMax = 60, vMin = 60, boca = 0, ancho = 0.5f, hAvg = 0;
@@ -332,6 +334,10 @@ void tareaAudio(void *) {
         else if (F < 0.22f && O < 1.2f) c = M > 0.35f ? caras::R_JAZZ : caras::R_PIANO;  // limpio y sostenido: saxo o piano
         else if (F < 0.3f && O >= 1.2f) c = A < 0.08f ? caras::R_PIANO : caras::R_GUITARRA;  // limpio con ataques: piano o guitarra
         aInsF = F; aInsO = O;
+        snprintf(rasgosTxt, sizeof rasgosTxt, "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.0f,%.2f,%.2f,%d,%s,%s",
+                 B, L, M, A, F, V, O, (float)aBpm, (float)aReg, (float)aNivel, cantando ? 1 : 0,
+                 c >= 0 ? caras::NOMBRE_RITMO[c] : "-", instrumentoOido >= 0 ? caras::NOMBRE_RITMO[instrumentoOido] : "-");
+        rasgosNuevo = true;
         if (c == insCand) { if (insN < 9) insN++; } else { insCand = c; insN = 1; }
         if (insCand >= 0 && insN >= 2 && insCand != instrumentoOido && now - insDesde > 8000) { instrumentoOido = insCand; insDesde = now; }
       }
@@ -1223,6 +1229,12 @@ void loop() {
   uint32_t now = millis();
   serialDebug();
   bleAtender();
+  if (rasgosNuevo && bleOn) {   // capturador: el celular lo guarda si está prendido
+    rasgosNuevo = false;
+    String m = String("rasgos|") + rasgosTxt + "\n";
+    bleTx->setValue((uint8_t *)m.c_str(), m.length());
+    bleTx->notify();
+  }
   if (reinicioEn && now > reinicioEn) ESP.restart();
   imuUpdate(now);
   touchUpdate(now);

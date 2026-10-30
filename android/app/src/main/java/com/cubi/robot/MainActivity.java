@@ -303,6 +303,50 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String capturaEstado() {  // {on, kb, lineas}
+            if (CubiService.yo == null) return "{}";
+            java.io.File f = CubiService.yo.archivoCaptura();
+            int lineas = 0;
+            if (f.exists()) try (java.io.BufferedReader r = new java.io.BufferedReader(new java.io.FileReader(f))) { while (r.readLine() != null) lineas++; } catch (Exception ignored) {}
+            try {
+                return new JSONObject().put("on", CubiService.yo.capturando()).put("kb", f.length() / 1024).put("lineas", Math.max(0, lineas - 1)).toString();
+            } catch (Exception e) { return "{}"; }
+        }
+
+        @JavascriptInterface
+        public void capturaOn(boolean si) { if (CubiService.yo != null) CubiService.yo.capturar(si); }
+
+        @JavascriptInterface
+        public void capturaBorrar() { if (CubiService.yo != null) CubiService.yo.archivoCaptura().delete(); }
+
+        // copia la captura a Descargas y abre "Compartir" para mandarla (WhatsApp, correo, Drive…)
+        @JavascriptInterface
+        public void capturaCompartir() {
+            if (CubiService.yo == null) return;
+            java.io.File f = CubiService.yo.archivoCaptura();
+            if (!f.exists() || f.length() == 0) { js("toast('Todavía no hay nada capturado')"); return; }
+            if (Build.VERSION.SDK_INT < 29) { js("toast('Esto necesita Android 10 o más nuevo')"); return; }
+            try {
+                String nombre = "cubi_captura_" + new java.text.SimpleDateFormat("yyyyMMdd_HHmm", java.util.Locale.US).format(new java.util.Date()) + ".csv";
+                android.content.ContentValues v = new android.content.ContentValues();
+                v.put(android.provider.MediaStore.Downloads.DISPLAY_NAME, nombre);
+                v.put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/csv");
+                Uri u = getContentResolver().insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+                try (java.io.OutputStream o = getContentResolver().openOutputStream(u); java.io.InputStream i = new java.io.FileInputStream(f)) {
+                    byte[] b = new byte[65536];
+                    int n;
+                    while ((n = i.read(b)) > 0) o.write(b, 0, n);
+                }
+                Intent s = new Intent(Intent.ACTION_SEND).setType("text/csv").putExtra(Intent.EXTRA_STREAM, u)
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                runOnUiThread(() -> startActivity(Intent.createChooser(s, "Mandar la captura de Cubi")));
+                js("toast(" + JSONObject.quote("Guardada en Descargas: " + nombre) + ")");
+            } catch (Exception e) {
+                js("toast(" + JSONObject.quote("No pude guardar la captura: " + e.getMessage()) + ")");
+            }
+        }
+
+        @JavascriptInterface
         public String personasCubi() {  // {"lista": [{n: nombre, r: reglas}], "sel": índice}
             if (CubiService.yo == null) return "{}";
             try {

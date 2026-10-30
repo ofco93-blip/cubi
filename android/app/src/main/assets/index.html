@@ -173,6 +173,12 @@ section[hidden] { display: none; }
   <div class="grid2" id="bailes"></div>
   <p class="note" id="cps"></p>
   </div>
+  <h2>Capturador (para afinar los instrumentos)</h2>
+  <div class="card">
+    <div class="row"><span>Capturar lo que oye</span><label class="sw"><input type="checkbox" id="captura"><i></i></label></div>
+    <p class="note" id="capturaNota">Prendido, Cubi anota cada 2 segundos lo que oye, qué instrumento decidió y qué canción sonaba. Úsalo un día manejando con música y luego mándame el archivo.</p>
+    <div class="grid2"><button class="btn main" id="capturaMandar">Guardar y mandar</button><button class="btn" id="capturaBorrar">Borrar</button></div>
+  </div>
   <h2>Ajustar el canto</h2>
   <div class="card">
     <div class="row"><span>Reaccionar a la música</span><label class="sw"><input type="checkbox" id="mus"><i></i></label></div>
@@ -448,6 +454,18 @@ $('guardarClaude').onclick = () => {
   Android.claudeClave(k); $('claveClaude').value = ''; claudeEstado(); toast('Clave guardada');
 };
 $('hablarCubi').onclick = () => { if (window.Android) Android.hablarCubi(); };
+// ---------- capturador ----------
+function capturaEstado() {
+  if (!window.Android) return;
+  const d = JSON.parse(Android.capturaEstado() || '{}');
+  if (d.on === undefined) return;
+  $('captura').checked = d.on;
+  $('capturaNota').textContent = (d.on ? 'Capturando. ' : 'Apagado. ') + d.lineas + ' momentos guardados (' + d.kb + ' KB). Úsalo un día manejando con música y luego toca "Guardar y mandar".';
+}
+$('captura').onchange = e => { Android.capturaOn(e.target.checked); capturaEstado(); };
+$('capturaMandar').onclick = () => Android.capturaCompartir();
+$('capturaBorrar').onclick = () => { Android.capturaBorrar(); capturaEstado(); toast('Captura borrada'); };
+setTimeout(capturaEstado, 900); setInterval(() => { if (tab === 'musica') capturaEstado(); }, 5000);
 // ---------- personalidades ----------
 let personas = [], pSel = 0;
 function pintarPersonas() {
