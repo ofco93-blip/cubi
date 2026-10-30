@@ -147,7 +147,10 @@ public class CubiService extends Service {
                 .setContentIntent(pi)
                 .setOngoing(true)
                 .build();
-        oidoQuiere = getSharedPreferences("cubi", 0).getBoolean("hola", false);
+        // el oído "Hola Cubi" del celular se quitó: los videos (Facebook, reels) lo disparaban. A Cubi se le habla con
+        // doble toque en su pantalla o con el botón de la app
+        oidoQuiere = false;
+        getSharedPreferences("cubi", 0).edit().putBoolean("hola", false).apply();
         clima();
         primerPlano();
         escucharAsistente();
@@ -1155,12 +1158,9 @@ public class CubiService extends Service {
     private boolean bajando;
     private long ultimoHola;
 
-    void hola(boolean si) {
-        getSharedPreferences("cubi", 0).edit().putBoolean("hola", si).apply();
-        oidoQuiere = si;
-        primerPlano();
-        if (si) prepararOido();
-        else pararOido();
+    void hola(boolean si) {  // ya no se prende (ver onCreate): solo lo apaga si quedó corriendo
+        oidoQuiere = false;
+        pararOido();
     }
 
     boolean holaActivo() { return oidoQuiere; }
