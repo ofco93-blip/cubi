@@ -46,7 +46,8 @@ static Reac laReac = NINGUNA;
 static float reacDesde = -1, tAhora = 0, baseDesde = 0, curvaAhora = 0;
 static float gritoAhora = 0;  // 0..1: qué tan grande abre la boca en la parte fuerte (sigue cada sílaba, por niveles)
 static float gritoZona = 0;
-static float bailaAhora = 0;  // 0..1: la canción es bailable (tempo de baile y suena con fuerza): baila y usa la mano libre   // 0..1: está en una parte fuerte de la canción (sube rápido, baja en ~1 s)
+static float bailaAhora = 0;
+static float rockeroAhora = 0;  // 0..1: la eléctrica suena fuerte: ojos apretados y se muerde el labio, como un roquero  // 0..1: la canción es bailable (tempo de baile y suena con fuerza): baila y usa la mano libre   // 0..1: está en una parte fuerte de la canción (sube rápido, baja en ~1 s)
 static int gradosN = 0; static float gradosDesde = -1, gradosHasta = -1;
 void mostrarGrados(int g, float seg) { gradosN = g; gradosDesde = tAhora; gradosHasta = tAhora + seg; }
 
@@ -192,6 +193,13 @@ static void boca(const Rostro &r) {
   float x = r.bx, y = r.by;
   // minimalista: boca solo al hablar y al cantar (ni en reacciones ni en reposo)
   if (elPaquete == MINIMALISTA && (laReac != NINGUNA || (laBase != CANTA && laBase != HABLA && laBase != TELEFONO))) return;
+  if (elPaquete == MINIMALISTA && laBase == CANTA && rockeroAhora > 0.5f && op < 0.45f) {   // roquero: se muerde el labio
+    figura(x - 30, y - 6, x + 30, y + 22, solido(BLANCO, rockeroAhora, 10),
+           [=](float px, float py) { return dCaja(px, py, x, y + 8, 24, 8, 8); });           // el labio
+    figura(x - 12, y - 4, x + 12, y + 8, solido(NEG, rockeroAhora),
+           [=](float px, float py) { return dCaja(px, py, x, y + 2, 9, 4, 1.5f); });         // los dientes encima
+    return;
+  }
   if (elPaquete == MINIMALISTA) {                                // canta y habla: una boquita vertical que abre y cierra con la voz
     if (op < 0.12f) return;                                      // entre sílabas se cierra del todo
     // vocal: w = 0 redonda (o, u) .. 1 estirada (i, e). La "a" abre alta; la "o" es más redonda; la "i" una rayita ancha
@@ -642,6 +650,8 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
   nivelB += (e.nivel - nivelB) * lim(dtB * 0.6f, 0, 1);
   const bool bailable = e.bpm >= 92 && e.bpm <= 145 && nivelB > 0.32f;
   bailaAhora += ((bailable ? 1.f : 0.f) - bailaAhora) * lim(dtB * 0.8f, 0, 1);
+  const bool rock = (e.ritmo == R_ROCK || e.ritmo == R_GROOVE) && nivelB > 0.5f;
+  rockeroAhora += ((rock ? 1.f : 0.f) - rockeroAhora) * lim(dtB * 1.5f, 0, 1);   // los ojos se ajustan al final
   if (bailaAhora > 0.01f) {
     const float B = bailaAhora;
     mover(r, 16 * B * vaiven, -10 * B * g);
@@ -680,6 +690,12 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
     const float Z = gritoZona;                          // los ojos no se mueven de su sitio y el instrumento sigue tocando
     feliz(r, fmaxf(r.L.feliz, Z)); escalar(r, 1 - 0.15f * Z, 1);
     r.by -= 22 * Z;                                     // la boca sube un poquito, hacia los ojos
+  }
+  if (rockeroAhora > 0.01f) {                         // roquero: ojos apretados, cejas bravas, cabecea duro con el golpe
+    const float K = rockeroAhora;
+    tapas(r, 0.7f * K); r.L.incl = r.R.incl = 0.25f * K;
+    r.L.feliz *= 1 - K; r.R.feliz *= 1 - K;
+    mover(r, 0, 14 * K * g);
   }
 }
 
@@ -830,6 +846,8 @@ static void extrasMini(float u, const Entradas &e) {
       guitarraLinea(gx, gy, ang, 1, true, 4 * gv, 1);
       aPantalla(marco(gx, gy, ang, 1), 0, -14 + 26 * (1 - gv), hx, hy);
       manoBlanca(hx, hy, ang + 1.9f, 0.85f, false);
+      aPantalla(marco(gx, gy, ang, 1), 96 + 14 * sinf(f * PI * 0.5f), 12, hx, hy);   // la otra mano en el mástil
+      manoBlanca(hx, hy, ang - 1.5f, 0.8f, false);
       break;
     }
     case R_GUITARRA: case R_DISFRUTA: {                 // guitarra acústica: rasguea a la velocidad del nivel
@@ -837,6 +855,8 @@ static void extrasMini(float u, const Entradas &e) {
       guitarraLinea(gx, gy, ang, 1.05f, false, 3 * rasga, 1);
       aPantalla(marco(gx, gy, ang, 1.05f), 22, -16 + 26 * (1 - rasga), hx, hy);
       manoBlanca(hx, hy, ang + 1.9f, 0.85f, false);
+      aPantalla(marco(gx, gy, ang, 1.05f), 104 + 10 * sinf(f * PI * 0.5f), 12, hx, hy);   // la otra mano en el mástil
+      manoBlanca(hx, hy, ang - 1.5f, 0.8f, false);
       break;
     }
     case R_TROPICAL:                                    // maracas a los lados: se sacuden en el 2 y el 4
@@ -856,7 +876,7 @@ static void extrasMini(float u, const Entradas &e) {
       break;
     }
     case R_DJ: case R_ELECTRO: case R_BARRAS: {         // disco a la derecha (la boquita queda libre) y la manito que lo raya
-      float scratch = (n % 4 >= 2) ? sinf(f * PI * veces) : 0, x = CX + 122, y = H - 66;   // raya más rápido en lo fuerte
+      float scratch = (n % 4 >= 2) ? sinf(f * PI * veces) : 0, x = CX + 122 + 20 * vaiven, y = H - 66 - 8 * gv;   // se mece con el golpe
       disco(x, y, 48, u * 4 + 0.9f * scratch, 1);
       manoBlanca(x - 44 + 10 * scratch, y - 30 + 6 * scratch, 0.45f, 1.15f, true);
       if (bailaAhora > 0.05f) manoLibre(e, n, gv, 0, bailaAhora);   // la otra mano: puño arriba con el golpe
@@ -1440,26 +1460,6 @@ static void kame(float u) {
 static Rostro deReac(float u, const Entradas &e, float &vel) {
   Rostro r = neutro(AZUL);
   vel = 1000;        // las de caricatura van "de golpe"
-  if (elPaquete == MINIMALISTA && laReac == FRENAZO) {  // minimalista: la inercia lo tira adelante, ojos redondos de susto,
-    vel = 30;                                           // tiembla y respira aliviado (sin vidrio roto)
-    const float tira = campana(u, 0.05f, 0.6f), asusta = tramo(u, 0.3f, 0.45f) * (1 - tramo(u, 1.8f, 2.2f));
-    const float alivio = tramo(u, 2.0f, 2.3f) * (1 - tramo(u, 3.5f, 4.0f));
-    if (u < 0.08f) escalar(r, 1.1f, 0.85f);             // se encoge un instante
-    mover(r, 0, 36 * tira); escalar(r, 1 + 0.2f * tira, 1 + 0.12f * tira);
-    escalar(r, 1 + 0.3f * asusta, 1 - 0.35f * asusta);  // ojos redondos y grandes
-    if (u > 0.4f && u < 1.4f) mover(r, 2.5f * sinf(u * 80), 0);
-    tapas(r, 0.5f * alivio); mover(r, 0, 8 * alivio);
-    return r;
-  }
-  if (elPaquete == MINIMALISTA && (laReac == GIRO_IZQ || laReac == GIRO_DER)) {   // minimalista: se ladea con la curva,
-    vel = 22;                                                                     // mira hacia donde va y vuelve
-    const float lado = laReac == GIRO_IZQ ? -1 : 1, ir = tramo(u, 0.05f, 0.3f) * (1 - tramo(u, 1.6f, 2.2f));
-    mover(r, lado * 60 * ir, 0); mirar(r, lado * 0.6f * ir, 0);
-    r.L.incl = r.R.incl = lado * 0.22f * ir;
-    if (u > 0.3f) mover(r, lado * 7 * expf(-(u - 0.3f) * 4) * sinf((u - 0.3f) * 20), 0);   // se mece al llegar
-    feliz(r, 0.8f * campana(u, 1.7f, 2.4f));
-    return r;
-  }
   switch (laReac) {
     case SALUDO: {
       float abre = tramo(u, 0.05f, 0.35f);
@@ -1671,27 +1671,6 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
 }
 
 static void extrasReac(float u, bool delante) {
-  if (elPaquete == MINIMALISTA && (laReac == FRENAZO || laReac == GIRO_IZQ || laReac == GIRO_DER)) {
-    if (!delante) return;
-    const Ojo &oL = ahora.L, &oR = ahora.R;
-    if (laReac == FRENAZO) {
-      const float a = campana(u, 0.15f, 0.9f);           // dos rayitas de susto arriba
-      if (a > 0.01f) for (int s2 = -1; s2 <= 1; s2 += 2) {
-        const Ojo &o = s2 < 0 ? oL : oR;
-        linea(o.x + s2 * 10, o.y - o.h / 2 - 18, o.x + s2 * 22, o.y - o.h / 2 - 40, 4, BL, a, 6);
-      }
-      const float alivio = tramo(u, 2.0f, 2.3f) * (1 - tramo(u, 3.5f, 4.0f));   // gotita de sudor
-      if (alivio > 0.01f) gota(oR.x + oR.w / 2 + 26, oR.y - oR.h / 2 + 50 * tramo(u, 2.1f, 3.4f), 11, alivio);
-    } else {
-      const float lado = laReac == GIRO_IZQ ? -1 : 1, a = campana(u, 0.05f, 0.7f);   // rayitas de velocidad detrás
-      if (a > 0.01f) for (int i = 0; i < 3; i++) {
-        const Ojo &o = lado > 0 ? oL : oR;
-        const float x = o.x - lado * (o.w / 2 + 22 + 8 * i), y = o.y - 30 + i * 30;
-        linea(x, y, x - lado * (36 - 8 * i), y, 4, BL, a * 0.85f, 6);
-      }
-    }
-    return;
-  }
   switch (laReac) {
     case KAME:
       if (delante) kame(u);
