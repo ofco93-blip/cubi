@@ -174,8 +174,10 @@ bool sintetizar() {
 float vR[NF], vI[NF];
 ArduinoFFT<float> FFT(vR, vI, NF, SR);
 volatile uint8_t estilo = NADA;
+volatile int8_t instrumentoOido = -1;  // el instrumento que más se oye ahora (un ritmo de caras), -1 si no está claro
 volatile uint32_t beatCnt = 0, hiCnt = 0, aplausoCnt = 0, tSonido = 0;  // tSonido: última vez que oyó algo (lo despierta)
 volatile bool aCanta = false;
+volatile float aInsF = 0, aInsO = 0;  // para ver en la app: qué tan ruidoso suena y golpes por segundo
 volatile float aNivel = 0, aVoz = 0, aBoca = 0, aBocaCruda = 0, aAncho = 0.5f, aBajoP = 0, aBpm = 0, aReg = 0, aBajo = 0, aMedio = 0, aAgudo = 0, aRms = 0, aPiso = 0;
 const char *EST_NOM[N_EST] = { "nada", "voz", "balada", "tropical", "reggaeton", "electronica", "rock" };
 
@@ -303,11 +305,38 @@ void tareaAudio(void *) {
     if (suena && golpe && now - ultBeat > 250) { ultBeat = now; beatCnt++; }
     fPrev = flujo;
     bPrev = b;
+    // rasgos para saber qué instrumento domina: reparto por bandas, qué tan "ruidoso" es (platillos, distorsión) o
+    // "limpio" (piano, guitarra, saxo), y qué tanto parece voz
+    static float sB = 0, sL = 0, sM = 0, sA = 0, sF = 0, sV = 0; static int sN = 0; static uint32_t golpesIni = 0;
+    if (suena) {
+      float lg = 0, ar = 0;
+      for (int k = 6; k < 192; k++) { lg += logf(vR[k] + 1); ar += vR[k]; }
+      sB += b / tot; sL += suma(6, 16) / tot; sM += md / tot; sA += hi / tot;
+      sF += expf(lg / 186) / (ar / 186 + 1); sV += aVoz; sN++;
+    }
     if (hay) { fB += (b / tot - fB) * 0.03f; fM += (md / tot - fM) * 0.03f; fA += (hi / tot - fA) * 0.03f; tSon = now; }
 
     if (now - tEval < 2000) continue;
     tEval = now;
-    if (now - tSon > 3000) { estilo = NADA; candN = 0; continue; }
+    {
+      static int8_t insCand = -1; static uint8_t insN = 0; static uint32_t insDesde = 0;
+      if (sN > 20) {
+        const float B = sB / sN, L = sL / sN, M = sM / sN, A = sA / sN, F = sF / sN, V = sV / sN, O = (beatCnt - golpesIni) / 2.f;
+        int8_t c = -1;
+        if (V > 0.55f) c = caras::R_KPOP;                                    // manda la voz: micrófono
+        else if (B > 0.42f && O >= 1.5f) c = caras::R_DJ;                    // bajo electrónico con golpe parejo
+        else if (A > 0.22f && F > 0.45f) c = O > 3 ? caras::R_TROPICAL : caras::R_POP;   // agudos ruidosos: shaker o batería
+        else if (M + A > 0.45f && F > 0.25f && B < 0.3f) c = caras::R_ROCK;  // medios llenos y algo ruidosos: distorsión
+        else if (F < 0.22f && O < 1.2f) c = M > 0.35f ? caras::R_JAZZ : caras::R_PIANO;  // limpio y sostenido: saxo o piano
+        else if (F < 0.3f && O >= 1.2f) c = A < 0.08f ? caras::R_PIANO : caras::R_GUITARRA;  // limpio con ataques: piano o guitarra
+        aInsF = F; aInsO = O;
+        (void)L;
+        if (c == insCand) { if (insN < 9) insN++; } else { insCand = c; insN = 1; }
+        if (insCand >= 0 && insN >= 2 && insCand != instrumentoOido && now - insDesde > 8000) { instrumentoOido = insCand; insDesde = now; }
+      }
+      sB = sL = sM = sA = sF = sV = 0; sN = 0; golpesIni = beatCnt;
+    }
+    if (now - tSon > 3000) { estilo = NADA; candN = 0; instrumentoOido = -1; continue; }
     float bpm, reg;
     tempo.medir(bpm, reg);
     while (bpm && bpm < 70) bpm *= 2;
@@ -603,7 +632,11 @@ uint8_t elegirRitmo(uint32_t now) {
   static uint8_t r = R_KPOP, estR = NADA;
   if (ritmoFijo >= 0) return ritmoFijo;
   // con el celular en play: el instrumento que dijo Haiku; si no se sabe, no improvisa: micrófono y ojos cerrados
-  if (musicaCel && celPlay) return celRitmo >= 0 ? celRitmo : R_KPOP;
+  if (musicaCel && celPlay) {
+    if (celRitmo == R_PIANO) return R_PIANO;                    // intro de piano (lo sabe el celular)
+    return instrumentoOido >= 0 ? instrumentoOido : celRitmo >= 0 ? celRitmo : R_KPOP;
+  }
+  if (instrumentoOido >= 0 && est >= BALADA) return instrumentoOido;   // solo el oído: lo que domina ahora
   if (est < BALADA) estR = NADA;
   if (musicaCel && celPlay && estR != NADA) return r;  // con el celular en play no cambia de baile a mitad de la canción
   if (est >= BALADA && est != estR) {
@@ -996,10 +1029,11 @@ String atender(const String &ruta, const Params &p, int &cod) {
       ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + ",\"paq\":" + prefs.getUChar("paq", 0) + "}";  // cuadros por segundo del último cuadro
   }
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
-    char b[300];
+    char b[420];
     snprintf(b, sizeof b, "{\"estado\":%u,\"estilo\":\"%s\",\"bpm\":%.0f,\"nivel\":%.2f,\"voz\":%.2f,\"canta\":%d,\"boca\":%.2f,\"ancho\":%.2f,"
-      "\"bajo\":%.2f,\"rms\":%.0f,\"piso\":%.0f,\"golpes\":%lu,\"reg\":%.2f}",
-      estado, EST_NOM[estilo], aBpm, aNivel, aVoz, cantando ? 1 : 0, bocaV, aAncho, aBajoP, aRms, aPiso, (unsigned long)beatCnt, aReg);
+      "\"bajo\":%.2f,\"rms\":%.0f,\"piso\":%.0f,\"golpes\":%lu,\"reg\":%.2f,\"ins\":\"%s\",\"ruido\":%.2f,\"gps\":%.1f}",
+      estado, EST_NOM[estilo], aBpm, aNivel, aVoz, cantando ? 1 : 0, bocaV, aAncho, aBajoP, aRms, aPiso, (unsigned long)beatCnt, aReg,
+      instrumentoOido >= 0 ? caras::NOMBRE_RITMO[instrumentoOido] : "", aInsF, aInsO);
     return b;
   }
   // Actualización por Bluetooth: inicio (tamaño y MD5), los datos llegan por la característica OTA, y fin (verifica y reinicia).
