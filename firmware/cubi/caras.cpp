@@ -801,13 +801,13 @@ static void telefonoIcono(float x, float y, float R, float u, float alfa) {
 // la mano libre, a la izquierda de la cara: 0 puño arriba con el golpe, 1 saluda de lado a lado, 2 apunta al cielo
 static void manoLibre(const Entradas &e, int n, float g, int paso, float a) {
   const Ojo &o = ahora.L;
-  const float f = n + e.pulso, x0 = o.x - o.w / 2 - 58, y0 = o.y + o.h / 2 + 10;
+  const float f = n + e.pulso, x0 = o.x - o.w / 2 - 40, y0 = o.y + o.h / 2 + 34;
   float x = x0, y = y0, ang = -PI / 2;
   bool apunta = false;
   if (paso == 0) { y = y0 - 50 * (1 - g); ang = -PI / 2 - 0.2f; }                       // puño que sube y baja
   else if (paso == 1) { ang = -PI / 2 + 0.6f * sinf(f * PI); x = x0 + 10 * sinf(f * PI); y = y0 - 40; }   // saludo
   else { apunta = true; ang = -PI / 2 + 0.25f; y = y0 - 30 - 30 * (1 - g); x = x0 + 8; }   // apunta arriba
-  manoBlanca(x, y, ang, 0.9f, apunta, a);
+  manoBlanca(x, y, ang, 1.1f, apunta, fminf(1.f, a * 1.6f));   // blanca sólida y más grande: que se vea el paso
 }
 
 static void extrasMini(float u, const Entradas &e) {
