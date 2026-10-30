@@ -939,8 +939,18 @@ public class CubiService extends Service {
                 Instrumento r = claude.messages().create(b.outputConfig(Instrumento.class).build())
                         .content().stream().flatMap(c -> c.text().stream()).map(t -> t.text()).findFirst().orElse(null);
                 if (r == null || r.instrumento == null || !id.equals(cancionId)) return;
-                for (String[] par : INSTRUMENTOS)
-                    if (par[0].equals(r.instrumento.trim().toLowerCase(Locale.ROOT))) ritmoCancion = par[1];
+                String g = r.instrumento.trim().toLowerCase(Locale.ROOT), elegido = "kpop";   // si no reconoce nada: micrófono
+                for (String[] par : INSTRUMENTOS) if (par[0].equals(g)) elegido = par[1];
+                if (g.contains("rock") || g.contains("metal") || g.contains("punk")) elegido = "rock";
+                else if (g.contains("electr") || g.contains("house") || g.contains("dance") || g.contains("edm")
+                        || g.contains("reggaet") || g.contains("urban") || g.contains("trap") || g.contains("hip")) elegido = "dj";
+                else if (g.contains("salsa") || g.contains("cumbia") || g.contains("merengue") || g.contains("bachata")
+                        || g.contains("vallenato") || g.contains("tropical")) elegido = "tropical";
+                else if (g.contains("jazz") || g.contains("blues") || g.contains("soul")) elegido = "jazz";
+                else if (g.contains("piano") || g.contains("clasic") || g.contains("clásic")) elegido = "piano";
+                else if (g.contains("acust") || g.contains("acúst") || g.contains("folk") || g.contains("country")) elegido = "guitarra";
+                else if (g.contains("percus") || g.contains("bater")) elegido = "pop";
+                ritmoCancion = elegido;
                 introPiano = Boolean.TRUE.equals(r.empiezaPiano);
             } catch (Exception ignored) {  // sin internet: el micrófono elige
             }

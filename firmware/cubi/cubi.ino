@@ -69,7 +69,8 @@ es8311_handle_t es = nullptr;
 
 uint8_t rotacion = ROTACION_INICIAL, volumen = VOLUMEN_INICIAL, micGan = GANANCIA_MIC;
 bool sonidoOn = true, musicaOn = true;
-uint8_t tamCara = 120;  // % del tamaño de la cara (para el acrílico)
+uint8_t tamCara = 120;
+bool apagarConCarro = true;  // al cortarse la corriente del USB (se apagó el carro) se apaga a los 20 s  // % del tamaño de la cara (para el acrílico)
 bool musicaCel = true;  // true: baila solo cuando el celular reproduce (y usa la letra y el instrumento que manda);
                         // false: solo con lo que oye su micrófono, sin mirar el celular
 float umbralVoz = UMBRAL_VOZ, ganBoca = GANANCIA_BOCA, sensK = SONIDO_K, umbralFreno = UMBRAL_FRENO;
@@ -340,7 +341,8 @@ void tareaAudio(void *) {
                  c >= 0 ? caras::NOMBRE_RITMO[c] : "-", instrumentoOido >= 0 ? caras::NOMBRE_RITMO[instrumentoOido] : "-");
         rasgosNuevo = true;
         if (c == insCand) { if (insN < 9) insN++; } else { insCand = c; insN = 1; }
-        if (insCand >= 0 && insN >= 2 && insCand != instrumentoOido && now - insDesde > 8000) { instrumentoOido = insCand; insDesde = now; }
+        // sin celular decide el oído, pero estable: lo mismo tres veces seguidas (6 s) y no más de un cambio cada 30 s
+        if (insCand >= 0 && insN >= 3 && insCand != instrumentoOido && (instrumentoOido < 0 || now - insDesde > 30000)) { instrumentoOido = insCand; insDesde = now; }
       }
       sB = sL = sM = sA = sF = sV = 0; sN = 0; golpesIni = beatCnt;
     }
@@ -646,10 +648,9 @@ uint8_t elegirRitmo(uint32_t now) {
   static uint8_t r = R_KPOP, estR = NADA;
   if (ritmoFijo >= 0) return ritmoFijo;
   // con el celular en play: el instrumento que dijo Haiku; si no se sabe, no improvisa: micrófono y ojos cerrados
-  if (musicaCel && celPlay) {
-    if (celRitmo == R_PIANO) return R_PIANO;                    // intro de piano (lo sabe el celular)
-    return instrumentoOido >= 0 ? instrumentoOido : celRitmo >= 0 ? celRitmo : R_KPOP;
-  }
+  // con el celular manda la canción (su género, y el piano de la intro): la captura mostró que el oído cambia de
+  // instrumento según el parlante (sin bajos todo le suena a rock), así que solo decide cuando no hay celular
+  if (musicaCel && celPlay) return celRitmo >= 0 ? celRitmo : R_KPOP;
   if (instrumentoOido >= 0 && est >= BALADA) return instrumentoOido;   // solo el oído: lo que domina ahora
   if (est < BALADA) estR = NADA;
   if (musicaCel && celPlay && estR != NADA) return r;  // con el celular en play no cambia de baile a mitad de la canción
@@ -930,12 +931,15 @@ void energiaUpdate(uint32_t now) {
   bool usb = pmu.isVbusIn();
   if (usbAntes >= 0 && usb != usbAntes && modo == NORMAL && !asis) { despertar(now); reac(usb ? caras::AMOR : caras::SORPRESA); }
   usbAntes = usb;
+  static bool usbVisto = false;  // si lo prendieron con batería sin USB (pruebas en la oficina), no se apaga por eso
+  if (usb) usbVisto = true;
   if (usb || !pmu.isBatteryConnect()) { sinUsb = 0; return; }
   static uint32_t avisoBat = 0;
   if (pmu.getBatteryPercent() < 15 && (!avisoBat || now - avisoBat > 600000)) { avisoBat = now; reac(caras::BATERIA); }
   if (!sinUsb) sinUsb = now;
   bool vacia = pmu.getBatteryPercent() < 5;
-  if (vacia || (APAGAR_SIN_USB_SEG && now - sinUsb > APAGAR_SIN_USB_SEG * 1000UL)) {
+  const uint32_t espera = APAGAR_SIN_USB_SEG ? APAGAR_SIN_USB_SEG * 1000UL : 20000UL;
+  if (vacia || (apagarConCarro && usbVisto && now - sinUsb > espera)) {   // se apagó el carro: se despide y se apaga
     // Se apaga del todo para cuidar la batería; el AXP2101 lo vuelve a prender al conectar el USB (o con el botón PWR).
     emoBase = SUENO; setEmo(SUENO, 0); sonar(S_SUENO);
     for (uint32_t t0 = millis(); millis() - t0 < 2500;) { animar(millis()); pintar(millis()); delay(30); }
@@ -945,7 +949,7 @@ void energiaUpdate(uint32_t now) {
 }
 
 void guardar() {
-  prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn); prefs.putBool("mc", musicaCel); prefs.putUChar("tam", tamCara);
+  prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn); prefs.putBool("mc", musicaCel); prefs.putUChar("tam", tamCara); prefs.putBool("carro", apagarConCarro);
   prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan); prefs.putChar("adl", adelante); prefs.putFloat("fr", umbralFreno);
 }
 
@@ -1022,6 +1026,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
   if (ruta == "/ajuste") {
     if (p.has("vol")) { volumen = constrain(p.get("vol").toInt(), 0, 100); if (es) es8311_voice_volume_set(es, volumen, NULL); sonar(S_WHATSAPP); }
     if (p.has("son")) sonidoOn = p.get("son") == "1";
+    if (p.has("carro")) apagarConCarro = p.get("carro") == "1";
     if (p.has("tam")) { tamCara = constrain(p.get("tam").toInt(), 100, 150); caras::tamano(tamCara / 100.f); dib::todo(); }
     if (p.has("mus")) musicaOn = p.get("mus") == "1";
     if (p.has("mc")) musicaCel = p.get("mc") == "1";
@@ -1039,7 +1044,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     int bat = pmuOk && pmu.isBatteryConnect() ? pmu.getBatteryPercent() : -1;
     return String("{\"emo\":\"") + EMO_NOM[emo] + "\",\"modo\":" + modo + ",\"estado\":" + estado +
       ",\"estilo\":\"" + EST_NOM[estilo] + "\",\"bpm\":" + int(aBpm) + ",\"bat\":" + bat + ",\"usb\":" + (pmuOk && pmu.isVbusIn() ? 1 : 0) +
-      ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"mc\":" + musicaCel + ",\"tam\":" + tamCara +
+      ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"mc\":" + musicaCel + ",\"tam\":" + tamCara + ",\"carro\":" + apagarConCarro +
       ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
       ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"fw\":" + VERSION_FW +
       ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + ",\"paq\":" + prefs.getUChar("paq", 0) + "}";  // cuadros por segundo del último cuadro
@@ -1197,6 +1202,7 @@ void setup() {
   rotacion = prefs.getUChar("rot", ROTACION_INICIAL); volumen = prefs.getUChar("vol", VOLUMEN_INICIAL);
   sonidoOn = prefs.getBool("son", true); musicaOn = prefs.getBool("mus", true); musicaCel = prefs.getBool("mc", true);
   tamCara = prefs.getUChar("tam", 120); caras::tamano(tamCara / 100.f);
+  apagarConCarro = prefs.getBool("carro", true);
   caras::paquete(prefs.getUChar("paq", caras::CUBI_AZUL));
   umbralVoz = prefs.getFloat("uv", UMBRAL_VOZ); ganBoca = prefs.getFloat("gb", GANANCIA_BOCA);
   sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = UMBRAL_FRENO;
