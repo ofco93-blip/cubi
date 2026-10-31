@@ -127,6 +127,12 @@ public class MainActivity extends Activity {
 
     @Override
     public void onRequestPermissionsResult(int code, String[] p, int[] r) {
+        if (code == 6) {  // GPS
+            boolean si = r.length > 0 && r[0] == PackageManager.PERMISSION_GRANTED;
+            if (si && CubiService.yo != null) CubiService.yo.gpsOn(true);
+            else js("gpsEstado(false)");
+            return;
+        }
         if (code == 5) {  // ubicación aproximada para el clima
             boolean si = r.length > 0 && r[0] == PackageManager.PERMISSION_GRANTED;
             if (si && CubiService.yo != null) CubiService.yo.climaOn(true);
@@ -435,6 +441,19 @@ public class MainActivity extends Activity {
             if (si && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
                 requestPermissions(new String[]{Manifest.permission.ACCESS_COARSE_LOCATION}, 5);
             else CubiService.yo.climaOn(si);
+        }
+
+        @JavascriptInterface
+        public void gpsCubi(boolean si) {
+            if (CubiService.yo == null) return;
+            if (si && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, 6);
+            else CubiService.yo.gpsOn(si);
+        }
+
+        @JavascriptInterface
+        public boolean gpsActivo() {
+            return CubiService.yo != null && CubiService.yo.gpsActivo();
         }
 
         @JavascriptInterface

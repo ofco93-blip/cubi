@@ -27,6 +27,7 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
 import android.content.pm.ServiceInfo;
 import android.content.res.Configuration;
@@ -151,6 +152,7 @@ public class CubiService extends Service {
         oidoQuiere = getSharedPreferences("cubi", 0).getBoolean("oido", true);
         clima();
         primerPlano();
+        gps();
         escucharAsistente();
         iniciarVoz();
         if (oidoQuiere) prepararOido();
@@ -165,10 +167,12 @@ public class CubiService extends Service {
         int tipo = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE;
         if (oidoQuiere && Build.VERSION.SDK_INT >= 30 && checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) == 0)
             tipo |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
+        int sinGps = tipo;
+        if (gpsActivo() && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == 0) tipo |= ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION;
         try {
             startForeground(1, aviso, tipo);
-        } catch (Exception e) {
-            startForeground(1, aviso, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
+        } catch (Exception e) {   // Android no deja sumar el GPS (o el micrófono) desde segundo plano: se prueba con menos
+            try { startForeground(1, aviso, sinGps); } catch (Exception e2) { startForeground(1, aviso, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE); }
         }
     }
 
@@ -185,6 +189,7 @@ public class CubiService extends Service {
     public void onDestroy() {
         if (gatt != null) gatt.close();
         oido = null;
+        if (oyeGps != null) ((LocationManager) getSystemService(LOCATION_SERVICE)).removeUpdates(oyeGps);
         if (voz != null) voz.shutdown();
         if (oreja != null) oreja.destroy();
         bajarMusica(false);
@@ -391,9 +396,11 @@ public class CubiService extends Service {
     }
 
     private final Runnable climaCada = this::clima;
+    private long climaCuando;
     void clima() {
         ui.removeCallbacks(climaCada);
         if (!climaActivo()) return;
+        climaCuando = System.currentTimeMillis();
         ui.postDelayed(climaCada, 20 * 60000);
         guardarUbicacion();
         String lugar = getSharedPreferences("cubi", 0).getString("lugar", "");
@@ -417,6 +424,48 @@ public class CubiService extends Service {
                 js("climaTexto(" + JSONObject.quote(climaTexto) + ")");
             } catch (Exception ignored) {}
         }).start();
+    }
+
+    // ---------- GPS: "¡llegamos!" sin Google Maps y el clima del camino ----------
+    boolean gpsActivo() { return getSharedPreferences("cubi", 0).getBoolean("gps", false); }
+    void gpsOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("gps", si).apply(); primerPlano(); gps(); }
+    private LocationListener oyeGps;
+    private Location antesGps, quietoEn, climaEn;
+    private long quietoDesde;
+    private float recorrido;   // metros andados desde la última llegada
+    float kmh = -1;
+
+    @SuppressLint("MissingPermission")
+    void gps() {
+        LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+        if (oyeGps != null) { lm.removeUpdates(oyeGps); oyeGps = null; }
+        kmh = -1;
+        if (!gpsActivo() || checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
+        oyeGps = this::posicion;
+        // cada 5 s y sin distancia mínima: parado también tiene que avisar, si no nunca sabría que ya llegamos
+        try { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 0, oyeGps, Looper.getMainLooper()); }
+        catch (Exception e) { oyeGps = null; }
+    }
+
+    private void posicion(Location l) {
+        long ahora = System.currentTimeMillis();
+        if (l.hasSpeed()) kmh = l.getSpeed() * 3.6f;
+        getSharedPreferences("cubi", 0).edit()
+            .putString("lugar", String.format(Locale.US, "%.2f,%.2f", l.getLatitude(), l.getLongitude())).apply();
+        if (antesGps != null && l.getAccuracy() < 50) recorrido += antesGps.distanceTo(l);
+        antesGps = l;
+        // llegada: venía de un viaje (más de 2 km) y lleva 3 minutos parado en el mismo sitio
+        // ponytail: un trancón o semáforo de más de 3 min también cuenta como llegada; si molesta, subir el tiempo
+        if (quietoEn == null || quietoEn.distanceTo(l) > 60) { quietoEn = l; quietoDesde = ahora; }
+        else if (recorrido > 2000 && ahora - quietoDesde > 180000) {
+            recorrido = 0;
+            if (ahora - llegadaAvisada > 60000) { llegadaAvisada = ahora; enviar("asis|/r?n=llegamos"); }
+        }
+        // clima del camino: cada 8 km (no más de una vez cada 5 min) se vuelve a preguntar; si cambió, Cubi reacciona
+        if (climaActivo() && (climaEn == null || climaEn.distanceTo(l) > 8000) && ahora - climaCuando > 5 * 60000) {
+            climaEn = l;
+            clima();
+        }
     }
 
     // ---------- asistente: Cubi pide abrir Gemini y se le cuenta si escucha o habla ----------
@@ -639,6 +688,7 @@ public class CubiService extends Service {
         Calendar c = Calendar.getInstance();
         return "[Hora: " + String.format(Locale.US, "%d:%02d", c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE))
                 + (climaTexto.isEmpty() ? "" : ". Clima: " + climaTexto)
+                + (kmh < 0 ? "" : kmh < 3 ? ". El carro está quieto" : ". Vamos a " + Math.round(kmh) + " km/h")
                 + (musicaPlay ? ". Está sonando " + (cancionTexto.isEmpty() ? "música" : cancionTexto) : "") + "]\n";
     }
 

@@ -10,7 +10,9 @@
     <!-- Bluetooth: Android 11 y anteriores (buscar dispositivos pide ubicación) -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30" />
+    <!-- GPS (y buscar Bluetooth en Android 11 y anteriores): llegadas y el clima del camino -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="false" />
     <!-- Seguir conectado con la pantalla apagada -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -57,7 +59,7 @@
         <service
             android:name=".CubiService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice|microphone" />
+            android:foregroundServiceType="connectedDevice|microphone|location" />
         <!-- "Cubi, pon salsa": con acceso a notificaciones le pide a Spotify que busque y reproduzca -->
         <service
             android:name=".Oyente"

@@ -199,8 +199,10 @@ section[hidden] { display: none; }
 
 <!-- ================= AJUSTES ================= -->
 <section id="tab-ajustes" hidden>
-  <h2>Clima</h2>
+  <h2>Clima y viaje</h2>
   <div class="card">
+    <div class="row"><span>Usar el GPS</span><label class="sw"><input type="checkbox" id="gps"><i></i></label></div>
+    <p class="note">Cuando paran 3 minutos después de un viaje, Cubi celebra que llegaron (sin Google Maps). En el camino revisa el clima cada 8 km y reacciona si cambia (lluvia, sol, frío, calor). Si le hablas, sabe a qué velocidad van.</p>
     <div class="row"><span>Reaccionar al clima</span><label class="sw"><input type="checkbox" id="clima"><i></i></label></div>
     <p class="note" id="climaNota">Con lluvia saca la sombrilla, con sol se alegra, con calor suda y con frío tirita. Usa tu ubicación aproximada (~1 km) y se actualiza cada 20 minutos.</p>
   </div>
@@ -402,6 +404,9 @@ $('vol').onchange = e => mandar('/ajuste?vol=' + e.target.value);
 $('son').onchange = e => mandar('/ajuste?son=' + (e.target.checked ? 1 : 0));
 $('rot').onclick = () => mandar('/ajuste?rot=1');
 $('clima').onchange = e => Android.climaCubi(e.target.checked);
+$('gps').onchange = e => Android.gpsCubi(e.target.checked);
+function gpsEstado(si) { $('gps').checked = si; }
+if (window.Android) setTimeout(() => gpsEstado(Android.gpsActivo()), 500);
 function climaEstado(si) { $('clima').checked = si; }
 function climaTexto(s) { if (s) $('climaNota').textContent = s; }
 if (window.Android) setTimeout(() => { climaEstado(Android.climaActivo()); climaTexto(Android.climaTexto()); }, 500);
