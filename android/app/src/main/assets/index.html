@@ -108,6 +108,8 @@ section[hidden] { display: none; }
   <div class="card">
     <button class="btn main" id="gemini">Hablar con Gemini</button>
     <p class="note">También con <b>doble toque</b> en la pantalla de Cubi. Mientras Gemini te contesta, Cubi mueve la boca.</p>
+    <div class="row"><span>Despertar con “Hola Cubi”</span><label class="sw"><input type="checkbox" id="hola"><i></i></label></div>
+    <p class="note">El celular escucha sin internet y nada sale de él. No escucha mientras suena un video (Facebook, reels). Android muestra el puntito verde del micrófono.</p>
     <button class="btn" id="permisoGemini" hidden>Permitir que Cubi abra Gemini con la pantalla apagada</button>
   </div>
   <h2>Cubi habla (Claude)</h2>
@@ -126,7 +128,7 @@ section[hidden] { display: none; }
     <button class="btn" id="permisoMusica" hidden>Permitir que Cubi controle la música y cante con la letra</button>
     <p class="note">Abre los ajustes de voz del celular: elige “Servicios de voz de Google”, toca el engranaje → Instalar datos de voz → Español. Al volver, las voces nuevas aparecen aquí.</p>
     <button class="btn main" id="hablarCubi">Hablarle a Cubi</button>
-    <p class="note">Toca dos veces la pantalla de Cubi (o “Hablarle a Cubi”), espera su carita de escuchar y pide lo que quieras: “haz un kamehameha”, “cuéntame un chiste”. Mientras escucha y habla, la música se baja sola. Sin clave, el doble toque abre Gemini como antes.</p>
+    <p class="note">Di “Hola Cubi” o toca dos veces su pantalla (o “Hablarle a Cubi”), espera su carita de escuchar y pide lo que quieras: “haz un kamehameha”, “cuéntame un chiste”. Mientras escucha y habla, la música se baja sola. Sin clave, el doble toque abre Gemini como antes.</p>
   </div>
   <h2>Personalidad</h2>
   <div class="card">
@@ -525,6 +527,8 @@ document.addEventListener('visibilitychange', () => {   // vuelve de los ajustes
   vocesAbiertas = false; Android.recargarVoces(); $('vozCubi').innerHTML = ''; setTimeout(cargarVoces, 1500);
 });
 setTimeout(claudeEstado, 500);
+$('hola').onchange = e => Android.holaCubi(e.target.checked);
+function holaEstado(si) { $('hola').checked = si; }
 function revisarPermisoGemini() {
   if (!window.Android) return;
   $('permisoGemini').hidden = Android.puedeAbrirSolo();
@@ -568,6 +572,7 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 etiquetas();
 conectar();
 revisarPermisoGemini();
+if (window.Android) setTimeout(() => holaEstado(Android.holaActivo()), 500);
 // revisa GitHub al abrir, al volver a la app (máximo cada minuto) y con el botón
 let verRevisada = 0;
 function buscarVersion(forzar) {

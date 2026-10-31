@@ -147,10 +147,8 @@ public class CubiService extends Service {
                 .setContentIntent(pi)
                 .setOngoing(true)
                 .build();
-        // el oído "Hola Cubi" del celular se quitó: los videos (Facebook, reels) lo disparaban. A Cubi se le habla con
-        // doble toque en su pantalla o con el botón de la app
-        oidoQuiere = false;
-        getSharedPreferences("cubi", 0).edit().putBoolean("hola", false).apply();
+        // "Hola Cubi" prendido de entrada (se apaga en la app); no escucha mientras el celular tiene un video sonando
+        oidoQuiere = getSharedPreferences("cubi", 0).getBoolean("oido", true);
         clima();
         primerPlano();
         escucharAsistente();
@@ -924,7 +922,9 @@ public class CubiService extends Service {
 
     private void pedirInstrumento(String titulo, String artista, String id) {
         if (claveClaude().isEmpty()) return;  // sin clave: el micrófono adivina el estilo como antes
-        new Thread(() -> {
+        // la captura mostró que a veces no llega (un tercio de las canciones sin género): lo intenta 3 veces y, si no,
+        // canta con el micrófono en vez de quedarse con el instrumento de la canción anterior
+        new Thread(() -> { for (int intento = 1; intento <= 3; intento++) {
             try {
                 if (claude == null) claude = AnthropicOkHttpClient.builder().apiKey(claveClaude()).build();
                 MessageCreateParams.Builder b = MessageCreateParams.builder().model(MODELO_CLAUDE).maxTokens(256L)
@@ -952,9 +952,12 @@ public class CubiService extends Service {
                 else if (g.contains("percus") || g.contains("bater")) elegido = "pop";
                 ritmoCancion = elegido;
                 introPiano = Boolean.TRUE.equals(r.empiezaPiano);
-            } catch (Exception ignored) {  // sin internet: el micrófono elige
+                return;
+            } catch (Exception e) {  // sin internet o la respuesta no llegó: otra vez en un rato
+                if (intento == 3) { if (id.equals(cancionId)) ritmoCancion = "kpop"; return; }
+                SystemClock.sleep(3000L * intento);
             }
-        }).start();
+        } }).start();
     }
 
     // busca la canción en LRCLIB y se queda con la letra sincronizada de la versión de duración más parecida
@@ -1212,7 +1215,8 @@ public class CubiService extends Service {
         if (!asisEstado.isEmpty() || hablaDesde != 0 || ahora < pitidoHasta || ventana || musicaPlay || ahora < charlaHasta) ui.postDelayed(revisar, 400);
         else if (listo) ui.postDelayed(revisar, 2000);  // con Cubi conectado se vuelve a mirar: con Android Auto no siempre llega el aviso de audio
         // "Hola Cubi" escucha solo cuando nadie más usa el micrófono ni hay llamada
-        boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva && ahora >= charlaHasta;
+        // ni con un video sonando (Facebook, reels): eso lo despertaba de la nada
+        boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva && ahora >= charlaHasta && !video;
         if (oidoQuiere && modelo != null && libre) arrancarOido();
         else pararOido();
     }
@@ -1243,9 +1247,12 @@ public class CubiService extends Service {
     private boolean bajando;
     private long ultimoHola;
 
-    void hola(boolean si) {  // ya no se prende (ver onCreate): solo lo apaga si quedó corriendo
-        oidoQuiere = false;
-        pararOido();
+    void hola(boolean si) {
+        getSharedPreferences("cubi", 0).edit().putBoolean("oido", si).apply();
+        oidoQuiere = si;
+        primerPlano();
+        if (si) prepararOido();
+        else pararOido();
     }
 
     boolean holaActivo() { return oidoQuiere; }
