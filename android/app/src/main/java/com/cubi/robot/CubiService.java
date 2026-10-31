@@ -1216,7 +1216,8 @@ public class CubiService extends Service {
         else if (listo) ui.postDelayed(revisar, 2000);  // con Cubi conectado se vuelve a mirar: con Android Auto no siempre llega el aviso de audio
         // "Hola Cubi" escucha solo cuando nadie más usa el micrófono ni hay llamada
         // ni con un video sonando (Facebook, reels): eso lo despertaba de la nada
-        boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva && ahora >= charlaHasta && !video;
+        // ni con música (con el parlante sonando no lo oye y el reconocedor gasta el celular sin parar)
+        boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva && ahora >= charlaHasta && !video && !play;
         if (oidoQuiere && modelo != null && libre) arrancarOido();
         else pararOido();
     }
@@ -1241,7 +1242,7 @@ public class CubiService extends Service {
     static final String GRAMATICA = "[\"hola cubi\", \"hola cuba\", \"hola cubo\", \"[unk]\"]";
     static final Pattern HOLA = Pattern.compile("\\bh?ola\\s+(cu|ku)[bv]\\w{0,2}\\b");
     private volatile boolean oidoQuiere;
-    private volatile Thread oido;
+    private volatile Thread oido, hiloOido;
     private volatile int miSesion = -1;
     private volatile org.vosk.Model modelo;
     private boolean bajando;
@@ -1301,7 +1302,7 @@ public class CubiService extends Service {
     }
 
     private void arrancarOido() {
-        if (oido != null) return;
+        if (oido != null || (hiloOido != null && hiloOido.isAlive())) return;   // nunca dos reconocedores a la vez
         Thread t = new Thread(() -> {
             AudioRecord r = null;
             try (org.vosk.Recognizer rec = new org.vosk.Recognizer(modelo, 16000, GRAMATICA)) {
@@ -1326,7 +1327,7 @@ public class CubiService extends Service {
                 if (oido == Thread.currentThread()) { oido = null; miSesion = -1; }
             }
         });
-        oido = t;
+        oido = hiloOido = t;
         t.start();
     }
 
