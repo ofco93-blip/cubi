@@ -106,7 +106,8 @@ struct Pintura {
 };
 // paquete "Robot minimalista": todo en blanco (se quita el color y se deja qué tan claro es)
 extern bool blanco;
-inline Col sinColor(const Col &c) { float v = fmaxf(c.r, fmaxf(c.g, c.b)); return {v, v, v}; }
+extern Col tinte;   // el color de los ojos (blanco = como siempre): lo toma todo lo que se dibuja en el minimalista
+inline Col sinColor(const Col &c) { float v = fmaxf(c.r, fmaxf(c.g, c.b)) * (1.f / 255); return {v * tinte.r, v * tinte.g, v * tinte.b}; }
 // zoom de la cara (para el acrílico que la agranda): lo que se dibuja se escala alrededor de (zx, zy).
 // Las figuras se siguen describiendo en las medidas de siempre; figura() y texto() hacen la cuenta.
 extern float zoom, zx, zy;

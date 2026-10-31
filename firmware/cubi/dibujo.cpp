@@ -6,6 +6,7 @@ namespace dib {
 
 uint16_t *fb = nullptr;
 uint8_t giro = 0;
+Col tinte{255, 255, 255};
 int cx0 = W, cy0 = H, cx1 = 0, cy1 = 0;
 uint8_t cual = 0;
 struct RL { int x0, y0, x1, y1; };                  // rectángulo acostado

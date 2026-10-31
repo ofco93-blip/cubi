@@ -70,6 +70,9 @@ es8311_handle_t es = nullptr;
 uint8_t rotacion = ROTACION_INICIAL, volumen = VOLUMEN_INICIAL, micGan = GANANCIA_MIC;
 bool sonidoOn = true, musicaOn = true;
 uint8_t tamCara = 120;  // % del tamaño de la cara (para el acrílico)
+bool labios = true;          // false: con la música solo baila (sin mover la boca con la letra)
+uint32_t colorOjos = 0xFFFFFF;
+static void ponerColor(uint32_t c) { colorOjos = c; dib::tinte = {float(c >> 16 & 255), float(c >> 8 & 255), float(c & 255)}; dib::todo(); }
 bool apagarConCarro = true;  // al cortarse la corriente del USB (se apagó el carro) se apaga al minuto (APAGAR_SIN_USB_SEG)
 bool musicaCel = true;  // true: baila solo cuando el celular reproduce (y usa la letra y el instrumento que manda);
                         // false: solo con lo que oye su micrófono, sin mirar el celular
@@ -737,7 +740,7 @@ void pintar(uint32_t now) {
   else if (emoBase == SUENO) b = caras::DUERME;
   caras::base(b);
   caras::Entradas en;
-  en.boca = bocaV; en.ancho = anchoV; en.canta = cantando; en.nivel = aNivel; en.curva = curvaLook / 60; en.voz = aVoz;
+  en.boca = bocaV; en.ancho = anchoV; en.canta = cantando && labios; en.nivel = aNivel; en.curva = curvaLook / 60; en.voz = aVoz;
   if (b == caras::CANTA) {
     float bpm = now < demoHasta ? 126 : aBpm > 60 ? aBpm : 110;
     static float fase = 0; static uint32_t antesF = now, golpeVisto = 0; static uint8_t fuera = 0;
@@ -958,7 +961,7 @@ void energiaUpdate(uint32_t now) {
 }
 
 void guardar() {
-  prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn); prefs.putBool("mc", musicaCel); prefs.putUChar("tam", tamCara); prefs.putBool("carro", apagarConCarro);
+  prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn); prefs.putBool("mc", musicaCel); prefs.putUChar("tam", tamCara); prefs.putBool("carro", apagarConCarro); prefs.putBool("lab", labios); prefs.putUInt("ojos", colorOjos);
   prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan); prefs.putChar("adl", adelante); prefs.putFloat("fr", umbralFreno);
 }
 
@@ -1036,6 +1039,8 @@ String atender(const String &ruta, const Params &p, int &cod) {
     if (p.has("vol")) { volumen = constrain(p.get("vol").toInt(), 0, 100); if (es) es8311_voice_volume_set(es, volumen, NULL); sonar(S_WHATSAPP); }
     if (p.has("son")) sonidoOn = p.get("son") == "1";
     if (p.has("carro")) apagarConCarro = p.get("carro") == "1";
+    if (p.has("lab")) labios = p.get("lab") == "1";
+    if (p.has("ojos")) ponerColor(strtoul(p.get("ojos").c_str(), nullptr, 16) & 0xFFFFFF);
     if (p.has("tam")) { tamCara = constrain(p.get("tam").toInt(), 100, 150); caras::tamano(tamCara / 100.f); dib::todo(); }
     if (p.has("mus")) musicaOn = p.get("mus") == "1";
     if (p.has("mc")) musicaCel = p.get("mc") == "1";
@@ -1053,7 +1058,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     int bat = pmuOk && pmu.isBatteryConnect() ? pmu.getBatteryPercent() : -1;
     return String("{\"emo\":\"") + EMO_NOM[emo] + "\",\"modo\":" + modo + ",\"estado\":" + estado +
       ",\"estilo\":\"" + EST_NOM[estilo] + "\",\"bpm\":" + int(aBpm) + ",\"bat\":" + bat + ",\"usb\":" + (pmuOk && pmu.isVbusIn() ? 1 : 0) +
-      ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"mc\":" + musicaCel + ",\"tam\":" + tamCara + ",\"carro\":" + apagarConCarro +
+      ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"mc\":" + musicaCel + ",\"tam\":" + tamCara + ",\"carro\":" + apagarConCarro + ",\"lab\":" + labios + ",\"ojos\":" + colorOjos +
       ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
       ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"fw\":" + VERSION_FW +
       ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + ",\"paq\":" + prefs.getUChar("paq", 0) + "}";  // cuadros por segundo del último cuadro
@@ -1212,6 +1217,7 @@ void setup() {
   sonidoOn = prefs.getBool("son", true); musicaOn = prefs.getBool("mus", true); musicaCel = prefs.getBool("mc", true);
   tamCara = prefs.getUChar("tam", 120); caras::tamano(tamCara / 100.f);
   apagarConCarro = prefs.getBool("carro", true);
+  labios = prefs.getBool("lab", true); ponerColor(prefs.getUInt("ojos", 0xFFFFFF));
   caras::paquete(prefs.getUChar("paq", caras::CUBI_AZUL));
   umbralVoz = prefs.getFloat("uv", UMBRAL_VOZ); ganBoca = prefs.getFloat("gb", GANANCIA_BOCA);
   sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = UMBRAL_FRENO;

@@ -1030,6 +1030,8 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       }
       // con voz la boca sigue al cantante (entre sílabas se cierra); sin voz no hay boca: solo baila o toca
       // minimalista: la boca sigue la voz completa, como en la app (sin achicarla por baile)
+      // bailando o cantando nunca con cara de preocupado: la inclinación negativa son cejas tristes
+      r.L.incl = fmaxf(r.L.incl, 0); r.R.incl = fmaxf(r.R.incl, 0);
       r.boca = e.canta && abre > 0 ? fmaxf(e.boca * (elPaquete == MINIMALISTA ? 1 : abre), 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;
       vel = 16;
       break;
