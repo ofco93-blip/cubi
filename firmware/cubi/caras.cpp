@@ -203,10 +203,10 @@ static void boca(const Rostro &r) {
   // minimalista: boca solo al hablar y al cantar (ni en reacciones ni en reposo)
   if (elPaquete == MINIMALISTA && (laReac != NINGUNA || (laBase != CANTA && laBase != HABLA && laBase != TELEFONO))) return;
   if (elPaquete == MINIMALISTA) {                                // canta y habla: una boquita vertical que abre y cierra con la voz
-    if (op < 0.12f) return;                                      // entre sílabas se cierra del todo
+    if (op < 0.06f) return;                                      // entre sílabas se cierra del todo
     // vocal: w = 0 redonda (o, u) .. 1 estirada (i, e). La "a" abre alta; la "o" es más redonda; la "i" una rayita ancha
     const float w = lim((r.bAncho - 0.75f) / 0.6f, 0, 1), G = laBase == CANTA ? gritoAhora : 0;
-    const float bh0 = (5 + 24 * op) * (1 - 0.35f * w), bw0 = 5 + 5 * w + (1 - w) * 0.35f * bh0;
+    const float bh0 = (4 + 30 * op) * (1 - 0.35f * w), bw0 = 5 + 5 * w + (1 - w) * 0.35f * bh0;
     // en el "¡aaah!" la boca crece vertical hasta ocupar casi toda la pantalla; el ancho sigue la vocal
     const float bhG = 64 * (1 - 0.25f * w), bwG = bhG * (0.5f + 0.2f * (1 - w) + 0.2f * w);   // grande, pero cabe con los ojos en su sitio
     const float bh = bh0 + (bhG - bh0) * G, bw = bw0 + (bwG - bw0) * G;
@@ -1029,7 +1029,8 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
           break;
       }
       // con voz la boca sigue al cantante (entre sílabas se cierra); sin voz no hay boca: solo baila o toca
-      r.boca = e.canta && abre > 0 ? fmaxf(e.boca * abre, 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;
+      // minimalista: la boca sigue la voz completa, como en la app (sin achicarla por baile)
+      r.boca = e.canta && abre > 0 ? fmaxf(e.boca * (elPaquete == MINIMALISTA ? 1 : abre), 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;
       vel = 16;
       break;
     }
