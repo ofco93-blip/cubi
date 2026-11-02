@@ -49,6 +49,7 @@ static float reacDesde = -1, tAhora = 0, baseDesde = 0, curvaAhora = 0;
 static float gritoAhora = 0;  // 0..1: qué tan grande abre la boca en la parte fuerte (sigue cada sílaba, por niveles)
 static float gritoZona = 0;
 static float bailaAhora = 0;
+static float emoAhora = 0;    // 0..1: la nota sostenida, suavizada (ojos cerrados y las dos manos en el micrófono)
 static float rockeroAhora = 0;  // 0..1: la eléctrica suena fuerte: ojos apretados y se muerde el labio, como un roquero  // 0..1: la canción es bailable (tempo de baile y suena con fuerza): baila y usa la mano libre   // 0..1: está en una parte fuerte de la canción (sube rápido, baja en ~1 s)
 static int gradosN = 0; static float gradosDesde = -1, gradosHasta = -1;
 void mostrarGrados(int g, float seg) { gradosN = g; gradosDesde = tAhora; gradosHasta = tAhora + seg; }
@@ -680,6 +681,8 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
       default: r.corazon = 1; escalar(r, 1.05f, 1.05f); mover(r, 0, 6 * g); break;         // ojitos de corazón
     }
   } else if (e.ritmo == R_KPOP) { feliz(r, 1); mover(r, 0, 8 * g); }   // micrófono sin voz: ojos cerrados, "tun, tun"
+  emoAhora += ((e.canta ? e.emocion : 0) - emoAhora) * lim(dtB * 6, 0, 1);
+  if (emoAhora > 0.4f) { feliz(r, 1); mirar(r, 0, -0.35f); mover(r, 0, -8 * emoAhora); }   // nota larga: ojos cerrados, al cielo
   // "¡aaah!": en la parte fuerte de la canción (voz muy fuerte o la barra rosada al tope) la boca crece, pero sigue
   // abriendo y cerrando con cada sílaba por niveles: no se queda pegada abierta. Los ojos se vuelven chiquitos.
   static float tAntes = 0;
@@ -922,7 +925,10 @@ static void extrasMini(float u, const Entradas &e) {
       microLinea(mx, my, ang, 1.3f, 1);
       aPantalla(marco(mx, my, ang, 1.3f), 42, 0, hx, hy);
       manoBlanca(hx, hy, ang - PI / 2, 0.85f, false);
-      if (e.canta || bailaAhora > 0.05f) manoLibre(e, n, gv, (n / 8) % 3, fmaxf(bailaAhora, 0.6f));   // la otra mano baila
+      if (emoAhora > 0.3f) {                            // nota larga: el micrófono con las dos manos
+        aPantalla(marco(mx, my, ang, 1.3f), 64, 0, hx, hy);
+        manoBlanca(hx, hy, ang - PI / 2 - 0.25f, 0.85f, false, lim(emoAhora * 2 - 0.6f, 0, 1));
+      } else if (e.canta || bailaAhora > 0.05f) manoLibre(e, n, gv, (n / 8) % 3, fmaxf(bailaAhora, 0.6f));   // la otra mano baila
       break;
     }
     default: bateria(nv, gv, 1); break;                 // batería: más golpes por compás en lo fuerte

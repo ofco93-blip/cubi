@@ -893,7 +893,9 @@ public class CubiService extends Service {
     String cancionTexto = "";              // "Título de Artista", para que Haiku sepa qué suena
     private volatile long[] letraT;        // cuándo empieza cada línea (ms)
     private volatile boolean[] letraVoz;   // si esa línea tiene letra (las vacías son partes sin voz)
-    private int vozEnviada = -1;
+    private volatile String[] letraSil;    // una vocal por sílaba de cada línea: la boca de Cubi las va diciendo
+    private volatile boolean[] letraCoro;  // la línea se repite en la canción: es del coro
+    private int vozEnviada = -1, lineaEnviada = -1;
     private boolean siguiendo;
     volatile String estadoLetra = "";      // lo que pasa con la letra, para verlo en la app
     private final Runnable seguirLetraR = this::seguirLetra;
@@ -945,15 +947,48 @@ public class CubiService extends Service {
             long finIntro = t != null && t.length > 0 ? t[0] : 15000;
             String quiere = introPiano && pos < finIntro ? "piano" : ritmoCancion;
             if (!quiere.isEmpty() && !quiere.equals(ritmoMandado)) { ritmoMandado = quiere; enviar("asis|/musica?ritmo=" + quiere); }
-            if (t != null && st.getState() == PlaybackState.STATE_PLAYING) {
+            String[] sil = letraSil; boolean[] coro = letraCoro;
+            if (t != null && sil != null && st.getState() == PlaybackState.STATE_PLAYING) {
                 int i = -1;
                 for (int k = 0; k < t.length && t[k] <= pos + 150; k++) i = k;  // 150 ms antes: lo que tarda en llegar a Cubi
-                int s = i >= 0 && v[i] && pos - t[i] < 7000 ? 1 : 0;           // una línea sin la siguiente dura 7 s máximo
-                if (s != vozEnviada || ahora - vozMandada > 4000) { enviar("asis|/musica?voz=" + s); vozEnviada = s; vozMandada = ahora; }
+                long d = i >= 0 ? durLinea(t, sil, i) : 0;
+                int s = i >= 0 && v[i] && !sil[i].isEmpty() && pos + 150 - t[i] < d ? 1 : 0;   // al terminar la línea cierra la boca
+                if (s == 1 && i != lineaEnviada) {   // línea nueva: sus sílabas, para que la boca vaya con la letra
+                    enviar("asis|/musica?voz=1&s=" + sil[i] + "&d=" + d + "&o=" + (pos + 150 - t[i]) + "&c=" + (coro[i] ? 1 : 0));
+                    lineaEnviada = i; vozEnviada = 1; vozMandada = ahora;
+                } else if (s != vozEnviada || ahora - vozMandada > 4000) { enviar("asis|/musica?voz=" + s); vozEnviada = s; vozMandada = ahora; }
+                if (s == 0) lineaEnviada = -1;
                 estadoLetra = cancionTexto + ": " + (s == 1 ? "canta ahora" : "parte sin voz");
+                // se despierta justo para el próximo cambio (empieza la línea o termina de cantarla): antes miraba cada
+                // 250 ms y la boca arrancaba hasta un cuarto de segundo tarde
+                long prox = 250;
+                if (i + 1 < t.length) prox = Math.min(prox, t[i + 1] - 150 - pos);
+                if (s == 1) prox = Math.min(prox, t[i] + d - 150 - pos);
+                ui.postDelayed(seguirLetraR, Math.max(15, prox));
+                return;
             }
         }
         ui.postDelayed(seguirLetraR, 250);
+    }
+
+    // lo que dura cantar la línea i: las sílabas a ~0,28 s más la última sostenida, sin pasarse de la siguiente línea
+    static long durLinea(long[] t, String[] sil, int i) {
+        long hueco = i + 1 < t.length ? t[i + 1] - t[i] : 7000;
+        return Math.max(300, Math.min(hueco - 150, Math.max(800, sil[i].length() * 280L + 600)));
+    }
+
+    // una vocal por sílaba: cada grupo de vocales seguidas es una sílaba y se queda con la más abierta (a, o, e, u, i)
+    static String vocales(String linea) {
+        String s = java.text.Normalizer.normalize(linea.toLowerCase(Locale.ROOT), java.text.Normalizer.Form.NFD);
+        StringBuilder r = new StringBuilder();
+        char mejor = 0;
+        for (char c : (s + " ").toCharArray()) {
+            int f = "iueoa".indexOf(c == 'y' ? 'i' : c);
+            if (f >= 0) { if (mejor == 0 || f > "iueoa".indexOf(mejor)) mejor = "iueoa".charAt(f); }
+            else if (Character.getType(c) == Character.NON_SPACING_MARK) continue;   // la tilde no corta la sílaba
+            else if (mejor != 0) { r.append(mejor); mejor = 0; }
+        }
+        return r.length() > 40 ? r.substring(0, 40) : r.toString();
     }
 
     // Haiku conoce casi todas las canciones: le pregunta el género y Cubi toca el instrumento de ese tipo de canción
@@ -1038,15 +1073,25 @@ public class CubiService extends Service {
                 }
                 if (!id.equals(cancionId)) return;
                 if (mejor == null || dif > 10) { estadoLetra = cancionTexto + ": sin letra sincronizada (usa el micrófono)"; return; }
-                ArrayList<Long> ts = new ArrayList<>(); ArrayList<Boolean> vs = new ArrayList<>();
+                ArrayList<Long> ts = new ArrayList<>(); ArrayList<Boolean> vs = new ArrayList<>(); ArrayList<String> xs = new ArrayList<>();
+                java.util.HashMap<String, Integer> veces = new java.util.HashMap<>();
                 for (String linea : mejor.split("\n")) {
                     Matcher mt = LINEA.matcher(linea.trim());
                     if (!mt.matches()) continue;
                     ts.add((long) ((Integer.parseInt(mt.group(1)) * 60 + Double.parseDouble(mt.group(2))) * 1000));
-                    vs.add(!mt.group(3).trim().isEmpty());
+                    String x = mt.group(3).trim().toLowerCase(Locale.ROOT);
+                    vs.add(!x.isEmpty());
+                    xs.add(x);
+                    veces.merge(x, 1, Integer::sum);
                 }
-                long[] t = new long[ts.size()]; boolean[] v = new boolean[ts.size()];
-                for (int i = 0; i < t.length; i++) { t[i] = ts.get(i); v[i] = vs.get(i); }
+                long[] t = new long[ts.size()]; boolean[] v = new boolean[ts.size()], coro = new boolean[ts.size()];
+                String[] sil = new String[ts.size()];
+                for (int i = 0; i < t.length; i++) {
+                    t[i] = ts.get(i); v[i] = vs.get(i); sil[i] = vocales(xs.get(i));
+                    coro[i] = v[i] && veces.get(xs.get(i)) >= 2;
+                }
+                letraCoro = coro;
+                letraSil = sil;
                 letraVoz = v;
                 letraT = t;
             } catch (Exception e) {  // sin internet o sin letra: Cubi sigue con lo que oye

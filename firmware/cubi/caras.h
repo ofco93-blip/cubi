@@ -30,6 +30,7 @@ struct Entradas {
   float ancho = 0.5f;   // 0 = boca redonda (o, u) .. 1 = estirada (i, e)
   float curva = 0;      // -1..1: hacia dónde gira el carro (mueve el destello del sol)
   float voz = 0;        // 0..1: qué tanto parece voz lo que oye (al máximo en las notas agudas sostenidas)
+  float emocion = 0;    // 0..1: sostiene una nota larga: cierra los ojos y agarra el micrófono con las dos manos
 };
 
 // paquetes de caras (se escogen desde la app)

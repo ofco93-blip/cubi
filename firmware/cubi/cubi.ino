@@ -407,6 +407,8 @@ bool hayMusica = false, cantando = false;  // lo que animar() decide y las caras
 extern volatile bool bleOn;
 bool celPlay = false; uint8_t estPlay = TROPICAL;
 bool celVoz = false; uint32_t celVozHasta = 0;
+// la línea de la letra que canta el artista: una vocal por sílaba ("aeo..."), cuándo empezó y lo que dura cantarla
+char silabas[48] = ""; uint8_t nSil = 0; uint32_t silT0 = 0, silDur = 1; bool coro = false;
 bool celVideo = false;  // el celular está con un video (reels, Facebook): con eso no baila
 int celRitmo = -1;  // el instrumento que se destaca en la canción (lo dice Haiku por el título): se toca ese  // el celular sabe por la letra cuándo canta el artista (caduca si deja de avisar)  // el celular avisa play/pausa; estPlay = el último estilo que se oyó
 uint32_t tGolpe = 0;  // pedida desde la app o tocando: le gana a la música; las del movimiento no
@@ -449,8 +451,8 @@ void evento(const String &t) {
 float lx = 0, ly = 0, vlx = 0, vly = 0, tlx = 0, tly = 0, bounce = 0, escala = 1, pulso = 0, eyeCy = H / 2, sqx = 1, sqy = 1;
 C3 fondoC = { 0, 0, 0 };  // color detrás de los ojos (para suavizar sus bordes)
 uint32_t frameUs = 0, tAnim = 0, tDib = 0, tFlush = 0;
-float bocaV = 0, anchoV = 0.5f, hablaV = 0, fondo = 0, giro = 0, tono = 0;
-uint32_t nextSacc = 0, nextBlink = 0, blinkT0 = 0, lastMotion = 0, fuerteDesde = 0;
+float bocaV = 0, anchoV = 0.5f, hablaV = 0, fondo = 0, giro = 0, tono = 0, emocion = 0;
+uint32_t nextSacc = 0, nextBlink = 0, blinkT0 = 0, lastMotion = 0;
 uint32_t demoT0 = 0, demoHasta = 0, demoBeat = 0; bool demoCanto = false;
 float curvaLook = 0;
 uint8_t brillo = BRILLO_INICIAL;
@@ -513,12 +515,32 @@ void animar(uint32_t now) {
   }
   bool musica = est >= BALADA;
   if (musica && now >= demoHasta) {
-    // con la letra canta justo cuando canta el artista; sin letra canta mientras suena la música (con respiros cada
-    // tantos segundos), salvo que el oído ya esté oyendo la voz. La boca sigue lo que oye y unas sílabas inventadas.
-    float t = now / 1000.f;
-    if (musicaCel && now < celVozHasta) voz = celVoz;
-    else if (!voz) voz = aNivel > 0.12f && fmodf(t, 5.f) < 4.f;
-    bIn = voz ? fmaxf(aBocaCruda, 0.6f * constrain(0.5f * sinf(t * 9.3f) + 0.3f * sinf(t * 3.7f) + 0.3f, 0.f, 1.f)) : 0;
+    // con la letra: una sílaba por vocal de la línea, repartidas en lo que dura cantarla, y la última se sostiene
+    // (como los cantantes). Sin letra solo baila: la captura mostró que el micrófono oye igual la voz que los
+    // instrumentos, y por eso abría la boca en los solos.
+    voz = false; emocion = 0;
+    if (musicaCel && now < celVozHasta && celVoz && nSil) {
+      float u = (now - silT0) * (nSil + 1.5f) / silDur;
+      if (u < nSil + 1.5f) {
+        int k = min((int)u, nSil - 1);
+        bool ultima = k == nSil - 1;
+        float ph = ultima ? (u - k) / 2.5f : u - k;
+        float env = ph < 0.15f ? ph / 0.15f : ph < 0.7f ? 1 : (1 - ph) / 0.3f;   // abre rápido y cierra al final de la sílaba
+        float abre = 0.75f, an = 0.5f;
+        switch (silabas[k]) {
+          case 'a': abre = 1; an = 0.6f; break;
+          case 'e': abre = 0.7f; an = 0.9f; break;
+          case 'i': abre = 0.45f; an = 1; break;
+          case 'o': abre = 0.8f; an = 0.15f; break;
+          case 'u': abre = 0.5f; an = 0; break;
+        }
+        voz = true; aIn = an;
+        bIn = constrain(abre * env * (coro ? 1.15f : 0.95f) * ganBoca / GANANCIA_BOCA, 0.f, 1.f);
+        // nota larga al final de la línea (más fácil en el coro): ojos cerrados y el micrófono con las dos manos
+        float largo = silDur * 2.5f / (nSil + 1.5f);
+        if (ultima && largo > (coro ? 450 : 700)) emocion = 1;
+      }
+    }
   }
   if (asis && now > asisHasta) asis = NO_ASIS;
   if (asis) { musica = false; est = NADA; libre = true; despertar(now); }  // el asistente le gana a todo
@@ -593,8 +615,7 @@ void animar(uint32_t now) {
     if (est == ROCK) { tgt.arco = 0; tgt.boca = 0; }  // cabeceo con cejas de rockero
   }
   if (c == CANTA && !asis) {  // canta con sentimiento: si sostiene una nota fuerte, cierra los ojos y sube las cejas
-    if (bocaV > 0.65f) { if (!fuerteDesde) fuerteDesde = now; } else fuerteDesde = 0;
-    if (fuerteDesde && now - fuerteDesde > 350) { tgt.arco = 0.85f; tgt.cejaY = 16; tgt.cejaAng = -0.5f; }
+    if (emocion > 0.5f) { tgt.arco = 0.85f; tgt.cejaY = 16; tgt.cejaAng = -0.5f; }
   }
   if (voz || hablaV > 0.05f) cyBase -= 24 * U; else if (fabsf(tgt.boca) > 0.3f && c != REPOSO) cyBase -= 14 * U;
   if (c != caraAct) { sqy = 1.12f; sqx = 0.9f; }  // al cambiar de cara: estirón elástico
@@ -740,7 +761,7 @@ void pintar(uint32_t now) {
   else if (emoBase == SUENO) b = caras::DUERME;
   caras::base(b);
   caras::Entradas en;
-  en.boca = bocaV; en.ancho = anchoV; en.canta = cantando && labios; en.nivel = aNivel; en.curva = curvaLook / 60; en.voz = aVoz;
+  en.boca = bocaV; en.ancho = anchoV; en.canta = cantando && labios; en.nivel = aNivel; en.curva = curvaLook / 60; en.voz = aVoz; en.emocion = emocion;
   if (b == caras::CANTA) {
     float bpm = now < demoHasta ? 126 : aBpm > 60 ? aBpm : 110;
     static float fase = 0; static uint32_t antesF = now, golpeVisto = 0; static uint8_t fuera = 0;
@@ -1013,6 +1034,10 @@ String atender(const String &ruta, const Params &p, int &cod) {
   if (ruta == "/musica") {  // el celular avisa play o pausa (con play baila de una) y, por la letra, si el artista canta
     if (p.has("play")) { celPlay = p.get("play") == "1"; if (!celPlay) { estilo = NADA; celVozHasta = 0; } }
     if (p.has("voz")) { celVoz = p.get("voz") == "1"; celVozHasta = millis() + 6000; }
+    if (p.has("s")) {   // empezó una línea: s = sus vocales, d = cuánto dura cantarla, o = cuánto lleva, c = es del coro
+      strlcpy(silabas, p.get("s").c_str(), sizeof silabas); nSil = strlen(silabas);
+      silDur = max(1L, p.get("d").toInt()); silT0 = millis() - p.get("o").toInt(); coro = p.get("c") == "1";
+    }
     if (p.has("video")) celVideo = p.get("video") == "1";
     if (p.has("ritmo")) { celRitmo = -1; for (int i = 0; i < caras::N_RITMO; i++) if (p.get("ritmo") == caras::NOMBRE_RITMO[i]) celRitmo = i; }
     if (p.has("play") && !celPlay) celRitmo = -1;
