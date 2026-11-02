@@ -214,8 +214,7 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
   if (r.corazon > 0.5f) {
     float s = fminf(o.w, o.h) * 0.55f * (0.9f + 0.1f * r.corazon);
     auto cor = [=](float px, float py) { return dCorazon(px, py, x, y, s); };
-    if (mini) volumen(x - s * 1.3f, y - s * 1.3f, x + s * 1.3f, y + s * 1.1f, o.alfa, cor);
-    else figura(x - s * 1.3f, y - s * 1.3f, x + s * 1.3f, y + s * 1.1f, tonoP(r, y - s, y + s, 20, o.alfa), cor);
+    figura(x - s * 1.3f, y - s * 1.3f, x + s * 1.3f, y + s * 1.1f, tonoP(r, y - s, y + s, 20, o.alfa), cor);
     return;
   }
   if (claro()) { ojoLindo(r, o, lado, top); return; }
@@ -224,11 +223,12 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
     const float yl = y2 - hh2 + fabsf(tn) * hw;
     if (fz > 0.5f) {   // feliz: un arco de trazo grueso, como el robot del tablero (no una píldora recortada)
       const float R = hw * 1.1f, cyA = y + hh * 0.35f;
-      figura(x - R - 8, cyA - R - 8, x + R + 8, cyA + 8, solido(BLANCO, o.alfa, 10),
+      figura(x - R - 8, cyA - R - 8, x + R + 8, cyA + 8, tonoP(r, cyA - R, cyA, 10, o.alfa),
              [=](float px, float py) { return dArco(px, py, x, cyA, R, -PI * 0.86f, -PI * 0.14f) - 6.5f; });
       return;
     }
-    volumen(x - hw, y2 - hh2, x + hw, y2 + hh2, o.alfa, [=](float px, float py) {
+    // con los colores de Lumi azul (como Copi), no en blanco
+    figura(x - hw, y2 - hh2, x + hw, y2 + hh2, tonoP(r, y2 - hh2, y2 + hh2, 14, o.alfa), [=](float px, float py) {
       float d = dPildora(px, py, x, y2, hw, hh2);
       if (o.incl != 0) d = smax(d, (yl + tn * (px - x) - py) * co, 10);
       if (fz > 0.01f) d = smax(d, -dElipse(px, py, x, cy2, crx, cry2), 8);
