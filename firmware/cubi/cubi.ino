@@ -70,6 +70,7 @@ es8311_handle_t es = nullptr;
 uint8_t rotacion = ROTACION_INICIAL, volumen = VOLUMEN_INICIAL, micGan = GANANCIA_MIC;
 bool sonidoOn = true, musicaOn = true;
 uint8_t tamCara = 120;  // % del tamaño de la cara (para el acrílico)
+bool bocaMic = true;         // la boca sigue su propio micrófono (con las vocales); false: sigue la letra que manda el celular
 bool labios = true;          // false: con la música solo baila (sin mover la boca con la letra)
 uint32_t colorOjos = 0xFFFFFF;
 static void ponerColor(uint32_t c) { colorOjos = c; dib::tinte = {float(c >> 16 & 255), float(c >> 8 & 255), float(c & 255)}; dib::todo(); }
@@ -184,7 +185,7 @@ char rasgosTxt[200]; volatile bool rasgosNuevo = false;  // capturador: lo que o
 volatile uint32_t beatCnt = 0, hiCnt = 0, aplausoCnt = 0, tSonido = 0;  // tSonido: última vez que oyó algo (lo despierta)
 volatile bool aCanta = false;
 volatile float aInsF = 0, aInsO = 0;  // para ver en la app: qué tan ruidoso suena y golpes por segundo
-volatile float aNivel = 0, aVoz = 0, aBoca = 0, aBocaCruda = 0, aAncho = 0.5f, aBajoP = 0, aBpm = 0, aReg = 0, aBajo = 0, aMedio = 0, aAgudo = 0, aRms = 0, aPiso = 0;
+volatile float aAbre = 0.8f, aNivel = 0, aVoz = 0, aBoca = 0, aBocaCruda = 0, aAncho = 0.5f, aBajoP = 0, aBpm = 0, aReg = 0, aBajo = 0, aMedio = 0, aAgudo = 0, aRms = 0, aPiso = 0;
 const char *EST_NOM[N_EST] = { "nada", "voz", "balada", "tropical", "reggaeton", "electronica", "rock" };
 
 uint8_t clasificar(float bpm, float reg, float bajo, float medio, float agudo) {
@@ -252,7 +253,7 @@ void analizarVoz(bool hay) {
 
   hAvg += (eh - hAvg) * 0.05f;
   if (hay && eh > hAvg * 2.2f) hiCnt++;  // platillo / hi-hat: chispas
-  aVoz = vozS; aCanta = canta; aBoca = boca; aAncho = ancho; aBocaCruda = cruda;
+  aVoz = vozS; aCanta = canta; aBoca = boca; aAncho = ancho; aBocaCruda = cruda; aAbre = abre;
 }
 
 void tareaAudio(void *) {
@@ -519,7 +520,13 @@ void animar(uint32_t now) {
     // (como los cantantes). Sin letra solo baila: la captura mostró que el micrófono oye igual la voz que los
     // instrumentos, y por eso abría la boca en los solos.
     voz = false; emocion = 0;
-    if (musicaCel && now < celVozHasta && celVoz && nSil) {
+    static uint32_t fuerteDesde = 0;
+    if (bocaMic) {   // su propio micrófono: canta cuando oye voz, con la vocal que oye (a, e, i, o, u)
+      voz = aCanta; bIn = aBoca; aIn = aAncho;
+      // nota fuerte y sostenida: ojos cerrados y el micrófono con las dos manos
+      if (aCanta && aVoz > 0.6f) { if (!fuerteDesde) fuerteDesde = now; if (now - fuerteDesde > 700) emocion = 1; }
+      else fuerteDesde = 0;
+    } else if (musicaCel && now < celVozHasta && celVoz && nSil) {
       float u = (now - silT0) * (nSil + 1.5f) / silDur;
       if (u < nSil + 1.5f) {
         int k = min((int)u, nSil - 1);
@@ -982,7 +989,7 @@ void energiaUpdate(uint32_t now) {
 }
 
 void guardar() {
-  prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn); prefs.putBool("mc", musicaCel); prefs.putUChar("tam", tamCara); prefs.putBool("carro", apagarConCarro); prefs.putBool("lab", labios); prefs.putUInt("ojos", colorOjos);
+  prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn); prefs.putBool("mc", musicaCel); prefs.putUChar("tam", tamCara); prefs.putBool("carro", apagarConCarro); prefs.putBool("lab", labios); prefs.putBool("bmic", bocaMic); prefs.putUInt("ojos", colorOjos);
   prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan); prefs.putChar("adl", adelante); prefs.putFloat("fr", umbralFreno);
 }
 
@@ -1069,6 +1076,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     if (p.has("son")) sonidoOn = p.get("son") == "1";
     if (p.has("carro")) apagarConCarro = p.get("carro") == "1";
     if (p.has("lab")) labios = p.get("lab") == "1";
+    if (p.has("bm")) bocaMic = p.get("bm") == "1";
     if (p.has("ojos")) ponerColor(strtoul(p.get("ojos").c_str(), nullptr, 16) & 0xFFFFFF);
     if (p.has("tam")) { tamCara = constrain(p.get("tam").toInt(), 100, 150); caras::tamano(tamCara / 100.f); dib::todo(); }
     if (p.has("mus")) musicaOn = p.get("mus") == "1";
@@ -1087,7 +1095,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     int bat = pmuOk && pmu.isBatteryConnect() ? pmu.getBatteryPercent() : -1;
     return String("{\"emo\":\"") + EMO_NOM[emo] + "\",\"modo\":" + modo + ",\"estado\":" + estado +
       ",\"estilo\":\"" + EST_NOM[estilo] + "\",\"bpm\":" + int(aBpm) + ",\"bat\":" + bat + ",\"usb\":" + (pmuOk && pmu.isVbusIn() ? 1 : 0) +
-      ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"mc\":" + musicaCel + ",\"tam\":" + tamCara + ",\"carro\":" + apagarConCarro + ",\"lab\":" + labios + ",\"ojos\":" + colorOjos +
+      ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"mc\":" + musicaCel + ",\"tam\":" + tamCara + ",\"carro\":" + apagarConCarro + ",\"lab\":" + labios + ",\"bm\":" + bocaMic + ",\"ojos\":" + colorOjos +
       ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
       ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"fw\":" + VERSION_FW +
       ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + ",\"paq\":" + prefs.getUChar("paq", 0) + "}";  // cuadros por segundo del último cuadro
@@ -1095,8 +1103,8 @@ String atender(const String &ruta, const Params &p, int &cod) {
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
     char b[420];
     snprintf(b, sizeof b, "{\"estado\":%u,\"estilo\":\"%s\",\"bpm\":%.0f,\"nivel\":%.2f,\"voz\":%.2f,\"canta\":%d,\"boca\":%.2f,\"ancho\":%.2f,"
-      "\"bajo\":%.2f,\"rms\":%.0f,\"piso\":%.0f,\"golpes\":%lu,\"reg\":%.2f,\"ins\":\"%s\",\"ruido\":%.2f,\"gps\":%.1f}",
-      estado, EST_NOM[estilo], aBpm, aNivel, aVoz, cantando ? 1 : 0, bocaV, aAncho, aBajoP, aRms, aPiso, (unsigned long)beatCnt, aReg,
+      "\"abre\":%.2f,\"bajo\":%.2f,\"rms\":%.0f,\"piso\":%.0f,\"golpes\":%lu,\"reg\":%.2f,\"ins\":\"%s\",\"ruido\":%.2f,\"gps\":%.1f}",
+      estado, EST_NOM[estilo], aBpm, aNivel, aVoz, cantando ? 1 : 0, bocaV, aAncho, aAbre, aBajoP, aRms, aPiso, (unsigned long)beatCnt, aReg,
       instrumentoOido >= 0 ? caras::NOMBRE_RITMO[instrumentoOido] : "", aInsF, aInsO);
     return b;
   }
@@ -1147,10 +1155,12 @@ class BleOta : public BLECharacteristicCallbacks {
     otaHecho += n;
   }
 };
+static int bleN = 0;
 class BleSrv : public BLEServerCallbacks {
-  void onConnect(BLEServer *) override { bleOn = true; }
+  // pueden estar el celular y el panel del PC a la vez: se sigue anunciando y se cuentan las conexiones
+  void onConnect(BLEServer *s) override { bleN++; bleOn = true; s->startAdvertising(); }
   void onDisconnect(BLEServer *s) override {
-    bleOn = false;
+    bleOn = --bleN > 0;
     if (otaTotal) { otaTotal = 0; Update.abort(); }  // se cortó a mitad: sigue con la versión que tenía
     s->startAdvertising();
   }
@@ -1246,7 +1256,7 @@ void setup() {
   sonidoOn = prefs.getBool("son", true); musicaOn = prefs.getBool("mus", true); musicaCel = prefs.getBool("mc", true);
   tamCara = prefs.getUChar("tam", 120); caras::tamano(tamCara / 100.f);
   apagarConCarro = prefs.getBool("carro", true);
-  labios = prefs.getBool("lab", true); ponerColor(prefs.getUInt("ojos", 0xFFFFFF));
+  labios = prefs.getBool("lab", true); bocaMic = prefs.getBool("bmic", true); ponerColor(prefs.getUInt("ojos", 0xFFFFFF));
   caras::paquete(prefs.getUChar("paq", caras::CUBI_AZUL));
   umbralVoz = prefs.getFloat("uv", UMBRAL_VOZ); ganBoca = prefs.getFloat("gb", GANANCIA_BOCA);
   sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = UMBRAL_FRENO;

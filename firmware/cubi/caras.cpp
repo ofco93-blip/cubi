@@ -263,20 +263,7 @@ static void boca(const Rostro &r) {
   }
   if (op < 0.05f) return;
   float w = (26 + 14 * op) * r.bAncho, h = 16 + 62 * op;
-  // minimalista: boca solo al hablar y al cantar (ni en reacciones ni en reposo)
-  if (elPaquete == MINIMALISTA && (laReac != NINGUNA || (laBase != CANTA && laBase != HABLA && laBase != TELEFONO))) return;
-  if (elPaquete == MINIMALISTA) {                                // canta y habla: una boquita vertical que abre y cierra con la voz
-    if (op < 0.06f) return;                                      // entre sílabas se cierra del todo
-    // vocal: w = 0 redonda (o, u) .. 1 estirada (i, e). La "a" abre alta; la "o" es más redonda; la "i" una rayita ancha
-    const float w = lim((r.bAncho - 0.75f) / 0.6f, 0, 1), G = laBase == CANTA ? gritoAhora : 0;
-    const float bh0 = (4 + 30 * op) * (1 - 0.35f * w), bw0 = 5 + 5 * w + (1 - w) * 0.35f * bh0;
-    // en el "¡aaah!" la boca crece vertical hasta ocupar casi toda la pantalla; el ancho sigue la vocal
-    const float bhG = 64 * (1 - 0.25f * w), bwG = bhG * (0.5f + 0.2f * (1 - w) + 0.2f * w);   // grande, pero cabe con los ojos en su sitio
-    const float bh = bh0 + (bhG - bh0) * G, bw = bw0 + (bwG - bw0) * G;
-    figura(x - bw - 2, y + 6 - bh - 2, x + bw + 2, y + 6 + bh + 2, solido(BLANCO, 1, 10),
-           [=](float px, float py) { return dCaja(px, py, x, y + 6, bw, bh, fminf(bw, bh)); });
-    return;
-  }
+  // minimalista: la misma boca de Lumi azul (como Copi), que se ve mejor que la boquita blanca
   figura(x - w / 2, y - h / 2, x + w / 2, y + h / 2, claro() ? solido(elPaquete == ANIME ? TINTA : CAFE) : tonoP(r, y - h / 2, y + h / 2, 12),
          [=](float px, float py) { return dCaja(px, py, x, y, w / 2, h / 2, fminf(w, h) / 2); });
 }
@@ -1957,7 +1944,7 @@ Reac reaccionActual() { return laReac; }
 
 void cuadro(float t, float dt, const Entradas &e) {
   tAhora = t; curvaAhora = e.curva;
-  dib::blanco = elPaquete == MINIMALISTA || elPaquete == ATARDECER;
+  dib::blanco = elPaquete == ATARDECER;   // el minimalista va con los colores de Lumi azul
   dib::zoom = elTamano; dib::zx = CX; dib::zy = 250;   // crece hacia arriba y a los lados; abajo casi no se corta
   if (laReac != NINGUNA && t - reacDesde >= DURA[laReac]) laReac = NINGUNA;
   if (laReac == PUM && pumCuenta >= 0 && t - reacDesde - pumCuenta > 5.6f) laReac = NINGUNA;   // terminó de reírse
@@ -1997,7 +1984,7 @@ void cuadro(float t, float dt, const Entradas &e) {
 
 void progreso(float t, float p) {
   // dos ojitos cerrados que respiran y un anillo que se va llenando
-  dib::blanco = elPaquete == MINIMALISTA;
+  dib::blanco = false;
   Rostro r = neutro(AZUL);
   arco(r, CX - EX, EY + 10 + 3 * sinf(t * 2), EW, false, 0.8f);
   arco(r, CX + EX, EY + 10 + 3 * sinf(t * 2), EW, false, 0.8f);
