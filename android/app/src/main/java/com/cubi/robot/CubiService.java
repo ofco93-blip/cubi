@@ -159,6 +159,7 @@ public class CubiService extends Service {
     }
 
     private Notification aviso;
+    private boolean micFondo = true;   // Android le dio el micrófono al servicio (si arrancó con la app cerrada, no)
 
     // Con "Hola Cubi" el servicio también usa el micrófono. Android solo lo deja pedir con la app a la vista:
     // si arrancó solo (en segundo plano) sigue sin micrófono hasta que se abra la app.
@@ -172,8 +173,9 @@ public class CubiService extends Service {
         try {
             startForeground(1, aviso, tipo);
         } catch (Exception e) {   // Android no deja sumar el GPS (o el micrófono) desde segundo plano: se prueba con menos
-            try { startForeground(1, aviso, sinGps); } catch (Exception e2) { startForeground(1, aviso, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE); }
+            try { startForeground(1, aviso, sinGps); } catch (Exception e2) { startForeground(1, aviso, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE); tipo = 0; }
         }
+        micFondo = (tipo & ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE) != 0;
     }
 
     @Override
@@ -657,6 +659,7 @@ public class CubiService extends Service {
         enviar("asis|/asistente?estado=escucha");
         bajarMusica(true);
         if (voz != null) voz.stop();
+        if (!hayInternet() && modelo != null) { escucharSinInternet(); revisarAsistente(); return; }
         if (oreja == null) {
             oreja = SpeechRecognizer.createSpeechRecognizer(this);
             oreja.setRecognitionListener(oye);
@@ -666,6 +669,74 @@ public class CubiService extends Service {
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-CO");
         ui.postDelayed(() -> oreja.startListening(i), 300);  // que "Cubi" (Vosk) suelte el micrófono primero
         revisarAsistente();
+    }
+
+    boolean hayInternet() {
+        android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
+        android.net.NetworkCapabilities c = cm.getNetworkCapabilities(cm.getActiveNetwork());
+        return c != null && c.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+    }
+
+    // sin internet el reconocedor de Google no sirve: oye con Vosk (el mismo modelo de "Hola Cubi", en el celular)
+    private void escucharSinInternet() {
+        new Thread(() -> {
+            String texto = "";
+            AudioRecord r = null;
+            SystemClock.sleep(300);  // que "Hola Cubi" suelte el micrófono primero
+            try (org.vosk.Recognizer rec = new org.vosk.Recognizer(modelo, 16000)) {
+                int tam = Math.max(AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), 8192);
+                r = new AudioRecord(MediaRecorder.AudioSource.MIC, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, tam);
+                r.startRecording();
+                short[] b = new short[2048];
+                long fin = SystemClock.elapsedRealtime() + 7000;
+                while (SystemClock.elapsedRealtime() < fin) {
+                    int n = r.read(b, 0, b.length);
+                    if (n < 0) break;
+                    if (rec.acceptWaveForm(b, n)) {   // terminó una frase
+                        texto = new JSONObject(rec.getResult()).optString("text");
+                        if (!texto.isEmpty()) break;
+                    }
+                }
+                if (texto.isEmpty()) texto = new JSONObject(rec.getFinalResult()).optString("text");
+            } catch (Exception ignored) {
+            } finally {
+                if (r != null) r.release();
+            }
+            String t = texto;
+            ui.post(() -> { if (t.isEmpty()) terminarCharla(); else preguntar(t); });
+        }).start();
+    }
+
+    static final String[] CHISTES = {
+            "¿Qué le dice un semáforo a otro? No me mires, que me estoy cambiando.",
+            "¿Por qué el libro de matemáticas está triste? Porque tiene muchos problemas.",
+            "¿Qué hace una abeja en el gimnasio? Zum-ba.",
+            "Había un carro tan viejo, tan viejo, que en vez de airbag tenía una almohada.",
+            "¿Cuál es el colmo de un robot? Tener un corazón de lata y que se lo oxiden."};
+
+    // lo que Cubi sabe hacer sin internet: {lo que dice, truco, acción}; null si no lo entendió
+    String[] sinInternet(String dicho) {
+        String s = java.text.Normalizer.normalize(dicho.toLowerCase(Locale.ROOT), java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        java.util.function.Predicate<String> dice = p -> Pattern.compile("\\b(" + p + ")\\b").matcher(s).find();
+        Calendar c = Calendar.getInstance();
+        int h = c.get(Calendar.HOUR), m = c.get(Calendar.MINUTE);
+        if (dice.test("hora")) return new String[]{"Son las " + (h == 0 ? 12 : h) + (m == 0 ? " en punto" : " y " + m) + ".", "ninguno", ""};
+        if (dice.test("kamehameha|kame|ame ame")) return new String[]{"¡Mira esto!", "kamehameha", ""};
+        if (dice.test("mata|matalo|matala|disparale|acaba con")) return new String[]{"¿Unas últimas palabras?", "confeti", ""};
+        if (dice.test("chiste|chistes")) return new String[]{CHISTES[(int) (Math.random() * CHISTES.length)], "risa", ""};
+        if (dice.test("pausa|para la musica|quita la musica|detente|para")) return new String[]{"Listo.", "ninguno", "musica_pausa"};
+        if (dice.test("siguiente|otra cancion|cambia|cambiala|pasala")) return new String[]{"¡Va otra!", "ninguno", "musica_siguiente"};
+        if (dice.test("anterior|la de antes")) return new String[]{"La de antes.", "ninguno", "musica_anterior"};
+        if (dice.test("sube|subele|mas duro|mas volumen")) return new String[]{"¡Más duro!", "ninguno", "volumen_subir"};
+        if (dice.test("baja|bajale|mas bajo|menos volumen")) return new String[]{"Listo, más bajito.", "ninguno", "volumen_bajar"};
+        if (dice.test("baila|bailemos|bailar|bailate")) return new String[]{"¡A bailar!", "baile_" + BAILES.get((int) (Math.random() * BAILES.size())), ""};
+        if (dice.test("pon|ponle|play|dale|musica")) return new String[]{"¡Música!", "ninguno", "musica_play"};
+        if (dice.test("te quiero|te amo|lindo|bonito")) return new String[]{"¡Yo también te quiero!", "amor", ""};
+        if (dice.test("velocidad|rapido|que tan rapido")) return new String[]{kmh < 0 ? "Prende el GPS en la app y te digo." : kmh < 3 ? "Estamos quietos." : "Vamos a " + Math.round(kmh) + " kilómetros por hora.", "ninguno", ""};
+        if (dice.test("clima|temperatura|llueve|lluvia|calor|frio"))
+            return new String[]{climaTexto.isEmpty() ? "Sin internet no sé el clima." : "Lo último que vi: " + climaTexto + ".", "ninguno", "clima"};
+        if (dice.test("hola|saluda|saludame|como estas")) return new String[]{"¡Hola! Aquí estoy, sin internet pero con toda la actitud.", "saludo", ""};
+        return null;
     }
 
     private final RecognitionListener oye = new RecognitionListener() {
@@ -704,6 +775,12 @@ public class CubiService extends Service {
         }
         charlaHasta = System.currentTimeMillis() + 30000;
         js("toast(" + JSONObject.quote("Le dijiste: " + texto) + ")");
+        if (claveClaude().isEmpty() || !hayInternet()) {   // sin internet (o sin Claude): lo que sabe hacer solo
+            String[] r = sinInternet(texto);
+            if (r == null) decir("Sin internet solo sé bailar, la música, la hora, chistes y el kamehameha.", "ninguno", "", "", false);
+            else decir(r[0], r[1], r[2], "", false);
+            return;
+        }
         new Thread(() -> {
             String dice, truco = "ninguno", accion = "", busqueda = "";
             boolean sigue = false;
@@ -841,6 +918,24 @@ public class CubiService extends Service {
         }
     }
 
+    // las indicaciones de Google Maps / Waze van a la misma captura (en la columna de la canción), para hacer animaciones
+    private String mapsAnotado = "";
+    private void anotarMaps(String t) {
+        String limpio = t.replace("\"", "'").replaceAll("\\s+", " ").trim();
+        if (limpio.equals(mapsAnotado)) return;
+        mapsAnotado = limpio;
+        String hora = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(new java.util.Date());
+        String r = ",,,,,,,," + (kmh < 0 ? "" : Math.round(kmh)) + ",,,,,maps";   // los km/h van en la columna de bpm
+        synchronized (this) {
+            if (!capturando() || archivoCaptura().length() > 8_000_000) return;
+            try (FileOutputStream o = new FileOutputStream(archivoCaptura(), true)) {
+                if (archivoCaptura().length() == 0) o.write(CABECERA.getBytes(StandardCharsets.UTF_8));
+                o.write((hora + ",\"MAPS: " + limpio + "\",maps,0,0" + r + "\n").getBytes(StandardCharsets.UTF_8));
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     // ---------- Google Maps / Waze: la notificación de navegación trae el próximo giro; cerca del giro Cubi muestra la flecha ----------
     static final Pattern DISTANCIA = Pattern.compile("(\\d+(?:[.,]\\d+)?)\\s*(km|m|mi|ft|pies)\\b");
     private String giroAvisado = "";
@@ -857,6 +952,7 @@ public class CubiService extends Service {
     }
 
     void indicacion(String t) {
+        anotarMaps(t);
         String s = t.toLowerCase(Locale.ROOT);
         long ahora = System.currentTimeMillis();
         if ((s.contains("llegaste") || s.contains("has llegado") || s.contains("you have arrived") || s.contains("arrived at"))
@@ -1438,8 +1534,19 @@ public class CubiService extends Service {
         ultimoHola = ahora;
         pararOido();  // el micrófono es para Gemini
         enviar("asis|/asistente?estado=escucha");
-        if (claveClaude().isEmpty()) abrirAsistente();
+        if (claveClaude().isEmpty() && hayInternet()) abrirAsistente();   // sin internet Gemini no sirve: Cubi entiende lo básico
         else charla();
+    }
+
+    // para la app: por qué "Hola Cubi" escucha o no
+    String estadoHola() {
+        if (!oidoQuiere) return "Apagado.";
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return "Falta el permiso del micrófono: apágalo y préndelo.";
+        if (modelo == null) return bajando ? "Preparando el oído (la primera vez baja 40 MB)…" : "El oído no está listo: necesita internet una sola vez para bajarse.";
+        if (!micFondo) return "Android no le dio el micrófono porque Cubi arrancó con la app cerrada: abre la app una vez.";
+        String sinRed = hayInternet() ? "" : " Sin internet entiende: baila, música, pausa, siguiente, volumen, la hora, chistes y kamehameha.";
+        if (oido != null) return "Escuchando: di “Hola Cubi”." + sinRed;
+        return (musicaPlay ? "En pausa mientras suena música: háblale con doble toque." : "En pausa (video, llamada o Cubi hablando).") + sinRed;
     }
 
     // ---------- actualización por Bluetooth ----------

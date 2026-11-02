@@ -109,7 +109,8 @@ section[hidden] { display: none; }
     <button class="btn main" id="gemini">Hablar con Gemini</button>
     <p class="note">También con <b>doble toque</b> en la pantalla de Cubi. Mientras Gemini te contesta, Cubi mueve la boca.</p>
     <div class="row"><span>Despertar con “Hola Cubi”</span><label class="sw"><input type="checkbox" id="hola"><i></i></label></div>
-    <p class="note">El celular escucha sin internet y nada sale de él. No escucha mientras suena música o un video (Facebook, reels): ahí háblale con doble toque. Android muestra el puntito verde del micrófono.</p>
+    <p class="note">El celular escucha sin internet y nada sale de él. No escucha mientras suena música o un video (Facebook, reels): ahí háblale con doble toque. Android muestra el puntito verde del micrófono. Sin internet igual te entiende lo básico: baila, música, pausa, siguiente, volumen, la hora, chistes y kamehameha.</p>
+    <p class="note" id="holaAhora"></p>
     <button class="btn" id="permisoGemini" hidden>Permitir que Cubi abra Gemini con la pantalla apagada</button>
   </div>
   <h2>Cubi habla (Claude)</h2>
@@ -178,7 +179,7 @@ section[hidden] { display: none; }
   <h2>Capturador (para afinar los instrumentos)</h2>
   <div class="card">
     <div class="row"><span>Capturar lo que oye</span><label class="sw"><input type="checkbox" id="captura"><i></i></label></div>
-    <p class="note" id="capturaNota">Prendido, Cubi anota cada 2 segundos lo que oye, qué instrumento decidió y qué canción sonaba. Úsalo un día manejando con música y luego mándame el archivo.</p>
+    <p class="note" id="capturaNota">Prendido, Cubi anota cada 2 segundos lo que oye, qué instrumento decidió y qué canción sonaba, y las indicaciones de Google Maps o Waze. Úsalo un día manejando con música y luego mándame el archivo.</p>
     <div class="grid2"><button class="btn main" id="capturaMandar">Guardar y mandar</button><button class="btn" id="capturaBorrar">Borrar</button></div>
   </div>
   <h2>Ajustar el canto</h2>
@@ -541,7 +542,9 @@ document.addEventListener('visibilitychange', () => {   // vuelve de los ajustes
 });
 setTimeout(claudeEstado, 500);
 $('hola').onchange = e => Android.holaCubi(e.target.checked);
-function holaEstado(si) { $('hola').checked = si; }
+function holaEstado(si) { $('hola').checked = si; holaAhora(); }
+function holaAhora() { if (window.Android) $('holaAhora').innerHTML = '<b>Ahora:</b> ' + Android.estadoHola(); }
+setTimeout(holaAhora, 800); setInterval(holaAhora, 3000);
 function revisarPermisoGemini() {
   if (!window.Android) return;
   $('permisoGemini').hidden = Android.puedeAbrirSolo();

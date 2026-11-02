@@ -472,6 +472,11 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String estadoHola() {
+            return CubiService.yo == null ? "" : CubiService.yo.estadoHola();
+        }
+
+        @JavascriptInterface
         public int version() {
             return miVersion();
         }
