@@ -771,8 +771,6 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
       default: r.corazon = 1; escalar(r, 1.05f, 1.05f); mover(r, 0, 6 * g); break;         // ojitos de corazón
     }
   } else if (e.ritmo == R_KPOP) { feliz(r, 1); mover(r, 0, 8 * g); }   // micrófono sin voz: ojos cerrados, "tun, tun"
-  emoAhora += ((e.canta ? e.emocion : 0) - emoAhora) * lim(dtB * 6, 0, 1);
-  if (emoAhora > 0.4f) { feliz(r, 1); mirar(r, 0, -0.35f); mover(r, 0, -8 * emoAhora); }   // nota larga: ojos cerrados, al cielo
   // "¡aaah!": en la parte fuerte de la canción (voz muy fuerte o la barra rosada al tope) la boca crece, pero sigue
   // abriendo y cerrando con cada sílaba por niveles: no se queda pegada abierta. Los ojos se vuelven chiquitos.
   static float tAntes = 0;
@@ -1129,6 +1127,18 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       // bailando o cantando nunca con cara de preocupado: la inclinación negativa son cejas tristes
       r.L.incl = fmaxf(r.L.incl, 0); r.R.incl = fmaxf(r.R.incl, 0);
       r.boca = e.canta && abre > 0 ? fmaxf(e.boca * (elPaquete == MINIMALISTA ? 1 : abre), 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;
+      {   // nota sostenida (un "aaah" con la misma vocal): emocion crece con lo que dura, y entre más dura más drama
+        static float tE = 0; const float dE = lim(t - tE, 0, 0.1f); tE = t;
+        emoAhora += ((e.canta ? e.emocion : 0) - emoAhora) * lim(dE * 6, 0, 1);
+        static bool alto = false;
+        if (emoAhora > 0.3f) { feliz(r, 1); mirar(r, 0, -0.35f - 0.3f * emoAhora); mover(r, 0, -8 - 14 * emoAhora); }   // ojos cerrados, al cielo
+        if (emoAhora > 0.6f) {                                // ya es largo: tiembla de emoción (vibrato) y crece
+          const float v = (emoAhora - 0.6f) * 2.5f;
+          mover(r, 3 * v * sinf(t * 38), 0); escalar(r, 1 + 0.08f * v, 1 + 0.08f * v);
+        }
+        if (emoAhora > 0.8f) alto = true;
+        if (alto && e.emocion < 0.05f && emoAhora < 0.3f) { alto = false; reaccion(GUINO); }   // terminó la nota: guiño
+      }
       vel = 16;
       break;
     }

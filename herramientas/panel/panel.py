@@ -162,8 +162,8 @@ class Oido:
             elif A > 0.22 and F > 0.45 and B > 0.18 and O >= 1.5: c = 'pop'
             elif A > 0.25 and F > 0.5 and B < 0.18 and O > 3: c = 'tropical'
             elif F > 0.4 and M > 0.3 and B < 0.3 and O < 2.5: c = 'rock'
-            elif L + M > 0.45 and B < 0.25 and O >= 1: c = 'guitarra'
-            elif F < 0.22 and O < 1.2: c = 'jazz' if M > 0.35 else 'piano'
+            elif L + M > 0.45 and B < 0.3 and O >= 1: c = 'guitarra' if F >= 0.3 else 'piano'
+            elif F < 0.28 and O < 1.2: c = 'jazz' if M > 0.35 else 'piano'
             elif F < 0.3 and O >= 1.2: c = 'piano' if A < 0.08 else 'guitarra'
             s.insAhora = c
             s.rasgos = dict(bajo=B, medios_bajos=L, medios=M, agudos=A, ruido=F, voz=V, golpes_s=O)
@@ -202,6 +202,7 @@ class Panel:
         s.fuente = ttk.Combobox(oye, values=['Cubi (su micrófono)'] + ['PC: ' + n for _, n in s.mics], state='readonly', width=34)
         s.fuente.current(0); s.fuente.pack(side='left', padx=4); s.fuente.bind('<<ComboboxSelected>>', lambda e: s.abrirMic())
         s.oido = Oido(lambda: {k: v.get() for k, v in s.vars.items()}); s.flujo = None; s.bocaV = 0.0; s.cantaHasta = 0.0
+        s.sostDesde = 0.0; s.vocalS = (0.5, 0.8)
 
         fila = tk.Frame(col, bg='#111'); fila.pack(anchor='w', pady=6)
         s.paq = ttk.Combobox(fila, values=PAQUETES, state='readonly', width=10); s.paq.current(0); s.paq.pack(side='left')
@@ -273,18 +274,28 @@ class Panel:
             o = s.oido
             if o.canta: s.cantaHasta = ahora + 1.5    # como el robot: la cara de cantar aguanta entre frases
             s.bocaV += ((o.boca if o.canta else 0) - s.bocaV) * 0.6
-            a = {'estado': (3 if o.canta or ahora < s.cantaHasta else 2) if o.suena else 0, 'canta': int(o.canta or ahora < s.cantaHasta),
+            # nota sostenida, como el robot: la misma vocal con voz fuerte; la emoción sube de 0,6 s a 2,4 s
+            misma = abs(o.ancho - s.vocalS[0]) < 0.18 and abs(o.abre - s.vocalS[1]) < 0.18
+            if o.canta and o.vozS > 0.5 and misma:
+                s.sostDesde = s.sostDesde or ahora
+                s.vocalS = (s.vocalS[0] + (o.ancho - s.vocalS[0]) * 0.05, s.vocalS[1] + (o.abre - s.vocalS[1]) * 0.05)
+                emo = min(1, max(0, (ahora - s.sostDesde - 0.6) / 1.8))
+            else: s.sostDesde = 0.0; s.vocalS = (o.ancho, o.abre); emo = 0
+            a = {'estado': (3 if o.canta or ahora < s.cantaHasta else 2) if o.suena else 0, 'canta': int(o.canta or ahora < s.cantaHasta), 'emo': emo,
                  'boca': s.bocaV, 'ancho': o.ancho, 'abre': o.abre, 'voz': o.vozS, 'nivel': o.nivel, 'bpm': 110,
                  'rms': round(o.rms), 'piso': round(o.piso), 'ins': o.ins or '', 'insAhora': o.insAhora, 'rasgos': o.rasgos}
         elif not s.cubi.cli and s.base.get() in ('canta', 'habla'):   # sin Cubi: canta de mentiras para ver la boca y el baile
-            c = (t % 4) < 2.6
-            a = {'estado': 3, 'canta': int(c), 'boca': (0.35 + 0.45 * abs(math.sin(t * 5.3))) if c else 0, 'ancho': 0.5 + 0.5 * math.sin(t * 2.3),
-                 'voz': 0.6 if c else 0, 'nivel': 0.5 + 0.4 * abs(math.sin(t * 1.7)), 'bpm': 110, 'abre': 0.8}
+            u = t % 10
+            c = u < 2.6 or 3.5 < u < 7.5      # sílabas y luego un "aaah" sostenido de 4 s
+            largo = 3.5 < u < 7.5
+            a = {'estado': 3, 'canta': int(c), 'boca': (0.8 if largo else 0.35 + 0.45 * abs(math.sin(t * 5.3))) if c else 0,
+                 'ancho': 0.6 if largo else 0.5 + 0.5 * math.sin(t * 2.3), 'voz': 0.7 if c else 0, 'nivel': 0.5 + 0.4 * abs(math.sin(t * 1.7)),
+                 'bpm': 110, 'abre': 1.0 if largo else 0.8, 'emo': min(1, max(0, (u - 3.5 - 0.6) / 1.8)) if largo else 0}
         bpm = a.get('bpm', 0) or 110
         s.fase = (s.fase + dt * bpm / 60) % 1000
         musica = a.get('estado', 0) >= 2; canta = bool(a.get('canta', 0))
         p = dll.cuadroPanel(ahora - s.t0, dt, int(musica or canta), int(canta), a.get('boca', 0), a.get('ancho', 0.5), a.get('voz', 0),
-                            a.get('nivel', 0), 0.0, RITMOS.index(a['ins']) if a.get('ins') in RITMOS else s.rit.current(), bpm, s.fase % 1)
+                            a.get('nivel', 0), a.get('emo', 0), RITMOS.index(a['ins']) if a.get('ins') in RITMOS else s.rit.current(), bpm, s.fase % 1)
         s.foto = ImageTk.PhotoImage(Image.frombuffer('RGB', (W, H), ctypes.string_at(p, W * H * 3), 'raw', 'RGB', 0, 1))
         s.img.config(image=s.foto)
         if s.flujo: s.con.config(text='Oyendo con el micrófono del PC', fg='#6af')
@@ -300,6 +311,8 @@ class Panel:
         c.create_text(0, 112, anchor='w', fill='#ff6' if canta else '#666', font=('Segoe UI', 12, 'bold'),
                       text='CANTANDO' if canta else ('con música, sin voz' if musica else 'sin música'))
         if canta: c.create_text(200, 125, text=vocal(a.get('abre', 0.8), a.get('ancho', 0.5)).upper(), fill='#ff6', font=('Segoe UI', 36, 'bold'))
+        if a.get('emo', 0) > 0:   # la nota sostenida: barrita de drama
+            c.create_text(240, 112, anchor='w', fill='#f6a', text='drama'); c.create_rectangle(240, 122, 240 + 80 * a['emo'], 130, fill='#f6a', width=0)
         c.create_text(0, 150, anchor='w', fill='#888', text='rms %s  piso %s  bpm %s' % (a.get('rms', '-'), a.get('piso', '-'), a.get('bpm', '-')))
         ins = INSTRUMENTO.get(a.get('ins'), '')
         c.create_text(0, 176, anchor='w', fill='#6df' if ins else '#666', font=('Segoe UI', 12, 'bold'),

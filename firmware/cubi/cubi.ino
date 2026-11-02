@@ -336,8 +336,9 @@ void tareaAudio(void *) {
         else if (A > 0.22f && F > 0.45f && B > 0.18f && O >= 1.5f) c = caras::R_POP;    // platillos y caja CON bombo: batería
         else if (A > 0.25f && F > 0.5f && B < 0.18f && O > 3) c = caras::R_TROPICAL;   // agudos rapidísimos sin bombo: maracas
         else if (F > 0.4f && M > 0.3f && B < 0.3f && O < 2.5f) c = caras::R_ROCK;        // medios llenos y ruidosos, sostenidos: distorsión
-        else if (L + M > 0.45f && B < 0.25f && O >= 1) c = caras::R_GUITARRA;          // medios con rasgueos, poco bajo: guitarra
-        else if (F < 0.22f && O < 1.2f) c = M > 0.35f ? caras::R_JAZZ : caras::R_PIANO;  // limpio y sostenido: saxo o piano
+        // ponytail: umbrales a ojo (el piano no salía nunca); se afinan mirando los números del panel con canciones reales
+        else if (L + M > 0.45f && B < 0.3f && O >= 1) c = F >= 0.3f ? caras::R_GUITARRA : caras::R_PIANO;   // medios con ataques: rasgueo ruidoso = guitarra, limpio = piano
+        else if (F < 0.28f && O < 1.2f) c = M > 0.35f ? caras::R_JAZZ : caras::R_PIANO;  // limpio y sostenido: saxo o piano
         else if (F < 0.3f && O >= 1.2f) c = A < 0.08f ? caras::R_PIANO : caras::R_GUITARRA;  // limpio con ataques: piano o guitarra
         aInsF = F; aInsO = O;
         snprintf(rasgosTxt, sizeof rasgosTxt, "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.0f,%.2f,%.2f,%d,%s,%s",
@@ -520,12 +521,17 @@ void animar(uint32_t now) {
     // (como los cantantes). Sin letra solo baila: la captura mostró que el micrófono oye igual la voz que los
     // instrumentos, y por eso abría la boca en los solos.
     voz = false; emocion = 0;
-    static uint32_t fuerteDesde = 0;
+    static uint32_t sostDesde = 0; static float anchoS = 0.5f, abreS = 0.8f;
     if (bocaMic) {   // su propio micrófono: canta cuando oye voz, con la vocal que oye (a, e, i, o, u)
       voz = aCanta; bIn = aBoca; aIn = aAncho;
-      // nota fuerte y sostenida: ojos cerrados y el micrófono con las dos manos
-      if (aCanta && aVoz > 0.6f) { if (!fuerteDesde) fuerteDesde = now; if (now - fuerteDesde > 700) emocion = 1; }
-      else fuerteDesde = 0;
+      // nota sostenida: la misma vocal con voz fuerte. Desde 0,6 s sube la emoción hasta 1 a los 2,4 s (ojos cerrados,
+      // las dos manos en el micrófono, y si sigue, tiembla de emoción); al soltarla, un guiño
+      bool misma = fabsf(aAncho - anchoS) < 0.18f && fabsf(aAbre - abreS) < 0.18f;
+      if (aCanta && aVoz > 0.5f && misma) {
+        if (!sostDesde) sostDesde = now;
+        anchoS += (aAncho - anchoS) * 0.05f; abreS += (aAbre - abreS) * 0.05f;   // la vocal puede ir cambiando despacito
+        emocion = constrain((now - sostDesde - 600) / 1800.f, 0.f, 1.f);
+      } else { sostDesde = 0; anchoS = aAncho; abreS = aAbre; }
     } else if (musicaCel && now < celVozHasta && celVoz && nSil) {
       float u = (now - silT0) * (nSil + 1.5f) / silDur;
       if (u < nSil + 1.5f) {
@@ -1103,9 +1109,9 @@ String atender(const String &ruta, const Params &p, int &cod) {
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
     char b[420];
     snprintf(b, sizeof b, "{\"estado\":%u,\"estilo\":\"%s\",\"bpm\":%.0f,\"nivel\":%.2f,\"voz\":%.2f,\"canta\":%d,\"boca\":%.2f,\"ancho\":%.2f,"
-      "\"abre\":%.2f,\"bajo\":%.2f,\"rms\":%.0f,\"piso\":%.0f,\"golpes\":%lu,\"reg\":%.2f,\"ins\":\"%s\",\"ruido\":%.2f,\"gps\":%.1f}",
+      "\"abre\":%.2f,\"bajo\":%.2f,\"rms\":%.0f,\"piso\":%.0f,\"golpes\":%lu,\"reg\":%.2f,\"ins\":\"%s\",\"ruido\":%.2f,\"gps\":%.1f,\"emo\":%.2f}",
       estado, EST_NOM[estilo], aBpm, aNivel, aVoz, cantando ? 1 : 0, bocaV, aAncho, aAbre, aBajoP, aRms, aPiso, (unsigned long)beatCnt, aReg,
-      instrumentoOido >= 0 ? caras::NOMBRE_RITMO[instrumentoOido] : "", aInsF, aInsO);
+      instrumentoOido >= 0 ? caras::NOMBRE_RITMO[instrumentoOido] : "", aInsF, aInsO, emocion);
     return b;
   }
   // Actualización por Bluetooth: inicio (tamaño y MD5), los datos llegan por la característica OTA, y fin (verifica y reinicia).
