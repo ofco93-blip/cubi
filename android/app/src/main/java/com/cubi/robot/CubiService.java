@@ -436,7 +436,7 @@ public class CubiService extends Service {
     private long quietoDesde;
     private float recorrido;   // metros andados desde la última llegada
     float kmh = -1;
-    int altura = Integer.MIN_VALUE, alturaTramo = Integer.MIN_VALUE;   // metros sobre el mar y en qué tramo de 500 m vamos
+    int altura = Integer.MIN_VALUE, alturaTramo = Integer.MIN_VALUE;   // metros sobre el mar y en qué tramo de 100 m vamos
 
     @SuppressLint("MissingPermission")
     void gps() {
@@ -472,17 +472,17 @@ public class CubiService extends Service {
         }
     }
 
-    // altitud del GPS del celular (Maps no la da): cada 500 m que se suben o bajan, Cubi la muestra en pantalla
+    // altitud del GPS del celular (Maps no la da): cada 100 m que se suben o bajan, Cubi la muestra en pantalla
     private void altura(Location l) {
         if (l.hasVerticalAccuracy() && l.getVerticalAccuracyMeters() > 30) return;   // dato malo, mejor nada
         if (Build.VERSION.SDK_INT >= 34 && l.hasMslAltitude()) altura = (int) Math.round(l.getMslAltitudeMeters());
         else if (l.hasAltitude()) altura = (int) Math.round(l.getAltitude());   // sobre el elipsoide: unos metros de diferencia
         else return;
-        int tramo = Math.floorDiv(altura, 500);
+        int tramo = Math.floorDiv(altura, 100);
         if (alturaTramo == Integer.MIN_VALUE) { alturaTramo = tramo; return; }   // al prender no avisa
-        // 40 m de margen para que el ruido del GPS no lo haga avisar ida y vuelta en la raya
-        if (tramo > alturaTramo && altura >= tramo * 500 + 40) { alturaTramo = tramo; enviar("asis|/r?n=sorpresa&m=" + tramo * 500); }
-        else if (tramo < alturaTramo && altura < (tramo + 1) * 500 - 40) { alturaTramo = tramo; enviar("asis|/r?n=curiosa&m=" + (tramo + 1) * 500); }
+        // 25 m de margen para que el ruido del GPS no lo haga avisar ida y vuelta en la raya
+        if (tramo > alturaTramo && altura >= tramo * 100 + 25) { alturaTramo = tramo; enviar("asis|/r?n=sorpresa&m=" + tramo * 100); }
+        else if (tramo < alturaTramo && altura < (tramo + 1) * 100 - 25) { alturaTramo = tramo; enviar("asis|/r?n=curiosa&m=" + (tramo + 1) * 100); }
     }
 
     // ---------- asistente: Cubi pide abrir Gemini y se le cuenta si escucha o habla ----------
