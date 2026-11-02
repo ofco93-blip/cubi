@@ -25,6 +25,11 @@ BASES = [dll.nombreBase(i).decode() for i in range(dll.nBases())]
 REACS = [dll.nombreReac(i).decode() for i in range(1, dll.nReac())]
 
 
+# qué instrumento oye (el baile que se pone con cada uno)
+INSTRUMENTO = {'kpop': 'voz (micrófono)', 'dj': 'bajo electrónico', 'pop': 'batería', 'tropical': 'maracas',
+               'rock': 'guitarra eléctrica', 'guitarra': 'guitarra', 'jazz': 'saxo', 'piano': 'piano'}
+
+
 def vocal(abre, ancho):
     """La vocal que está haciendo la boca, con las mismas medidas que usa el robot (F1 = abre, F2 = ancho)."""
     if ancho > 0.65: return 'i' if abre < 0.6 else 'e'
@@ -89,6 +94,10 @@ class Oido:
         s.canta = False; s.sube = 0; s.rs = 0.0; s.base = 0.3; s.abre = 0.8
         s.nivel = s.rms = 0.0; s.hay = s.suena = False
         s.ham = np.hamming(s.NF)
+        # detector de instrumentos (el de tareaAudio): rasgos promediados cada 2 s
+        s.bAvg = s.bPrev = s.fAvg = s.fPrev = 0.0; s.lPrev = np.zeros(128); s.golpes = 0; s.ultGolpe = 0.0
+        s.sum = np.zeros(6); s.sN = 0; s.golpesIni = 0; s.tEval = time.time()
+        s.insCand = None; s.insN = 0; s.ins = None; s.insDesde = 0.0; s.insAhora = None; s.rasgos = {}
 
     def bloque(s, x):
         aj = s.aj()
@@ -129,6 +138,41 @@ class Oido:
         o = min(1, o ** 1.4 * aj['gb']) * s.abre
         t = o if s.canta else 0
         s.boca += (t - s.boca) * (0.85 if t > s.boca else 0.45)
+        s.instrumento(m, hay)
+
+    def instrumento(s, m, hay):
+        ahora = time.time()
+        b, md, hi = m[2:6].sum(), m[17:65].sum(), m[65:256].sum()
+        lo = m[6:17].sum(); tot = b + lo + md + hi + 1
+        l = np.log1p(m[:128]); flujo = float(np.maximum(0, l[2:] - s.lPrev[2:]).sum()); s.lPrev = l
+        s.bAvg += (b - s.bAvg) * 0.04; s.fAvg += (flujo - s.fAvg) * 0.05
+        golpe = (b > s.bAvg * 1.45 and b > s.bPrev * 1.1) or (flujo > s.fAvg * 1.7 and flujo > s.fPrev)
+        if s.suena and golpe and ahora - s.ultGolpe > 0.25: s.ultGolpe = ahora; s.golpes += 1
+        s.fPrev, s.bPrev = flujo, b
+        if s.suena:
+            plano = np.exp(np.log(m[6:192] + 1).sum() / 186) / (m[6:192].sum() / 186 + 1)
+            s.sum += [b / tot, lo / tot, md / tot, hi / tot, plano, s.vozS]; s.sN += 1
+        if ahora - s.tEval < 2: return
+        s.tEval = ahora
+        if s.sN > 20:
+            B, L, M, A, F, V = s.sum / s.sN; O = (s.golpes - s.golpesIni) / 2
+            c = None
+            if V > 0.55: c = 'kpop'
+            elif B > 0.42 and O >= 1.5: c = 'dj'
+            elif A > 0.22 and F > 0.45 and B > 0.18 and O >= 1.5: c = 'pop'
+            elif A > 0.25 and F > 0.5 and B < 0.18 and O > 3: c = 'tropical'
+            elif F > 0.4 and M > 0.3 and B < 0.3 and O < 2.5: c = 'rock'
+            elif L + M > 0.45 and B < 0.25 and O >= 1: c = 'guitarra'
+            elif F < 0.22 and O < 1.2: c = 'jazz' if M > 0.35 else 'piano'
+            elif F < 0.3 and O >= 1.2: c = 'piano' if A < 0.08 else 'guitarra'
+            s.insAhora = c
+            s.rasgos = dict(bajo=B, medios_bajos=L, medios=M, agudos=A, ruido=F, voz=V, golpes_s=O)
+            if c == s.insCand: s.insN += 1
+            else: s.insCand, s.insN = c, 1
+            # como el robot: lo mismo tres veces seguidas (6 s) y no más de un cambio cada 30 s
+            if c and s.insN >= 3 and c != s.ins and (s.ins is None or ahora - s.insDesde > 30): s.ins, s.insDesde = c, ahora
+        elif not s.suena: s.ins = s.insAhora = None
+        s.sum[:] = 0; s.sN = 0; s.golpesIni = s.golpes
 
 
 class Panel:
@@ -179,7 +223,7 @@ class Panel:
         perilla('uv', 'Umbral de voz (uv)', 0.05, 0.95, 0.01, 'Si abre la boca en los solos, súbelo; si no canta con voz, bájalo')
         perilla('gb', 'Qué tanto abre la boca (gb)', 0.3, 3, 0.05, 'Más alto = boca más abierta')
 
-        s.cv = tk.Canvas(col, width=330, height=170, bg='#111', highlightthickness=0); s.cv.pack(anchor='w', pady=10)
+        s.cv = tk.Canvas(col, width=330, height=230, bg='#111', highlightthickness=0); s.cv.pack(anchor='w', pady=10)
         tk.Label(col, text='Los ajustes se guardan en Cubi al soltar cada perilla.', fg='#888', bg='#111', font=('Segoe UI', 8)).pack(anchor='w')
 
         s.t0 = s.antes = time.time(); s.fase = 0.0
@@ -231,7 +275,7 @@ class Panel:
             s.bocaV += ((o.boca if o.canta else 0) - s.bocaV) * 0.6
             a = {'estado': (3 if o.canta or ahora < s.cantaHasta else 2) if o.suena else 0, 'canta': int(o.canta or ahora < s.cantaHasta),
                  'boca': s.bocaV, 'ancho': o.ancho, 'abre': o.abre, 'voz': o.vozS, 'nivel': o.nivel, 'bpm': 110,
-                 'rms': round(o.rms), 'piso': round(o.piso)}
+                 'rms': round(o.rms), 'piso': round(o.piso), 'ins': o.ins or '', 'insAhora': o.insAhora, 'rasgos': o.rasgos}
         elif not s.cubi.cli and s.base.get() in ('canta', 'habla'):   # sin Cubi: canta de mentiras para ver la boca y el baile
             c = (t % 4) < 2.6
             a = {'estado': 3, 'canta': int(c), 'boca': (0.35 + 0.45 * abs(math.sin(t * 5.3))) if c else 0, 'ancho': 0.5 + 0.5 * math.sin(t * 2.3),
@@ -257,6 +301,14 @@ class Panel:
                       text='CANTANDO' if canta else ('con música, sin voz' if musica else 'sin música'))
         if canta: c.create_text(200, 125, text=vocal(a.get('abre', 0.8), a.get('ancho', 0.5)).upper(), fill='#ff6', font=('Segoe UI', 36, 'bold'))
         c.create_text(0, 150, anchor='w', fill='#888', text='rms %s  piso %s  bpm %s' % (a.get('rms', '-'), a.get('piso', '-'), a.get('bpm', '-')))
+        ins = INSTRUMENTO.get(a.get('ins'), '')
+        c.create_text(0, 176, anchor='w', fill='#6df' if ins else '#666', font=('Segoe UI', 12, 'bold'),
+                      text='Instrumento: ' + (ins or ('escuchando...' if musica else '-')))
+        if 'insAhora' in a:   # con el micrófono del PC se ve también lo que oye en estos 2 s y por qué
+            r = a.get('rasgos') or {}
+            c.create_text(0, 198, anchor='w', fill='#aaa', text='ahora: ' + INSTRUMENTO.get(a['insAhora'], 'no sé'))
+            c.create_text(0, 218, anchor='w', fill='#777', font=('Segoe UI', 8),
+                          text='  '.join('%s %.2f' % (k, v) for k, v in r.items()))
         s.r.after(max(1, int(40 - (time.time() - ahora) * 1000)), s.cuadro)
 
 
