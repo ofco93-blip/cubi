@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
   iniciar(7);
   bool esBase = false; int ritmo = 0;
   if (que.rfind("mini_", 0) == 0) { paquete(MINIMALISTA); que = que.substr(5); }
-  for (auto pq : {std::make_pair("anime_", ANIME), std::make_pair("peluche_", PELUCHE), std::make_pair("colores_", ATARDECER)})   // las caras nuevas, igual que mini_
+  for (auto pq : {std::make_pair("anime_", ANIME), std::make_pair("peluche_", PELUCHE), std::make_pair("colores_", ATARDECER), std::make_pair("ovalo_", OVALO), std::make_pair("neon_", NEON), std::make_pair("simple_", SIMPLE)})   // las caras nuevas, igual que mini_
     if (que.rfind(pq.first, 0) == 0) { paquete(pq.second); que = que.substr(strlen(pq.first)); }   // mini_x = la misma cara en el paquete minimalista
   bool voz = que.rfind("baila_", 0) != 0;   // baila_x = el mismo baile en una parte sin voz
   if (!voz) que = "canta_" + que.substr(6);

@@ -38,7 +38,7 @@ struct Rostro {
 static_assert(sizeof(Rostro) % sizeof(float) == 0, "Rostro debe ser solo floats");
 
 static Rostro ahora, meta;
-const char *NOMBRE_PAQ[N_PAQ] = {"Cubi azul", "Robot minimalista", "Anime", "Peluche", "Colores"};
+const char *NOMBRE_PAQ[N_PAQ] = {"Cubi azul", "Robot minimalista", "Anime", "Peluche", "Colores", "Nova", "Kira", "Pixel"};
 static uint8_t elPaquete = CUBI_AZUL;
 void paquete(uint8_t p) {
   elPaquete = p < N_PAQ ? p : CUBI_AZUL;
@@ -203,6 +203,45 @@ static void ojoLindo(const Rostro &r, const Ojo &o, float lado, float top) {
   }
 }
 
+// ---------------------------------------------------------------- caras de solo ojos (sin boca)
+// rayitas de pantalla: el ojo se ve hecho de líneas horizontales con brillo
+static inline float rayas(float d, float py, float paso) { return fmaxf(d, fabsf(fmodf(py + 1000, paso) - paso / 2) - paso * 0.3f); }
+static void ojoSoloOjos(const Rostro &r, const Ojo &o, float lado, float top) {
+  const float x = o.x, y = o.y, fz = o.feliz, tn = tanf(o.incl) * lado, co = cosf(o.incl);
+  if (elPaquete == SIMPLE) {   // trazos: una rayita parada; al cerrar se acuesta; feliz = ^ ; bravo o triste se inclina
+    const float g = 9;
+    if (fz > 0.5f) {
+      const float R = o.w * 0.4f, cy = y + R * 0.4f;
+      figura(x - R - g, cy - R - g, x + R + g, cy + g, tonoP(r, cy - R, cy, 12, o.alfa),
+             [=](float px, float py) { return dArco(px, py, x, cy, R, -PI * 0.82f, -PI * 0.18f) - g; });
+      return;
+    }
+    const float k = lim((top - 0.35f) / 0.4f, 0, 1);              // 0 = parada, 1 = acostada
+    const float hh = g + (o.h * 0.26f - g) * (1 - k), hw = g + (o.w * 0.36f - g) * k, cy = y + o.h * 0.2f * k;
+    const float a = o.incl * lado, ca = cosf(a), sa = sinf(a), m = fmaxf(hw, hh) + 4;
+    figura(x - m, cy - m, x + m, cy + m, tonoP(r, cy - hh, cy + hh, 14, o.alfa), [=](float px, float py) {
+      float u = (px - x) * ca + (py - cy) * sa, v = -(px - x) * sa + (py - cy) * ca;
+      return dCaja(u, v, 0, 0, hw, hh, fminf(hw, hh));
+    });
+    return;
+  }
+  // óvalos acostados e inclinados hacia adentro, o redondos de neón rosado; los dos con rayitas
+  const bool neon = elPaquete == NEON;
+  // con tope: en el susto los ojos crecen, pero no se montan uno sobre otro
+  const float rx = fminf(neon ? o.w * 0.55f : o.w * 0.7f, neon ? 66.f : 76.f), ry = fminf(neon ? fminf(o.w * 0.55f, o.h * 0.4f) : o.h * 0.3f, neon ? 66.f : 58.f);
+  const float a = neon ? 0 : 0.2f * lado, ca = cosf(a), sa = sinf(a);
+  const float y0 = y - ry + top * 2 * ry, cyF = y + ry * (2.1f - 1.2f * fz);
+  Pintura p = tonoP(r, y - ry, y + ry, 22, o.alfa);
+  if (neon) { p.arriba = {255, 196, 244}; p.abajo = {226, 96, 206}; p.haloCol = p.abajo; p.haloA = 0.45f; }
+  figura(x - rx - 4, y - ry - 6, x + rx + 4, y + ry + 6, p, [=](float px, float py) {
+    float u = (px - x) * ca + (py - y) * sa, v = -(px - x) * sa + (py - y) * ca;
+    float d = dElipse(u, v, 0, 0, rx, ry);
+    if (top > 0.005f || o.incl != 0) d = fmaxf(d, (y0 + tn * (px - x) - py) * co);
+    if (fz > 0.01f) d = fmaxf(d, -dElipse(px, py, x, cyF, rx * 1.3f, ry * 1.25f));   // feliz: media luna
+    return rayas(d, py, neon ? 6.f : 8.f);
+  });
+}
+
 static void ojo(const Rostro &r, const Ojo &o, float lado) {
   if (o.alfa < 0.02f || o.w < 2 || o.h < 2) return;
   float top = fminf(o.tapa, 0.98f);
@@ -218,6 +257,7 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
     return;
   }
   if (claro()) { ojoLindo(r, o, lado, top); return; }
+  if (elPaquete >= OVALO) { ojoSoloOjos(r, o, lado, top); return; }
   if (mini) {   // al entrecerrar se aplasta (no se corta) y todas las puntas quedan redondas
     const float hh2 = fmaxf(hh * (1 - top), 4.f), y2 = y + hh - hh2, cy2 = y2 + 2 * hh2 * (0.95f - 0.55f * fz), cry2 = 2 * hh2 * 0.62f;
     const float yl = y2 - hh2 + fabsf(tn) * hw;
@@ -252,6 +292,7 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
 }
 
 static void boca(const Rostro &r) {
+  if (elPaquete >= OVALO) return;   // las caras de solo ojos no tienen boca
   float op = r.boca;
   float x = r.bx, y = r.by;
   if (laReac == NINGUNA && elPaquete == MINIMALISTA && laBase == CANTA && rockeroAhora > 0.5f && op < 0.45f) {   // roquero: se muerde el labio

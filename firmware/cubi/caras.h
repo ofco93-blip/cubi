@@ -34,7 +34,7 @@ struct Entradas {
 };
 
 // paquetes de caras (se escogen desde la app)
-enum Paquete : uint8_t { CUBI_AZUL, MINIMALISTA, ANIME, PELUCHE, ATARDECER, N_PAQ };
+enum Paquete : uint8_t { CUBI_AZUL, MINIMALISTA, ANIME, PELUCHE, ATARDECER, OVALO, NEON, SIMPLE, N_PAQ };   // los tres últimos: solo ojos, sin boca
 extern const char *NOMBRE_PAQ[N_PAQ];
 void paquete(uint8_t p);
 void tamano(float z);                   // qué tan grande se dibuja la cara (1 = como antes, hasta 1,5)
