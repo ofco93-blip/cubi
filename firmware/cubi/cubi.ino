@@ -1005,7 +1005,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     String n = p.get("n");
     for (int i = 1; i < caras::N_REAC; i++) if (n == caras::NOMBRE_REAC[i]) {
       despertar(millis()); reac(caras::Reac(i));
-      if (p.get("m").length()) caras::mostrarGrados(p.get("m").toInt(), caras::duracion(caras::Reac(i)), true);   // la altitud en metros
+      if (p.get("m").length()) caras::mostrarGrados(p.get("m").toInt(), fmaxf(caras::duracion(caras::Reac(i)), 4), true);   // la altitud en metros, 4 s para alcanzar a leerla
       return "ok";
     }
     cod = 400; return "reaccion desconocida";
