@@ -12,6 +12,19 @@ uint8_t cual = 0;
 struct RL { int x0, y0, x1, y1; };                  // rectángulo acostado
 static RL previo[2] = {{0, 0, W, H}, {0, 0, W, H}}, ultimo = {0, 0, W, H};
 
+// el fondo ya ordenado como queda en memoria (una fila del panel), para cada giro
+static uint16_t fondoMem[2][H];
+static bool hayFondo = false;
+void ponerFondo(const Col &a, const Col &b) {
+  for (int y = 0; y < H; y++) {
+    Col c = mezcla(a, b, y / (H - 1.f));
+    uint16_t v = empacar(c.r, c.g, c.b);
+    fondoMem[1][y] = v; fondoMem[0][RW - 1 - y] = v;
+  }
+  hayFondo = true;
+}
+void sinFondo() { hayFondo = false; }
+
 static void borrar(const RL &r) {
   if (r.x0 >= r.x1 || r.y0 >= r.y1) return;
   int ya = max(0, r.y0), yb = min(H, r.y1);
@@ -19,7 +32,8 @@ static void borrar(const RL &r) {
   for (int x = max(0, r.x0); x < min(W, r.x1); x++) {
     // una fila del panel por cada x: las y seguidas quedan juntas en memoria
     uint32_t a = idx(x, giro ? ya : yb - 1);
-    memset(fb + a, 0, (yb - ya) * 2);
+    if (hayFondo) memcpy(fb + a, &fondoMem[giro ? 1 : 0][giro ? ya : RW - yb], (yb - ya) * 2);
+    else memset(fb + a, 0, (yb - ya) * 2);
   }
 }
 

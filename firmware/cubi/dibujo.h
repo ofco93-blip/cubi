@@ -108,6 +108,10 @@ struct Pintura {
 extern bool blanco;
 extern Col tinte;   // el color de los ojos (blanco = como siempre): lo toma todo lo que se dibuja en el minimalista
 inline Col sinColor(const Col &c) { float v = fmaxf(c.r, fmaxf(c.g, c.b)) * (1.f / 255); return {v * tinte.r, v * tinte.g, v * tinte.b}; }
+// fondo de color (degradado de arriba a abajo) en vez de negro: se pinta al borrar, así no cuesta más que el negro.
+// Después de cambiarlo hay que llamar todo() para que se pinte la pantalla entera una vez.
+void ponerFondo(const Col &arriba, const Col &abajo);
+void sinFondo();
 // zoom de la cara (para el acrílico que la agranda): lo que se dibuja se escala alrededor de (zx, zy).
 // Las figuras se siguen describiendo en las medidas de siempre; figura() y texto() hacen la cuenta.
 extern float zoom, zx, zy;

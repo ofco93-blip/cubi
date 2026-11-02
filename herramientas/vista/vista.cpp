@@ -4,6 +4,8 @@
 #include "../../firmware/cubi/caras.h"
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
+#include <utility>
 #include <string>
 using namespace caras;
 // "vista medir": cuánto tarda cada baile por cuadro (con voz y sin voz). En el ESP32 es ~60 veces más lento.
@@ -41,7 +43,9 @@ int main(int argc, char **argv) {
   FILE *o = fopen(argv[3], "wb");
   iniciar(7);
   bool esBase = false; int ritmo = 0;
-  if (que.rfind("mini_", 0) == 0) { paquete(MINIMALISTA); que = que.substr(5); }   // mini_x = la misma cara en el paquete minimalista
+  if (que.rfind("mini_", 0) == 0) { paquete(MINIMALISTA); que = que.substr(5); }
+  for (auto pq : {std::make_pair("anime_", ANIME), std::make_pair("peluche_", PELUCHE), std::make_pair("colores_", COLORES)})   // las caras nuevas, igual que mini_
+    if (que.rfind(pq.first, 0) == 0) { paquete(pq.second); que = que.substr(strlen(pq.first)); }   // mini_x = la misma cara en el paquete minimalista
   bool voz = que.rfind("baila_", 0) != 0;   // baila_x = el mismo baile en una parte sin voz
   if (!voz) que = "canta_" + que.substr(6);
   if (que.rfind("canta_", 0) == 0) { for (int k = 0; k < N_RITMO; k++) if (que.substr(6) == NOMBRE_RITMO[k]) ritmo = k; que = "canta"; }
