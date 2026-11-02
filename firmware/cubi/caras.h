@@ -11,7 +11,7 @@ enum Reac : uint8_t {
 };
 extern const char *NOMBRE_BASE[N_BASE];
 extern const char *NOMBRE_REAC[N_REAC];
-void mostrarGrados(int g, float seg);
+void mostrarGrados(int g, float seg, bool metros = false);
 void cuentaPum();                       // la pistola de confeti empieza la cuenta 3 2 1 (cuando el celular termina de hablar)   // los grados del clima arriba en la pantalla, por unos segundos
 
 // ritmos de la música (cada uno con su baile y su instrumento)

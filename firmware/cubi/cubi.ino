@@ -1003,7 +1003,11 @@ String atender(const String &ruta, const Params &p, int &cod) {
   if (otaTotal && !ruta.startsWith("/ota")) { cod = 409; return "actualizando"; }  // durante la actualización no se toca nada
   if (ruta == "/r") {  // una reacción de caricatura por su nombre (saludo, frenazo, amor, lluvia...)
     String n = p.get("n");
-    for (int i = 1; i < caras::N_REAC; i++) if (n == caras::NOMBRE_REAC[i]) { despertar(millis()); reac(caras::Reac(i)); return "ok"; }
+    for (int i = 1; i < caras::N_REAC; i++) if (n == caras::NOMBRE_REAC[i]) {
+      despertar(millis()); reac(caras::Reac(i));
+      if (p.get("m").length()) caras::mostrarGrados(p.get("m").toInt(), caras::duracion(caras::Reac(i)), true);   // la altitud en metros
+      return "ok";
+    }
     cod = 400; return "reaccion desconocida";
   }
   if (ruta == "/e") {

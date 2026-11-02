@@ -60,8 +60,8 @@ static float gritoZona = 0;
 static float bailaAhora = 0;
 static float emoAhora = 0;    // 0..1: la nota sostenida, suavizada (ojos cerrados y las dos manos en el micrófono)
 static float rockeroAhora = 0;  // 0..1: la eléctrica suena fuerte: ojos apretados y se muerde el labio, como un roquero  // 0..1: la canción es bailable (tempo de baile y suena con fuerza): baila y usa la mano libre   // 0..1: está en una parte fuerte de la canción (sube rápido, baja en ~1 s)
-static int gradosN = 0; static float gradosDesde = -1, gradosHasta = -1;
-void mostrarGrados(int g, float seg) { gradosN = g; gradosDesde = tAhora; gradosHasta = tAhora + seg; }
+static int gradosN = 0; static float gradosDesde = -1, gradosHasta = -1; static bool gradosM = false;
+void mostrarGrados(int g, float seg, bool metros) { gradosN = g; gradosM = metros; gradosDesde = tAhora; gradosHasta = tAhora + seg; }
 
 // ---------------------------------------------------------------- azar
 static uint32_t semilla = 12345;
@@ -1980,10 +1980,17 @@ void cuadro(float t, float dt, const Entradas &e) {
   dib::zoom = 1;                                                  // lo de arriba (los grados) va sin zoom, pegado al borde
   if (t < gradosHasta) {                                          // "24°" arriba, entra y sale suave
     float a = fminf(lim((t - gradosDesde) / 0.3f, 0, 1), lim((gradosHasta - t) / 0.4f, 0, 1));
-    char b[8]; snprintf(b, sizeof b, "%d", gradosN);
+    const Col c = claro() ? TINTA : BLANCO;
+    char b[16];
+    if (gradosM) {                                                 // "2.600 m"
+      if (gradosN >= 1000) snprintf(b, sizeof b, "%d.%03d m", gradosN / 1000, gradosN % 1000); else snprintf(b, sizeof b, "%d m", gradosN);
+      texto(b, CX, 46, 48, c, a);
+    } else {
+    snprintf(b, sizeof b, "%d", gradosN);
     const float tam = 52, x = CX - 8, ancho = anchoTexto(b, tam), gx = x + ancho / 2 + 12, gy = 30;
-    texto(b, x, 46, tam, BLANCO, a);
+    texto(b, x, 46, tam, c, a);
     figura(gx - 10, gy - 10, gx + 10, gy + 10, solido(BLANCO, a), [=](float px, float py) { return fabsf(dCirculo(px, py, gx, gy, 6.5f)) - 2.6f; });
+    }
   }
   dib::blanco = false;
 }

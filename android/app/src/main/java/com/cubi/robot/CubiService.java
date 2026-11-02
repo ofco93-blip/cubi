@@ -436,6 +436,7 @@ public class CubiService extends Service {
     private long quietoDesde;
     private float recorrido;   // metros andados desde la última llegada
     float kmh = -1;
+    int altura = Integer.MIN_VALUE, alturaTramo = Integer.MIN_VALUE;   // metros sobre el mar y en qué tramo de 500 m vamos
 
     @SuppressLint("MissingPermission")
     void gps() {
@@ -452,6 +453,7 @@ public class CubiService extends Service {
     private void posicion(Location l) {
         long ahora = System.currentTimeMillis();
         if (l.hasSpeed()) kmh = l.getSpeed() * 3.6f;
+        altura(l);
         getSharedPreferences("cubi", 0).edit()
             .putString("lugar", String.format(Locale.US, "%.2f,%.2f", l.getLatitude(), l.getLongitude())).apply();
         if (antesGps != null && l.getAccuracy() < 50) recorrido += antesGps.distanceTo(l);
@@ -468,6 +470,19 @@ public class CubiService extends Service {
             climaEn = l;
             clima();
         }
+    }
+
+    // altitud del GPS del celular (Maps no la da): cada 500 m que se suben o bajan, Cubi la muestra en pantalla
+    private void altura(Location l) {
+        if (l.hasVerticalAccuracy() && l.getVerticalAccuracyMeters() > 30) return;   // dato malo, mejor nada
+        if (Build.VERSION.SDK_INT >= 34 && l.hasMslAltitude()) altura = (int) Math.round(l.getMslAltitudeMeters());
+        else if (l.hasAltitude()) altura = (int) Math.round(l.getAltitude());   // sobre el elipsoide: unos metros de diferencia
+        else return;
+        int tramo = Math.floorDiv(altura, 500);
+        if (alturaTramo == Integer.MIN_VALUE) { alturaTramo = tramo; return; }   // al prender no avisa
+        // 40 m de margen para que el ruido del GPS no lo haga avisar ida y vuelta en la raya
+        if (tramo > alturaTramo && altura >= tramo * 500 + 40) { alturaTramo = tramo; enviar("asis|/r?n=sorpresa&m=" + tramo * 500); }
+        else if (tramo < alturaTramo && altura < (tramo + 1) * 500 - 40) { alturaTramo = tramo; enviar("asis|/r?n=curiosa&m=" + (tramo + 1) * 500); }
     }
 
     // ---------- asistente: Cubi pide abrir Gemini y se le cuenta si escucha o habla ----------
@@ -539,10 +554,11 @@ public class CubiService extends Service {
             + "persona. No cuentes ni digas '¡Pum!': la cuenta 3, 2, 1 y el disparo los hago yo justo después. "
             + "Nunca hables de hacer daño de verdad.\n"
             + "  baile_*: bailas unos segundos después de hablar.\n"
-            + "- accion: algo que haces en el celular, exactamente una de: ninguna, clima, musica_play, musica_pausa, "
+            + "- accion: algo que haces en el celular, exactamente una de: ninguna, clima, altura, musica_play, musica_pausa, "
             + "musica_siguiente, musica_anterior, musica_buscar, volumen_subir, volumen_bajar.\n"
             + "  clima: cuando pregunten por el clima o la temperatura; en tu pantalla salen la animación del clima y los grados. "
             + "Dilo en pocas palabras con el dato entre corchetes.\n"
+            + "  altura: cuando pregunten a qué altura o altitud van; en tu pantalla salen los metros. Usa el dato entre corchetes.\n"
             + "  musica_play: poner o seguir la música. musica_buscar: cuando pidan algo concreto (canción, artista o género).\n"
             + "- busqueda: solo con musica_buscar, qué buscar (por ejemplo 'salsa' o 'Bad Bunny'); si no, vacío.\n"
             + "- sigue: true para dejar el micrófono abierto y seguir conversando (casi siempre); false solo si la persona se "
@@ -733,6 +749,8 @@ public class CubiService extends Service {
         if (dice.test("pon|ponle|play|dale|musica")) return new String[]{"¡Música!", "ninguno", "musica_play"};
         if (dice.test("te quiero|te amo|lindo|bonito")) return new String[]{"¡Yo también te quiero!", "amor", ""};
         if (dice.test("velocidad|rapido|que tan rapido")) return new String[]{kmh < 0 ? "Prende el GPS en la app y te digo." : kmh < 3 ? "Estamos quietos." : "Vamos a " + Math.round(kmh) + " kilómetros por hora.", "ninguno", ""};
+        if (dice.test("altura|altitud|que tan alto|sobre el mar"))
+            return new String[]{altura == Integer.MIN_VALUE ? "Prende el GPS en la app y te digo." : "Estamos a " + altura + " metros sobre el mar.", "ninguno", "altura"};
         if (dice.test("clima|temperatura|llueve|lluvia|calor|frio"))
             return new String[]{climaTexto.isEmpty() ? "Sin internet no sé el clima." : "Lo último que vi: " + climaTexto + ".", "ninguno", "clima"};
         if (dice.test("hola|saluda|saludame|como estas")) return new String[]{"¡Hola! Aquí estoy, sin internet pero con toda la actitud.", "saludo", ""};
@@ -760,6 +778,7 @@ public class CubiService extends Service {
         return "[Hora: " + String.format(Locale.US, "%d:%02d", c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE))
                 + (climaTexto.isEmpty() ? "" : ". Clima: " + climaTexto)
                 + (kmh < 0 ? "" : kmh < 3 ? ". El carro está quieto" : ". Vamos a " + Math.round(kmh) + " km/h")
+                + (altura == Integer.MIN_VALUE ? "" : ". Altura: " + altura + " m sobre el mar")
                 + (musicaPlay ? ". Está sonando " + (cancionTexto.isEmpty() ? "música" : cancionTexto) : "") + "]\n";
     }
 
@@ -887,6 +906,7 @@ public class CubiService extends Service {
             if (!climaOrden.isEmpty()) enviar("asis|" + climaOrden + "&ver=1");
             else js("toast('Activa Clima en la app para que Cubi lo muestre')");
         }
+        if (empieza && ac.equals("altura")) { accionPend = ""; if (altura != Integer.MIN_VALUE) enviar("asis|/r?n=curiosa&m=" + altura); }
         if (!empieza && t.startsWith("baile_") && BAILES.contains(t.substring(6))) { trucoPend = ""; enviar("asis|/demo?t=baile&r=" + t.substring(6)); }
         if (!empieza && (ac.startsWith("musica") || ac.startsWith("volumen"))) {
             accionPend = "";
