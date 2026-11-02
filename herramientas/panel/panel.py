@@ -8,7 +8,7 @@ from PIL import Image, ImageTk
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 SRV, RX, TX = ('6e40000%d-b5a3-f393-e0a9-e50e24dcca9e' % i for i in (1, 2, 3))
-PAQUETES = ['Lumi azul', 'Minimal', 'Anime', 'Peluche', 'Colores']
+PAQUETES = ['Lumi azul', 'Minimal', 'Anime', 'Peluche', 'Colores', 'Nova', 'Kira', 'Pixel']
 
 dll = ctypes.CDLL(os.path.join(AQUI, 'cubi_cara.dll'))
 dll.nombreRitmo.restype = ctypes.c_char_p
