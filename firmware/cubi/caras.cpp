@@ -45,7 +45,7 @@ void paquete(uint8_t p) {
   // anime y peluche van sobre un fondo claro; "Colores" es el Cubi de siempre en blanco sobre un atardecer
   if (elPaquete == ANIME) dib::ponerFondo({255, 222, 238}, {205, 196, 255});
   else if (elPaquete == PELUCHE) dib::ponerFondo({255, 232, 205}, {246, 196, 178});
-  else if (elPaquete == COLORES) dib::ponerFondo({255, 150, 90}, {214, 64, 150});
+  else if (elPaquete == ATARDECER) dib::ponerFondo({255, 150, 90}, {214, 64, 150});
   else dib::sinFondo();
 }
 static inline bool claro() { return elPaquete == ANIME || elPaquete == PELUCHE; }   // fondo claro: se dibuja oscuro
@@ -1957,7 +1957,7 @@ Reac reaccionActual() { return laReac; }
 
 void cuadro(float t, float dt, const Entradas &e) {
   tAhora = t; curvaAhora = e.curva;
-  dib::blanco = elPaquete == MINIMALISTA || elPaquete == COLORES;
+  dib::blanco = elPaquete == MINIMALISTA || elPaquete == ATARDECER;
   dib::zoom = elTamano; dib::zx = CX; dib::zy = 250;   // crece hacia arriba y a los lados; abajo casi no se corta
   if (laReac != NINGUNA && t - reacDesde >= DURA[laReac]) laReac = NINGUNA;
   if (laReac == PUM && pumCuenta >= 0 && t - reacDesde - pumCuenta > 5.6f) laReac = NINGUNA;   // terminó de reírse
