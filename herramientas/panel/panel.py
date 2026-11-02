@@ -1,7 +1,7 @@
 # Panel en vivo: se conecta a Cubi por Bluetooth desde el PC (sin el celular). Cubi oye con su propio micrófono;
 # aquí se ve lo que oye (nivel, voz, vocal, boca), una copia de su cara (caras.cpp como cubi_cara.dll) y las
 # perillas, que se guardan en el mismo Cubi al moverlas.
-import asyncio, ctypes, json, os, threading, time, tkinter as tk
+import asyncio, ctypes, math, json, os, threading, time, tkinter as tk
 from tkinter import ttk
 from bleak import BleakClient, BleakScanner
 from PIL import Image, ImageTk
@@ -17,6 +17,9 @@ dll.cuadroPanel.argtypes = [ctypes.c_float, ctypes.c_float, ctypes.c_int, ctypes
 dll.arrancar()
 W, H = dll.ancho(), dll.alto()
 RITMOS = [dll.nombreRitmo(i).decode() for i in range(dll.nRitmos())]
+for f in (dll.nombreBase, dll.nombreReac): f.restype = ctypes.c_char_p
+BASES = [dll.nombreBase(i).decode() for i in range(dll.nBases())]
+REACS = [dll.nombreReac(i).decode() for i in range(1, dll.nReac())]
 
 
 def vocal(abre, ancho):
@@ -78,13 +81,24 @@ class Panel:
         s.aud = {}; s.aj = None
         s.r = tk.Tk(); s.r.title('Cubi en vivo'); s.r.configure(bg='#111')
         est = {'bg': '#111', 'fg': '#ddd'}
-        s.img = tk.Label(s.r, bg='black'); s.img.grid(row=0, column=0, padx=10, pady=10)
+        izq = tk.Frame(s.r, bg='#111'); izq.grid(row=0, column=0, sticky='n', padx=10, pady=10)
+        s.img = tk.Label(izq, bg='black'); s.img.pack()
+        # ver las caras sin Cubi: base, baile y reacciones (con Cubi conectado, la base la decide lo que oye)
+        ver = tk.Frame(izq, bg='#111'); ver.pack(anchor='w', pady=8)
+        tk.Label(ver, text='Ver caras:', **est).pack(side='left')
+        s.base = ttk.Combobox(ver, values=['lo que oye Cubi'] + BASES, state='readonly', width=14); s.base.current(0); s.base.pack(side='left', padx=4)
+        s.base.bind('<<ComboboxSelected>>', lambda e: dll.ponerBase(s.base.current() - 1))
+        s.rit = ttk.Combobox(ver, values=RITMOS, state='readonly', width=10); s.rit.current(0); s.rit.pack(side='left', padx=4)
+        botones = tk.Frame(izq, bg='#111'); botones.pack(anchor='w')
+        for k, n in enumerate(REACS):
+            tk.Button(botones, text=n, width=9, command=lambda k=k: dll.ponerReaccion(k + 1), bg='#222', fg='#ddd', relief='flat'
+                      ).grid(row=k // 6, column=k % 6, padx=2, pady=2)
         col = tk.Frame(s.r, bg='#111'); col.grid(row=0, column=1, sticky='n', padx=10, pady=10)
         s.con = tk.Label(col, text='', **est, font=('Segoe UI', 10, 'bold')); s.con.pack(anchor='w')
 
         fila = tk.Frame(col, bg='#111'); fila.pack(anchor='w', pady=6)
         s.paq = ttk.Combobox(fila, values=PAQUETES, state='readonly', width=10); s.paq.current(0); s.paq.pack(side='left')
-        s.paq.bind('<<ComboboxSelected>>', lambda e: s.mandar('paq', s.paq.current()))
+        s.paq.bind('<<ComboboxSelected>>', lambda e: (dll.ponerPaquete(s.paq.current()), s.mandar('paq', s.paq.current())))
         s.bm = tk.IntVar(value=1)
         tk.Checkbutton(fila, text='Boca con su micrófono', variable=s.bm, selectcolor='#333', command=lambda: s.mandar('bm', s.bm.get()), **est).pack(side='left', padx=8)
 
@@ -131,12 +145,17 @@ class Panel:
 
     def cuadro(s):
         ahora = time.time(); dt = min(0.1, ahora - s.antes); s.antes = ahora
-        a = s.aud; bpm = a.get('bpm', 0) or 110
+        a = s.aud if s.cubi.cli else {}
+        t = ahora - s.t0
+        if not s.cubi.cli and s.base.get() in ('canta', 'habla'):   # sin Cubi: canta de mentiras para ver la boca y el baile
+            c = (t % 4) < 2.6
+            a = {'estado': 3, 'canta': int(c), 'boca': (0.35 + 0.45 * abs(math.sin(t * 5.3))) if c else 0, 'ancho': 0.5 + 0.5 * math.sin(t * 2.3),
+                 'voz': 0.6 if c else 0, 'nivel': 0.5 + 0.4 * abs(math.sin(t * 1.7)), 'bpm': 110, 'abre': 0.8}
+        bpm = a.get('bpm', 0) or 110
         s.fase = (s.fase + dt * bpm / 60) % 1000
         musica = a.get('estado', 0) >= 2; canta = bool(a.get('canta', 0))
-        dll.ponerPaquete(s.paq.current())
         p = dll.cuadroPanel(ahora - s.t0, dt, int(musica or canta), int(canta), a.get('boca', 0), a.get('ancho', 0.5), a.get('voz', 0),
-                            a.get('nivel', 0), 0.0, max(0, RITMOS.index(a['ins'])) if a.get('ins') in RITMOS else 0, bpm, s.fase % 1)
+                            a.get('nivel', 0), 0.0, RITMOS.index(a['ins']) if a.get('ins') in RITMOS else s.rit.current(), bpm, s.fase % 1)
         s.foto = ImageTk.PhotoImage(Image.frombuffer('RGB', (W, H), ctypes.string_at(p, W * H * 3), 'raw', 'RGB', 0, 1))
         s.img.config(image=s.foto)
         s.con.config(text=s.cubi.estado + ('' if not a else '   ·   ' + a.get('estilo', '')), fg='#6d6' if s.cubi.cli else '#fa6')

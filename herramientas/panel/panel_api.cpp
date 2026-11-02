@@ -13,11 +13,19 @@ API int nRitmos() { return N_RITMO; }
 API const char *nombreRitmo(int i) { return NOMBRE_RITMO[i]; }
 API void arrancar() { dib::fb = mem; dib::giro = 0; iniciar(7); }
 API void ponerPaquete(int p) { paquete(p); }
+// para ver las caras sin Cubi: una base fija (reposo, escucha, habla, canta, piensa, duerme, teléfono) y las reacciones
+static int laBaseP = -1;   // -1 = la decide el panel (reposo o canta)
+API int nBases() { return N_BASE; }
+API const char *nombreBase(int i) { return NOMBRE_BASE[i]; }
+API void ponerBase(int b) { laBaseP = b; }
+API int nReac() { return N_REAC; }
+API const char *nombreReac(int i) { return NOMBRE_REAC[i]; }
+API void ponerReaccion(int r) { reaccion((Reac)r); }
 
 // musica = 0: cara de reposo; 1: bailando (y cantando si canta = 1)
 API const uint8_t *cuadroPanel(float t, float dt, int musica, int canta, float boca, float an, float voz, float nivel,
                                float emocion, int ritmo, float bpm, float pulso) {
-  base(musica ? CANTA : REPOSO);
+  base(laBaseP >= 0 ? (Base)laBaseP : musica ? CANTA : REPOSO);
   Entradas e;
   e.boca = boca; e.ancho = an; e.canta = canta; e.voz = voz; e.nivel = nivel; e.emocion = emocion;
   if (musica) { e.ritmo = ritmo; e.bpm = bpm; e.pulso = pulso; }
