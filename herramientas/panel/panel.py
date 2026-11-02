@@ -1,8 +1,11 @@
 # Panel en vivo: se conecta a Cubi por Bluetooth desde el PC (sin el celular). Cubi oye con su propio micrófono;
 # aquí se ve lo que oye (nivel, voz, vocal, boca), una copia de su cara (caras.cpp como cubi_cara.dll) y las
-# perillas, que se guardan en el mismo Cubi al moverlas.
+# perillas, que se guardan en el mismo Cubi al moverlas. Sin Cubi se puede oír con el micrófono del PC: las mismas
+# cuentas del robot (analizarVoz de cubi.ino), con las perillas aplicadas aquí.
 import asyncio, ctypes, math, json, os, threading, time, tkinter as tk
 from tkinter import ttk
+import numpy as np
+import sounddevice as sd
 from bleak import BleakClient, BleakScanner
 from PIL import Image, ImageTk
 
@@ -75,6 +78,59 @@ class Cubi:
         except Exception: return None
 
 
+class Oido:
+    """analizarVoz + el pedazo de tareaAudio que decide si "hay" sonido, igual que en el robot, con el micrófono del PC."""
+    SR, NF = 16000, 512
+
+    def __init__(s, aj):
+        s.aj = aj                                   # función que devuelve las perillas actuales
+        s.piso, s.pico = 30.0, 300.0
+        s.vMod = s.vPrev = s.vozS = 0.0; s.vMax = s.vMin = 60.0; s.boca = 0.0; s.ancho = 0.5
+        s.canta = False; s.sube = 0; s.rs = 0.0; s.base = 0.3; s.abre = 0.8
+        s.nivel = s.rms = 0.0; s.hay = s.suena = False
+        s.ham = np.hamming(s.NF)
+
+    def bloque(s, x):
+        aj = s.aj()
+        v = x * 32767 / 4 * aj['mic_pc']            # escala parecida a la del micrófono del robot
+        v = v - v.mean()
+        rms = float(np.sqrt(np.mean(v ** 2)))
+        m = np.abs(np.fft.rfft(v * s.ham))[:s.NF // 2]
+        s.piso = s.piso * 0.9 + rms * 0.1 if rms < s.piso else s.piso * 1.0004
+        hay = rms > s.piso * aj['sk'] and rms > 40
+        s.suena = rms > s.piso * 1.8 and rms > 30
+        s.pico = max(rms, s.pico * 0.998)
+        s.nivel = min(1, rms / s.pico) if s.suena else 0
+        s.rms, s.hay = rms, hay
+        eb, ev, eh = (m[2:7] ** 2).sum(), (m[9:97] ** 2).sum(), (m[112:] ** 2).sum()
+        plano = np.exp(np.log(m[9:97] + 1).sum() / 88) / (m[9:97].sum() / 88 + 1)
+        frac = ev / (eb + ev + eh + 1)
+        db = 10 * np.log10(ev + 1)
+        s.vMod += (abs(db - s.vPrev) - s.vMod) * 0.15; s.vPrev = db
+        fracN, tonN = np.clip((frac - 0.30) / 0.40, 0, 1), np.clip((0.62 - plano) / 0.32, 0, 1)
+        modN = np.clip((s.vMod - 0.6) / 2.4, 0, 1)
+        s.rs += (frac - s.rs) * 0.3
+        s.base += (s.rs - s.base) * (0.05 if s.rs < s.base else 0.003)
+        vozMus = np.clip((s.rs - s.base) / max(0.06, s.base * 0.5), 0, 1) * (0.5 + 0.5 * modN) if hay else 0
+        s.vozS += ((max((0.5 * fracN + 0.5 * tonN) * modN, vozMus) if hay else 0) - s.vozS) * 0.25
+        uv = aj['uv']
+        if not s.canta and s.vozS > uv:
+            s.sube += 1; s.canta = s.sube >= 2
+        else: s.sube = 0
+        if s.canta and s.vozS < uv * 0.7: s.canta = False
+        if hay and s.canta:                         # la vocal por formantes (F1 = qué tan abierta, F2 = qué tan estirada)
+            sv = np.convolve(m, np.ones(5), 'same')
+            k1 = 9 + int(np.argmax(sv[9:31])); k2a = max(k1 + 8, 28)
+            k2 = k2a + int(np.argmax(sv[k2a:81]))
+            s.abre += (np.clip((k1 * 31.25 - 280) / 470, 0, 1) * 0.55 + 0.45 - s.abre) * 0.5
+            s.ancho += (np.clip((k2 * 31.25 - 900) / 1300, 0, 1) - s.ancho) * 0.5
+        s.vMax = max(db, s.vMax - 0.02); s.vMin = min(db, s.vMin + 0.03)
+        o = np.clip((db - s.vMin - 3) / max(6, s.vMax - s.vMin - 3), 0, 1)
+        o = min(1, o ** 1.4 * aj['gb']) * s.abre
+        t = o if s.canta else 0
+        s.boca += (t - s.boca) * (0.85 if t > s.boca else 0.45)
+
+
 class Panel:
     def __init__(s):
         s.cubi = Cubi()
@@ -95,6 +151,13 @@ class Panel:
                       ).grid(row=k // 6, column=k % 6, padx=2, pady=2)
         col = tk.Frame(s.r, bg='#111'); col.grid(row=0, column=1, sticky='n', padx=10, pady=10)
         s.con = tk.Label(col, text='', **est, font=('Segoe UI', 10, 'bold')); s.con.pack(anchor='w')
+        oye = tk.Frame(col, bg='#111'); oye.pack(anchor='w', pady=(6, 0))
+        tk.Label(oye, text='Oír con:', **est).pack(side='left')
+        s.mics = [(i, d['name']) for i, d in enumerate(sd.query_devices())
+                  if d['max_input_channels'] > 0 and sd.query_hostapis(d['hostapi'])['name'] == 'MME']
+        s.fuente = ttk.Combobox(oye, values=['Cubi (su micrófono)'] + ['PC: ' + n for _, n in s.mics], state='readonly', width=34)
+        s.fuente.current(0); s.fuente.pack(side='left', padx=4); s.fuente.bind('<<ComboboxSelected>>', lambda e: s.abrirMic())
+        s.oido = Oido(lambda: {k: v.get() for k, v in s.vars.items()}); s.flujo = None; s.bocaV = 0.0; s.cantaHasta = 0.0
 
         fila = tk.Frame(col, bg='#111'); fila.pack(anchor='w', pady=6)
         s.paq = ttk.Combobox(fila, values=PAQUETES, state='readonly', width=10); s.paq.current(0); s.paq.pack(side='left')
@@ -110,6 +173,8 @@ class Panel:
             sc.bind('<ButtonRelease-1>', lambda e: s.mandar(clave, v.get())); sc.pack(anchor='w')
             tk.Label(col, text=ayuda, fg='#888', bg='#111', font=('Segoe UI', 8)).pack(anchor='w')
         perilla('mg', 'Ganancia del micrófono de Cubi (mg)', 0, 7, 1, 'Más alto = oye más fuerte (si satura, bájalo)')
+        perilla('mic_pc', 'Volumen del micrófono del PC', 0.1, 8, 0.1, 'Solo con el micrófono del PC: que la barra de Nivel se mueva bien')
+        s.vars['mic_pc'].set(1)
         perilla('sk', 'Sensibilidad (sk)', 1.3, 8, 0.1, 'Más alto = necesita sonar más fuerte sobre el ruido del carro')
         perilla('uv', 'Umbral de voz (uv)', 0.05, 0.95, 0.01, 'Si abre la boca en los solos, súbelo; si no canta con voz, bájalo')
         perilla('gb', 'Qué tanto abre la boca (gb)', 0.3, 3, 0.05, 'Más alto = boca más abierta')
@@ -122,8 +187,21 @@ class Panel:
         s.r.after(40, s.cuadro); s.r.mainloop()
 
     def mandar(s, clave, v):
+        if clave == 'mic_pc': return
         v = int(v) if clave in ('mg', 'paq', 'bm') else round(float(v), 2)
         threading.Thread(target=s.cubi.pedir, args=('/ajuste?%s=%s' % (clave, v),), daemon=True).start()
+
+    def abrirMic(s):
+        if s.flujo: s.flujo.close(); s.flujo = None
+        k = s.fuente.current()
+        if k == 0: return
+        s.oido = Oido(s.oido.aj)
+        try:
+            s.flujo = sd.InputStream(device=s.mics[k - 1][0], channels=1, samplerate=Oido.SR, blocksize=Oido.NF, dtype='float32',
+                                     callback=lambda d, *_: s.oido.bloque(d[:, 0].astype(np.float64)))
+            s.flujo.start()
+        except Exception as e:
+            s.flujo = None; s.con.config(text='No abre ese micrófono: ' + str(e)[:50])
 
     def oir(s):
         """Pide lo que oye Cubi unas 6 veces por segundo (y los ajustes que tiene al conectarse)."""
@@ -147,7 +225,14 @@ class Panel:
         ahora = time.time(); dt = min(0.1, ahora - s.antes); s.antes = ahora
         a = s.aud if s.cubi.cli else {}
         t = ahora - s.t0
-        if not s.cubi.cli and s.base.get() in ('canta', 'habla'):   # sin Cubi: canta de mentiras para ver la boca y el baile
+        if s.flujo:   # el micrófono del PC, con las cuentas del robot
+            o = s.oido
+            if o.canta: s.cantaHasta = ahora + 1.5    # como el robot: la cara de cantar aguanta entre frases
+            s.bocaV += ((o.boca if o.canta else 0) - s.bocaV) * 0.6
+            a = {'estado': (3 if o.canta or ahora < s.cantaHasta else 2) if o.suena else 0, 'canta': int(o.canta or ahora < s.cantaHasta),
+                 'boca': s.bocaV, 'ancho': o.ancho, 'abre': o.abre, 'voz': o.vozS, 'nivel': o.nivel, 'bpm': 110,
+                 'rms': round(o.rms), 'piso': round(o.piso)}
+        elif not s.cubi.cli and s.base.get() in ('canta', 'habla'):   # sin Cubi: canta de mentiras para ver la boca y el baile
             c = (t % 4) < 2.6
             a = {'estado': 3, 'canta': int(c), 'boca': (0.35 + 0.45 * abs(math.sin(t * 5.3))) if c else 0, 'ancho': 0.5 + 0.5 * math.sin(t * 2.3),
                  'voz': 0.6 if c else 0, 'nivel': 0.5 + 0.4 * abs(math.sin(t * 1.7)), 'bpm': 110, 'abre': 0.8}
@@ -158,7 +243,8 @@ class Panel:
                             a.get('nivel', 0), 0.0, RITMOS.index(a['ins']) if a.get('ins') in RITMOS else s.rit.current(), bpm, s.fase % 1)
         s.foto = ImageTk.PhotoImage(Image.frombuffer('RGB', (W, H), ctypes.string_at(p, W * H * 3), 'raw', 'RGB', 0, 1))
         s.img.config(image=s.foto)
-        s.con.config(text=s.cubi.estado + ('' if not a else '   ·   ' + a.get('estilo', '')), fg='#6d6' if s.cubi.cli else '#fa6')
+        if s.flujo: s.con.config(text='Oyendo con el micrófono del PC', fg='#6af')
+        else: s.con.config(text=s.cubi.estado + ('' if not a else '   ·   ' + a.get('estilo', '')), fg='#6d6' if s.cubi.cli else '#fa6')
         c = s.cv; c.delete('all')
         uv = s.vars['uv'].get()
         for i, (nom, v, col) in enumerate([('Nivel', a.get('nivel', 0), '#4a9'), ('Voz', a.get('voz', 0), '#59f'), ('Boca', a.get('boca', 0), '#f95')]):
