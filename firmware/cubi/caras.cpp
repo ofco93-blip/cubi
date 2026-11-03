@@ -38,18 +38,15 @@ struct Rostro {
 static_assert(sizeof(Rostro) % sizeof(float) == 0, "Rostro debe ser solo floats");
 
 static Rostro ahora, meta;
-const char *NOMBRE_PAQ[N_PAQ] = {"Cubi azul", "Robot minimalista", "Anime", "Peluche", "Colores", "Nova", "Kira", "Pixel"};
+const char *NOMBRE_PAQ[N_PAQ] = {"Cubi azul", "Robot minimalista", "Nova sólida", "Kira sólida", "Colores", "Nova", "Kira", "Pixel"};
 static uint8_t elPaquete = CUBI_AZUL;
 void paquete(uint8_t p) {
   elPaquete = p < N_PAQ ? p : CUBI_AZUL;
-  // anime y peluche van sobre un fondo claro; "Colores" es el Cubi de siempre en blanco sobre un atardecer
-  if (elPaquete == ANIME) dib::ponerFondo({255, 222, 238}, {205, 196, 255});
-  else if (elPaquete == PELUCHE) dib::ponerFondo({255, 232, 205}, {246, 196, 178});
-  else if (elPaquete == ATARDECER) dib::ponerFondo({255, 150, 90}, {214, 64, 150});
+  // "Colores" es el Cubi de siempre en blanco sobre un atardecer
+  if (elPaquete == ATARDECER) dib::ponerFondo({255, 150, 90}, {214, 64, 150});
   else dib::sinFondo();
 }
-static inline bool claro() { return elPaquete == ANIME || elPaquete == PELUCHE; }   // fondo claro: se dibuja oscuro
-static const Col TINTA{45, 28, 64}, CAFE{70, 44, 34};
+static inline bool soloOjos() { return elPaquete >= OVALO || elPaquete == NOVA_S || elPaquete == KIRA_S; }
 static float elTamano = 1.2f;  // la cara más grande (con el acrílico encima se ve aún más): 1 = como antes
 void tamano(float z) { elTamano = lim(z, 1.f, 1.5f); }
 static Base laBase = REPOSO;
@@ -151,58 +148,6 @@ static float dArco(float px, float py, float cx, float cy, float R, float a0, fl
 // píldora: lados rectos y las puntas redondas (parada o acostada)
 static float dPildora(float px, float py, float x, float y, float hw, float hh) { return dCaja(px, py, x, y, hw, hh, fminf(hw, hh)); }
 
-// Anime y peluche: al parpadear el ojo se aplasta hacia abajo; la inclinación (bravo, triste) lo corta con una línea
-static void ojoLindo(const Rostro &r, const Ojo &o, float lado, float top) {
-  const bool anime = elPaquete == ANIME;
-  const Col oscuro = anime ? TINTA : CAFE;
-  const float x = o.x, hw = o.w / 2, hh = o.h / 2, tn = tanf(o.incl) * lado, co = cosf(o.incl);
-  if (!anime) {                                        // peluche: cachetes rosados siempre
-    const float mx = x + lado * hw * 0.35f, my = o.y + hh + 16;
-    figura(mx - 26, my - 14, mx + 26, my + 14, solido(Col{255, 120, 140}, 0.4f * o.alfa, 0),
-           [=](float px, float py) { return dElipse(px, py, mx, my, 24, 12); });
-  }
-  if (o.feliz > 0.5f) {                                // feliz: arco grueso ^ ^
-    const float R = hw * 1.05f, cyA = o.y + hh * 0.35f;
-    figura(x - R - 8, cyA - R - 8, x + R + 8, cyA + 8, solido(oscuro, o.alfa),
-           [=](float px, float py) { return dArco(px, py, x, cyA, R, -PI * 0.86f, -PI * 0.14f) - 6.5f; });
-    return;
-  }
-  const float ex = anime ? hw * 1.05f : fminf(hw, hh) * 0.98f, ey0 = anime ? hh : ex;   // anime: ovalado; peluche: botón
-  const float ey = fmaxf(ey0 * (1 - top), 3.f), y = o.y + ey0 - ey, yl = y - ey + fabsf(tn) * ex;
-  auto forma = [=](float px, float py) {
-    float d = dElipse(px, py, x, y, ex, ey);
-    return o.incl != 0 ? smax(d, (yl + tn * (px - x) - py) * co, 8) : d;
-  };
-  auto dentro = [=](float px, float py, float d) { return fmaxf(d, forma(px, py)); };   // recortado por el ojo
-  const Col BLC{255, 255, 255};
-  if (anime) {
-    figura(x - ex, y - ey, x + ex, y + ey, solido(BLC, o.alfa), forma);                    // lo blanco
-    const float ix = x, iy = y + ey * 0.12f, irx = ex * 0.7f, iry = ey0 * 0.86f;        // iris grande del color del ánimo
-    figura(ix - irx, iy - iry, ix + irx, iy + iry, tonoP(r, iy - iry, iy + iry, 0, o.alfa),
-           [=](float px, float py) { return dentro(px, py, dElipse(px, py, ix, iy, irx, iry)); });
-    figura(ix - irx, iy - iry, ix + irx, iy + iry, solido(TINTA, o.alfa),               // pupila
-           [=](float px, float py) { return dentro(px, py, dElipse(px, py, ix, iy + iry * 0.08f, irx * 0.48f, iry * 0.56f)); });
-    const float b1x = ix - irx * 0.36f, b1y = iy - iry * 0.42f, b1 = irx * 0.34f, b2x = ix + irx * 0.38f, b2y = iy + iry * 0.36f, b2 = irx * 0.15f;
-    figura(b1x - b1, b1y - b1, b1x + b1, b1y + b1, solido(BLC, o.alfa), [=](float px, float py) { return dentro(px, py, dCirculo(px, py, b1x, b1y, b1)); });
-    figura(b2x - b2, b2y - b2, b2x + b2, b2y + b2, solido(BLC, o.alfa), [=](float px, float py) { return dentro(px, py, dCirculo(px, py, b2x, b2y, b2)); });
-    const float px0 = x + lado * ex * 0.9f, py0 = y - ey * 0.45f;                      // pestañas: el borde de arriba grueso y una colita
-    figura(x - ex - 6, y - ey - 8, x + ex + 18, y + 4, solido(TINTA, o.alfa), [=](float px, float py) {
-      float d = fmaxf(fabsf(forma(px, py)) - 3.8f, py - (y - ey * 0.1f));
-      return fminf(d, dSegmento(px, py, px0, py0, px0 + lado * 13, py0 - 10, 3.5f));
-    });
-  } else {
-    figura(x - ex, y - ey, x + ex, y + ey, solido(Col{120, 82, 60}, o.alfa), forma);      // el botón, con su borde más claro
-    figura(x - ex, y - ey, x + ex, y + ey, solido(CAFE, o.alfa),
-           [=](float px, float py) { return dentro(px, py, dElipse(px, py, x, y, ex * 0.8f, ey * 0.8f)); });
-    for (int k = 0; k < 4; k++) {                                                       // los cuatro huequitos del botón
-      const float hx = x + (k % 2 ? 1 : -1) * ex * 0.2f, hy = y + (k / 2 ? 1 : -1) * ey * 0.2f, hr = ex * 0.07f;
-      figura(hx - hr, hy - hr, hx + hr, hy + hr, solido(Col{40, 24, 18}, o.alfa), [=](float px, float py) { return dentro(px, py, dCirculo(px, py, hx, hy, hr)); });
-    }
-    const float b1x = x - ex * 0.4f, b1y = y - ey * 0.42f, b1 = ex * 0.2f;            // brillo de plástico
-    figura(b1x - b1, b1y - b1, b1x + b1, b1y + b1, solido(BLC, 0.85f * o.alfa), [=](float px, float py) { return dentro(px, py, dCirculo(px, py, b1x, b1y, b1)); });
-  }
-}
-
 // ---------------------------------------------------------------- caras de solo ojos (sin boca)
 // rayitas de pantalla: el ojo se ve hecho de líneas horizontales con brillo
 static inline float rayas(float d, float py, float paso) { return fmaxf(d, fabsf(fmodf(py + 1000, paso) - paso / 2) - paso * 0.3f); }
@@ -225,8 +170,8 @@ static void ojoSoloOjos(const Rostro &r, const Ojo &o, float lado, float top) {
     });
     return;
   }
-  // óvalos acostados e inclinados hacia adentro, o redondos de neón rosado; los dos con rayitas
-  const bool neon = elPaquete == NEON;
+  // óvalos acostados e inclinados hacia adentro, o redondos de neón rosado; con rayitas o sólidos
+  const bool neon = elPaquete == NEON || elPaquete == KIRA_S, conRayas = elPaquete == OVALO || elPaquete == NEON;
   // con tope: en el susto los ojos crecen, pero no se montan uno sobre otro
   const float rx = fminf(neon ? o.w * 0.55f : o.w * 0.7f, neon ? 66.f : 76.f), ry = fminf(neon ? fminf(o.w * 0.55f, o.h * 0.4f) : o.h * 0.3f, neon ? 66.f : 58.f);
   const float a = neon ? 0 : 0.2f * lado, ca = cosf(a), sa = sinf(a);
@@ -238,7 +183,7 @@ static void ojoSoloOjos(const Rostro &r, const Ojo &o, float lado, float top) {
     float d = dElipse(u, v, 0, 0, rx, ry);
     if (top > 0.005f || o.incl != 0) d = fmaxf(d, (y0 + tn * (px - x) - py) * co);
     if (fz > 0.01f) d = fmaxf(d, -dElipse(px, py, x, cyF, rx * 1.3f, ry * 1.25f));   // feliz: media luna
-    return rayas(d, py, neon ? 6.f : 8.f);
+    return conRayas ? rayas(d, py, neon ? 6.f : 8.f) : d;
   });
 }
 
@@ -256,8 +201,7 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
     figura(x - s * 1.3f, y - s * 1.3f, x + s * 1.3f, y + s * 1.1f, tonoP(r, y - s, y + s, 20, o.alfa), cor);
     return;
   }
-  if (claro()) { ojoLindo(r, o, lado, top); return; }
-  if (elPaquete >= OVALO) { ojoSoloOjos(r, o, lado, top); return; }
+  if (soloOjos()) { ojoSoloOjos(r, o, lado, top); return; }
   if (mini) {   // al entrecerrar se aplasta (no se corta) y todas las puntas quedan redondas
     const float hh2 = fmaxf(hh * (1 - top), 4.f), y2 = y + hh - hh2, cy2 = y2 + 2 * hh2 * (0.95f - 0.55f * fz), cry2 = 2 * hh2 * 0.62f;
     const float yl = y2 - hh2 + fabsf(tn) * hw;
@@ -292,7 +236,7 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
 }
 
 static void boca(const Rostro &r) {
-  if (elPaquete >= OVALO) return;   // las caras de solo ojos no tienen boca
+  if (soloOjos()) return;   // las caras de solo ojos no tienen boca
   float op = r.boca;
   float x = r.bx, y = r.by;
   if (laReac == NINGUNA && elPaquete == MINIMALISTA && laBase == CANTA && rockeroAhora > 0.5f && op < 0.45f) {   // roquero: se muerde el labio
@@ -305,7 +249,7 @@ static void boca(const Rostro &r) {
   if (op < 0.05f) return;
   float w = (26 + 14 * op) * r.bAncho, h = 16 + 62 * op;
   // minimalista: la misma boca de Lumi azul (como Copi), que se ve mejor que la boquita blanca
-  figura(x - w / 2, y - h / 2, x + w / 2, y + h / 2, claro() ? solido(elPaquete == ANIME ? TINTA : CAFE) : tonoP(r, y - h / 2, y + h / 2, 12),
+  figura(x - w / 2, y - h / 2, x + w / 2, y + h / 2, tonoP(r, y - h / 2, y + h / 2, 12),
          [=](float px, float py) { return dCaja(px, py, x, y, w / 2, h / 2, fminf(w, h) / 2); });
 }
 
@@ -2018,7 +1962,7 @@ void cuadro(float t, float dt, const Entradas &e) {
   dib::zoom = 1;                                                  // lo de arriba (los grados) va sin zoom, pegado al borde
   if (t < gradosHasta) {                                          // "24°" arriba, entra y sale suave
     float a = fminf(lim((t - gradosDesde) / 0.3f, 0, 1), lim((gradosHasta - t) / 0.4f, 0, 1));
-    const Col c = claro() ? TINTA : BLANCO;
+    const Col c = BLANCO;
     char b[16];
     if (gradosM) {                                                 // "2.600 m"
       if (gradosN >= 1000) snprintf(b, sizeof b, "%d.%03d m", gradosN / 1000, gradosN % 1000); else snprintf(b, sizeof b, "%d m", gradosN);
