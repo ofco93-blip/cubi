@@ -821,22 +821,15 @@ static void microLinea(float x, float y, float ang, float e, float alfa) {
   pieza(m, -14, -14, 14, 14, solido(BL, 0.7f * alfa), [=](float a, float b) { return fmaxf(fminf(fabsf(a) - 1.2f, fabsf(b) - 1.2f), dCirculo(a, b, 0, 0, 13)); });
   pieza(m, 12, -10, 66, 10, solido(BL, alfa, 6), [=](float a, float b) { return fabsf(dCapsula2(a, b, 17, 0, 7, 60, 0, 4.5f)) - 2.4f; });
 }
-// manito de piano vista desde arriba: palma y cuatro dedos, uno por tecla (k0 = la tecla del primer dedo); el pulgar
-// va hacia adentro. toca = bits de los dedos que bajan a tocar
-static void manoPiano(float x0, float kx, int k0, float yT, int toca, float g, bool izq) {
-  const float fx0 = x0 + (k0 + 0.5f) * kx, pcx = fx0 + 1.5f * kx, pcy = yT - 44;
-  auto d = [=](float px, float py) {
-    float p = dElipse(px, py, pcx, pcy, 1.3f * kx, 13);
-    for (int i = 0; i < 4; i++) {
-      const float fx = fx0 + i * kx, punta = yT + 4 + ((toca >> i) & 1 ? 12 * g : 0) - (i == 0 || i == 3 ? 5 : 0);
-      p = smin(p, dSegmento(px, py, fx, pcy, fx, punta, 4.5f), 3);
-    }
-    const float lado = izq ? 1 : -1;   // pulgar
-    return smin(p, dSegmento(px, py, pcx + lado * kx, pcy + 4, pcx + lado * 2.3f * kx, pcy + 16, 5.5f), 4);
-  };
-  const float bx0 = pcx - 2.6f * kx, bx1 = pcx + 2.6f * kx, by0 = pcy - 22, by1 = yT + 26;
-  figura(bx0, by0, bx1, by1, solido(NEG, 1), [=](float px, float py) { return d(px, py) - 4; });   // borde negro
-  figura(bx0, by0, bx1, by1, solido(BL, 1, 6), d);
+// dedos de piano: sin mano, solo las yemas (bolitas blancas) sobre cuatro teclas seguidas desde k0; las que tocan
+// (bits de "toca") bajan a la tecla y brillan, las otras esperan arriba
+static void manoPiano(float x0, float kx, int k0, float yT, int toca, float g, bool) {
+  for (int i = 0; i < 4; i++) {
+    const bool baja = (toca >> i) & 1;
+    const float fx = x0 + (k0 + i + 0.5f) * kx, fy = yT - 16 + (baja ? 26 * g : 0) - (i == 0 || i == 3 ? 3 : 0);
+    figura(fx - 9, fy - 9, fx + 9, fy + 9, solido(NEG, 1), [=](float px, float py) { return dCirculo(px, py, fx, fy, 9); });   // borde negro
+    circulo(fx, fy, 6.5f, BL, 1, baja ? 6 + 10 * g : 4);
+  }
 }
 // tambor de línea (un cilindro visto un poco desde arriba); al golpearlo el parche destella
 static void tambor(float x, float y, float rx, float alto, float golpe, float alfa) {
@@ -850,7 +843,7 @@ static void tambor(float x, float y, float rx, float alto, float golpe, float al
   });
 }
 // batería de línea: bombo al centro que late con cada golpe, dos toms encima, redoblante a la izquierda y platillo a la
-// derecha; la manito izquierda va al redoblante (y al tom en los compases impares), la derecha al platillo y al otro tom
+// derecha; la baqueta izquierda va al redoblante (y al tom en los compases impares), la derecha al platillo y al otro tom
 static void bateria(int n, float g, float alfa) {
   const int k = n % 4;
   const bool izq = k % 2 == 0;
@@ -871,9 +864,9 @@ static void bateria(int n, float g, float alfa) {
     const bool activa = (lado < 0) == izq;
     const int b = activa ? blanco : lado < 0 ? 0 : 3;                             // la que no toca espera sobre lo suyo
     const float tx = bxs[b], tyy = bys[b] - 4 - (activa ? 34 * (1 - g) : 30);
-    const float hx = tx + lado * 52, hy = tyy - 32;                               // las manitos por fuera: no tapan los ojos
-    linea(tx, tyy, hx, hy, 2.6f, BL, alfa);
-    manoBlanca(hx, hy, lado < 0 ? PI - 0.6f : 0.6f, 0.75f, false, alfa);
+    const float hx = tx + lado * 52, hy = tyy - 32;                               // el mango por fuera: no tapa los ojos
+    linea(tx, tyy, hx, hy, 3, BL, alfa);                                           // baqueta sola, sin manito
+    circulo(tx, tyy, 5, BL, alfa, 6);
   }
 }
 
