@@ -47,6 +47,8 @@ void paquete(uint8_t p) {
   else dib::sinFondo();
 }
 static inline bool soloOjos() { return elPaquete >= OVALO || elPaquete == NOVA_S || elPaquete == KIRA_S; }
+// las de solo ojos bailan y tocan los instrumentos como el minimalista (los del Cubi azul van pegados a la boca)
+static inline bool comoMini() { return elPaquete == MINIMALISTA || soloOjos(); }
 static float elTamano = 1.2f;  // la cara más grande (con el acrílico encima se ve aún más): 1 = como antes
 void tamano(float z) { elTamano = lim(z, 1.f, 1.5f); }
 static Base laBase = REPOSO;
@@ -995,7 +997,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       float g = expf(-e.pulso * 6), k = powf(1 - e.pulso, 3);
       float vaiven = sinf((n + e.pulso) * PI);               // un golpe hacia cada lado
       float abre = 1;   // cuánto abre la boca este baile cuando hay voz (0 = no canta)
-      if (elPaquete == MINIMALISTA) bailaMini(r, e, g, vaiven, bl);
+      if (comoMini()) bailaMini(r, e, g, vaiven, bl);
       else switch (e.ritmo) {
         case R_URBANO:                                        // gorra, mirada tranquila, cabecea fuerte y rapea
           escalar(r, 0.92f, 0.86f - 0.06f * g); mover(r, 0, 26 + 12 * g); tapas(r, 0.38f);
@@ -1130,7 +1132,7 @@ static void extrasBase(float t, const Entradas &e, bool delante) {
   float u = t - baseDesde;
   if (laBase == ESCUCHA && elPaquete == MINIMALISTA) { if (delante) haloEscucha(u, e); return; }
   if (!delante && laBase != CANTA) return;
-  if (laBase == CANTA && elPaquete == MINIMALISTA) { if (delante) extrasMini(u, e); return; }
+  if (laBase == CANTA && comoMini()) { if (delante) extrasMini(u, e); return; }
   switch (laBase) {
     case ESCUCHA: {
       for (int i = 0; i < 3; i++) {      // ondas de sonido al lado
