@@ -945,11 +945,24 @@ static void extrasMini(float u, const Entradas &e) {
       break;
     }
     case R_PIANO: case R_CORAZON: {                     // teclas que tocan una melodía: la que suena se ilumina
-      static const uint8_t MEL[8] = {0, 2, 4, 5, 4, 2, 1, 3};
-      int t = MEL[nv % 8] + ((nv / 8) % 2) * 3;          // más notas por golpe en lo fuerte
-      for (int i = 0; i < 9; i++) {
-        float x = CX + (i - 4) * 34, y = H - 40, a = i == t ? 0.4f + 0.6f * gv : 0.3f;
-        figura(x - 15, y - 26, x + 15, y + 26, solido(BL, a, i == t ? 8 : 0), [=](float px, float py) { return dCaja(px, py, x, y, 13, 24, 13); });
+      // teclado de línea con teclas negras; las dos manitos se turnan, cada una en su mitad, y la tecla que suena se ilumina
+      static const uint8_t MEL[8] = {0, 2, 4, 3, 1, 4, 2, 3};
+      const float kx = 30, x0 = CX - 5 * kx, yT = H - 72, yB = H - 14, yc = (yT + yB) / 2;
+      const int mano = nv % 2, tecla = mano * 5 + MEL[(nv / 2 + mano * 3) % 8];
+      const float tx = x0 + (tecla + 0.5f) * kx;
+      figura(tx - kx / 2, yT, tx + kx / 2, yB, solido(BL, 0.25f + 0.55f * gv, 10),
+             [=](float px, float py) { return dCaja(px, py, tx, yc, kx / 2 - 3, (yB - yT) / 2 - 3, 4); });
+      figura(x0 - 4, yT - 4, x0 + 10 * kx + 4, yB + 4, solido(BL, 1, 6),
+             [=](float px, float py) { return fabsf(dCaja(px, py, CX, yc, 5 * kx, (yB - yT) / 2, 8)) - 2.4f; });
+      for (int k = 1; k < 10; k++) linea(x0 + k * kx, yT + 2, x0 + k * kx, yB - 2, 1.4f, BL, 0.8f);
+      for (int k = 0; k < 9; k++) {
+        if (k % 7 == 2 || k % 7 == 6) continue;           // entre mi-fa y si-do no hay tecla negra
+        const float bx = x0 + (k + 1) * kx;
+        figura(bx - 9, yT, bx + 9, yT + 34, solido(BL, 0.95f), [=](float px, float py) { return dCaja(px, py, bx, yT + 16, 7, 17, 2.5f); });
+      }
+      for (int m = 0; m < 2; m++) {                       // la que toca baja con el golpe, la otra espera arriba
+        const float hx = m == mano ? tx : x0 + (m * 5 + 2.5f) * kx, hy = yT - 26 + (m == mano ? 16 * gv : -4);
+        manoBlanca(hx, hy, PI / 2 + (m ? 0.15f : -0.15f), 0.75f, true);
       }
       break;
     }
