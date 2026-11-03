@@ -821,24 +821,58 @@ static void microLinea(float x, float y, float ang, float e, float alfa) {
   pieza(m, -14, -14, 14, 14, solido(BL, 0.7f * alfa), [=](float a, float b) { return fmaxf(fminf(fabsf(a) - 1.2f, fabsf(b) - 1.2f), dCirculo(a, b, 0, 0, 13)); });
   pieza(m, 12, -10, 66, 10, solido(BL, alfa, 6), [=](float a, float b) { return fabsf(dCapsula2(a, b, 17, 0, 7, 60, 0, 4.5f)) - 2.4f; });
 }
-// batería de línea: redoblante a la izquierda, platillo a la derecha y dos manitos con baquetas que golpean por turnos
-static void bateria(int n, float g, float alfa) {
-  bool izq = n % 2 == 0;
-  const float sx = CX - 112, sy = H - 98;
-  figura(sx - 40, sy - 14, sx + 40, sy + 42, solido(BL, alfa, 6), [=](float px, float py) {
-    float arriba = fabsf(dElipse(px, py, sx, sy, 34, 9)) - 2.4f;
-    float lados = fmaxf(fabsf(fabsf(px - sx) - 34) - 2.4f, fabsf(py - sy - 14) - 14);
-    float abajo = fmaxf(fabsf(dElipse(px, py, sx, sy + 28, 34, 9)) - 2.4f, sy + 28 - py);
+// manito de piano vista desde arriba: palma y cuatro dedos, uno por tecla (k0 = la tecla del primer dedo); el pulgar
+// va hacia adentro. toca = bits de los dedos que bajan a tocar
+static void manoPiano(float x0, float kx, int k0, float yT, int toca, float g, bool izq) {
+  const float fx0 = x0 + (k0 + 0.5f) * kx, pcx = fx0 + 1.5f * kx, pcy = yT - 44;
+  auto d = [=](float px, float py) {
+    float p = dElipse(px, py, pcx, pcy, 1.3f * kx, 13);
+    for (int i = 0; i < 4; i++) {
+      const float fx = fx0 + i * kx, punta = yT + 4 + ((toca >> i) & 1 ? 12 * g : 0) - (i == 0 || i == 3 ? 5 : 0);
+      p = smin(p, dSegmento(px, py, fx, pcy, fx, punta, 4.5f), 3);
+    }
+    const float lado = izq ? 1 : -1;   // pulgar
+    return smin(p, dSegmento(px, py, pcx + lado * kx, pcy + 4, pcx + lado * 2.3f * kx, pcy + 16, 5.5f), 4);
+  };
+  const float bx0 = pcx - 2.6f * kx, bx1 = pcx + 2.6f * kx, by0 = pcy - 22, by1 = yT + 26;
+  figura(bx0, by0, bx1, by1, solido(NEG, 1), [=](float px, float py) { return d(px, py) - 4; });   // borde negro
+  figura(bx0, by0, bx1, by1, solido(BL, 1, 6), d);
+}
+// tambor de línea (un cilindro visto un poco desde arriba); al golpearlo el parche destella
+static void tambor(float x, float y, float rx, float alto, float golpe, float alfa) {
+  const float ry = rx * 0.27f;
+  if (golpe > 0.02f) figura(x - rx, y - ry, x + rx, y + ry, solido(BL, 0.5f * golpe * alfa, 12), [=](float px, float py) { return dElipse(px, py, x, y, rx, ry); });
+  figura(x - rx - 4, y - ry - 4, x + rx + 4, y + alto + ry + 4, solido(BL, alfa, 6), [=](float px, float py) {
+    float arriba = fabsf(dElipse(px, py, x, y, rx, ry)) - 2.4f;
+    float lados = fmaxf(fabsf(fabsf(px - x) - rx) - 2.4f, fabsf(py - y - alto / 2) - alto / 2);
+    float abajo = fmaxf(fabsf(dElipse(px, py, x, y + alto, rx, ry)) - 2.4f, y + alto - py);
     return fminf(arriba, fminf(lados, abajo));
   });
-  const float cx = CX + 112, cy = H - 104, inc = izq ? 0 : 0.14f * g;          // platillo que se mece al golpearlo
-  linea(cx - 42, cy + 5 - 42 * inc, cx + 42, cy - 5 + 42 * inc, 3, BL, alfa, 6);
-  linea(cx, cy, cx, H - 14, 2, BL, 0.6f * alfa);
+}
+// batería de línea: bombo al centro que late con cada golpe, dos toms encima, redoblante a la izquierda y platillo a la
+// derecha; la manito izquierda va al redoblante (y al tom en los compases impares), la derecha al platillo y al otro tom
+static void bateria(int n, float g, float alfa) {
+  const int k = n % 4;
+  const bool izq = k % 2 == 0;
+  const float R = 48 + 5 * g;
+  anillo(CX, H - 18, R, 2.6f, alfa);
+  anillo(CX, H - 18, R * 0.6f, 1.6f, 0.45f * alfa);
+  const float sx = CX - 136, sy = H - 72, t1x = CX - 64, t2x = CX + 64, ty = H - 104, cx = CX + 142, cy = H - 126;
+  const int blanco = k == 0 ? 0 : k == 1 ? 3 : k == 3 ? 2 : (n / 4) % 2 ? 1 : 0;   // 0 redoblante, 1 y 2 toms, 3 platillo
+  linea(sx, sy + 30, sx, H, 2, BL, 0.6f * alfa);
+  tambor(sx, sy, 34, 22, blanco == 0 ? g : 0, alfa);
+  tambor(t1x, ty, 30, 18, blanco == 1 ? g : 0, alfa);
+  tambor(t2x, ty, 30, 18, blanco == 2 ? g : 0, alfa);
+  const float inc = blanco == 3 ? 0.2f * g : 0;                                   // el platillo se mece al golpearlo
+  linea(cx, cy, cx, H, 2, BL, 0.6f * alfa);
+  linea(cx - 44, cy + 6 - 44 * inc, cx + 44, cy - 6 + 44 * inc, 3, BL, alfa, blanco == 3 ? 6 + 10 * g : 6);
+  const float bxs[4] = {sx + 6, t1x, t2x, cx - 22}, bys[4] = {sy, ty, ty, cy + 3};
   for (int lado = -1; lado <= 1; lado += 2) {
-    float sube = (lado < 0) == izq ? 1 - g : 0.75f;
-    float tx = lado < 0 ? sx + 6 : cx - 14, ty = (lado < 0 ? sy - 4 : cy - 4) - 20 * sube;
-    float hx = tx + lado * 40, hy = ty - 14;                                    // las manitos por fuera: no tapan los ojos
-    linea(tx, ty, hx, hy, 2.6f, BL, alfa);
+    const bool activa = (lado < 0) == izq;
+    const int b = activa ? blanco : lado < 0 ? 0 : 3;                             // la que no toca espera sobre lo suyo
+    const float tx = bxs[b], tyy = bys[b] - 4 - (activa ? 34 * (1 - g) : 30);
+    const float hx = tx + lado * 52, hy = tyy - 32;                               // las manitos por fuera: no tapan los ojos
+    linea(tx, tyy, hx, hy, 2.6f, BL, alfa);
     manoBlanca(hx, hy, lado < 0 ? PI - 0.6f : 0.6f, 0.75f, false, alfa);
   }
 }
@@ -945,13 +979,20 @@ static void extrasMini(float u, const Entradas &e) {
       break;
     }
     case R_PIANO: case R_CORAZON: {                     // teclas que tocan una melodía: la que suena se ilumina
-      // teclado de línea con teclas negras; las dos manitos se turnan, cada una en su mitad, y la tecla que suena se ilumina
-      static const uint8_t MEL[8] = {0, 2, 4, 3, 1, 4, 2, 3};
+      // teclado de línea con teclas negras y dos manos con cuatro dedos cada una: la derecha la melodía, a veces con dos
+      // dedos; la izquierda acordes de dos dedos cada dos toques. Las teclas que suenan se iluminan
+      static const uint8_t MEL[8] = {0, 2, 3, 1, 2, 3, 1, 0};
       const float kx = 30, x0 = CX - 5 * kx, yT = H - 72, yB = H - 14, yc = (yT + yB) / 2;
-      const int mano = nv % 2, tecla = mano * 5 + MEL[(nv / 2 + mano * 3) % 8];
-      const float tx = x0 + (tecla + 0.5f) * kx;
-      figura(tx - kx / 2, yT, tx + kx / 2, yB, solido(BL, 0.25f + 0.55f * gv, 10),
-             [=](float px, float py) { return dCaja(px, py, tx, yc, kx / 2 - 3, (yB - yT) / 2 - 3, 4); });
+      const int der = (1 << MEL[nv % 8]) | (veces > 1 && nv % 4 == 0 ? 1 << ((MEL[nv % 8] + 2) % 4) : 0);
+      const int izqT = (nv / 4) % 2 ? 0b1010 : 0b0101;
+      const float gI = nv % 2 == 0 ? gv : 0;
+      for (int i = 0; i < 4; i++) for (int m = 0; m < 2; m++) {
+        if (!(((m ? der : izqT) >> i) & 1)) continue;
+        const float tx = x0 + ((m ? 6 : 0) + i + 0.5f) * kx, a = (m ? gv : gI);
+        if (a < 0.02f) continue;
+        figura(tx - kx / 2, yT, tx + kx / 2, yB, solido(BL, 0.2f + 0.6f * a, 10),
+               [=](float px, float py) { return dCaja(px, py, tx, yc, kx / 2 - 3, (yB - yT) / 2 - 3, 4); });
+      }
       figura(x0 - 4, yT - 4, x0 + 10 * kx + 4, yB + 4, solido(BL, 1, 6),
              [=](float px, float py) { return fabsf(dCaja(px, py, CX, yc, 5 * kx, (yB - yT) / 2, 8)) - 2.4f; });
       for (int k = 1; k < 10; k++) linea(x0 + k * kx, yT + 2, x0 + k * kx, yB - 2, 1.4f, BL, 0.8f);
@@ -960,10 +1001,8 @@ static void extrasMini(float u, const Entradas &e) {
         const float bx = x0 + (k + 1) * kx;
         figura(bx - 9, yT, bx + 9, yT + 34, solido(BL, 0.95f), [=](float px, float py) { return dCaja(px, py, bx, yT + 16, 7, 17, 2.5f); });
       }
-      for (int m = 0; m < 2; m++) {                       // la que toca baja con el golpe, la otra espera arriba
-        const float hx = m == mano ? tx : x0 + (m * 5 + 2.5f) * kx, hy = yT - 26 + (m == mano ? 16 * gv : -4);
-        manoBlanca(hx, hy, PI / 2 + (m ? 0.15f : -0.15f), 0.75f, true);
-      }
+      manoPiano(x0, kx, 0, yT, izqT, gI, true);
+      manoPiano(x0, kx, 6, yT, der, gv, false);
       break;
     }
     case R_KPOP: {                                      // micrófono de línea frente a la boquita, con la manito
