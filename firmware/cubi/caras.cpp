@@ -1080,14 +1080,11 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       {   // nota sostenida (un "aaah" con la misma vocal): emocion crece con lo que dura, y entre más dura más drama
         static float tE = 0; const float dE = lim(t - tE, 0, 0.1f); tE = t;
         emoAhora += ((e.canta ? e.emocion : 0) - emoAhora) * lim(dE * 6, 0, 1);
-        static bool alto = false;
         if (emoAhora > 0.3f) { feliz(r, 1); mirar(r, 0, -0.35f - 0.3f * emoAhora); mover(r, 0, -8 - 14 * emoAhora); }   // ojos cerrados, al cielo
         if (emoAhora > 0.6f) {                                // ya es largo: tiembla de emoción (vibrato) y crece
           const float v = (emoAhora - 0.6f) * 2.5f;
           mover(r, 3 * v * sinf(t * 38), 0); escalar(r, 1 + 0.08f * v, 1 + 0.08f * v);
         }
-        if (emoAhora > 0.8f) alto = true;
-        if (alto && e.emocion < 0.05f && emoAhora < 0.3f) { alto = false; reaccion(GUINO); }   // terminó la nota: guiño
       }
       vel = 16;
       break;

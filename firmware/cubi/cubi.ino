@@ -893,9 +893,10 @@ void imuUpdate(uint32_t now) {
     // frenazo: medio segundo frenando duro, y no más de uno cada 20 s (el vidrio rajado cansa)
     static uint32_t ultimoFrenazo = 0;
     if (frenaDesde && now - frenaDesde > 300 && (!ultimoFrenazo || now - ultimoFrenazo > 20000)) { reac(caras::FRENAZO); cdEvento = now + 4500; ultimoEvento = ultimoFrenazo = now; }
-    else if (aceleraDesde && now - aceleraDesde > 300) {  // arrancar después de un buen rato quieto: entra "a toda velocidad"
+    // cantando, solo frenazos y curvas: el bajo de la música sacude el carro y armaba baches y acelerones de la nada
+    else if (aceleraDesde && now - aceleraDesde > 300 && !hayMusica) {  // arrancar después de un buen rato quieto: entra "a toda velocidad"
       reac(now - ultimoEvento > 60000 ? caras::ARRANQUE : caras::ACELERON); cdEvento = now + 4000; ultimoEvento = now;
-    } else if (fabsf(vert) > fmaxf(UMBRAL_BACHE, vibra * 5) && now - ultimoBache > 8000) {   // también con música
+    } else if (fabsf(vert) > fmaxf(UMBRAL_BACHE, vibra * 5) && now - ultimoBache > 8000 && !hayMusica) {
       reac(caras::BACHE); cdEvento = now + 3000; ultimoEvento = ultimoBache = now;
     }
   }
@@ -909,7 +910,7 @@ void imuUpdate(uint32_t now) {
   } else curvaDesde = 0;
   if (fabsf(yaw) > GIRO_MAREO) {
     if (!mareoDesde) mareoDesde = now;
-    if (now - mareoDesde > 1000 && modo == NORMAL && !asis && caras::reaccionActual() != caras::MAREO) reac(caras::MAREO);
+    if (now - mareoDesde > 1000 && modo == NORMAL && !asis && !hayMusica && caras::reaccionActual() != caras::MAREO) reac(caras::MAREO);
   } else mareoDesde = 0;
 #if DEBUG_IMU
   static uint32_t dbg; if (now - dbg > 300) { dbg = now; Serial.printf("lon=%.2f vert=%.2f giro=%.0f\n", lon, vert, yaw); }
@@ -976,13 +977,13 @@ void energiaUpdate(uint32_t now) {
   t = now;
   static int8_t usbAntes = -1;  // al conectarlo "come" energía feliz; al desconectarlo se sorprende (idea de Lumo)
   bool usb = pmu.isVbusIn();
-  if (usbAntes >= 0 && usb != usbAntes && modo == NORMAL && !asis) { despertar(now); reac(usb ? caras::AMOR : caras::SORPRESA); }
+  if (usbAntes >= 0 && usb != usbAntes && modo == NORMAL && !asis && !hayMusica) { despertar(now); reac(usb ? caras::AMOR : caras::SORPRESA); }
   usbAntes = usb;
   static bool usbVisto = false;  // si lo prendieron con batería sin USB (pruebas en la oficina), no se apaga por eso
   if (usb) usbVisto = true;
   if (usb || !pmu.isBatteryConnect()) { sinUsb = 0; return; }
   static uint32_t avisoBat = 0;
-  if (pmu.getBatteryPercent() < 15 && (!avisoBat || now - avisoBat > 600000)) { avisoBat = now; reac(caras::BATERIA); }
+  if (pmu.getBatteryPercent() < 15 && !hayMusica && (!avisoBat || now - avisoBat > 600000)) { avisoBat = now; reac(caras::BATERIA); }
   if (!sinUsb) sinUsb = now;
   bool vacia = pmu.getBatteryPercent() < 5;
   if (vacia || (apagarConCarro && usbVisto && now - sinUsb > APAGAR_SIN_USB_SEG * 1000UL)) {   // se apagó el carro: se despide y se apaga
@@ -1072,7 +1073,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
       despertar(millis());
       if (r == caras::NINGUNA) r = caras::CURIOSA;  // nublado y templado: se asoma a mirar
       reac(r); caras::mostrarGrados(t, caras::duracion(r));
-    } else if ((r != antes || r == caras::LLUVIA) && r != caras::NINGUNA && modo == NORMAL && !asis) reac(r);   // mientras llueva, cada vez
+    } else if ((r != antes || r == caras::LLUVIA) && r != caras::NINGUNA && modo == NORMAL && !asis && !hayMusica) reac(r);   // mientras llueva, cada vez
     antes = r; climaT = t; climaE = e;
     return "ok";
   }
