@@ -522,8 +522,8 @@ void animar(uint32_t now) {
     // instrumentos, y por eso abría la boca en los solos.
     voz = false; emocion = 0;
     static uint32_t sostDesde = 0; static float anchoS = 0.5f, abreS = 0.8f;
-    if (bocaMic) {   // su propio micrófono: canta cuando oye voz, con la vocal que oye (a, e, i, o, u)
-      voz = aCanta; bIn = aBoca; aIn = aAncho;
+    if (bocaMic) {   // su propio micrófono dice cuándo hay voz; la boca va como la de Copi (sin lip sync): abre y cierra parejo
+      voz = aCanta; bIn = 0.3f + 0.4f * fabsf(sinf(now * 0.0053f)); aIn = 0.5f;
       // nota sostenida: la misma vocal con voz fuerte. Desde 0,6 s sube la emoción hasta 1 a los 2,4 s (ojos cerrados,
       // las dos manos en el micrófono, y si sigue, tiembla de emoción); al soltarla, un guiño
       bool misma = fabsf(aAncho - anchoS) < 0.18f && fabsf(aAbre - abreS) < 0.18f;
@@ -881,9 +881,9 @@ void imuUpdate(uint32_t now) {
   const float lonN = lon - lonBase;
   const float yawG = dot(gyr, g);
   const float inclina = sqrtf(fmaxf(0.f, dot(gyr, gyr) - yawG * yawG));   // giro que no es alrededor de la vertical
-  if (inclina > 25) manoseado = now;
+  if (inclina > 140) manoseado = now;                      // con la mano de verdad (la vibración del carro pasa de 25 °/s)
   const bool calmo = now - manoseado > 8000;
-  frenaDesde = calmo && lonN < -umbralFreno ? (frenaDesde ? frenaDesde : now) : 0;
+  if (calmo && lonN < -umbralFreno) { if (!frenaDesde) frenaDesde = now; } else if (!calmo || lonN > -umbralFreno * 0.75f) frenaDesde = 0;
   aceleraDesde = calmo && lonN > UMBRAL_ACEL ? (aceleraDesde ? aceleraDesde : now) : 0;
   // mientras suena su parlante (y un ratico después) la caja vibra: no cuenta como movimiento
   static uint32_t parlanteHasta = 0;
@@ -899,12 +899,12 @@ void imuUpdate(uint32_t now) {
       reac(caras::BACHE); cdEvento = now + 3000; ultimoEvento = ultimoBache = now;
     }
   }
-  // curva larga (sin música): mira y se inclina hacia la curva
+  // curva (también con música, como Lumi): 0,6 s girando y mira y se inclina hacia la curva
   static uint32_t curvaDesde = 0;
   if (fabsf(yaw) > 20 && fabsf(yaw) < GIRO_MAREO) {
     if (!curvaDesde) curvaDesde = now;
-    if (now - curvaDesde > 1200 && now > cdEvento && estilo < BALADA && !asis && modo == NORMAL && caras::reaccionActual() == caras::NINGUNA) {
-      reac(yaw > 0 ? caras::GIRO_IZQ : caras::GIRO_DER); cdEvento = now + 6000;
+    if (now - curvaDesde > 600 && now > cdEvento && !asis && modo == NORMAL && caras::reaccionActual() == caras::NINGUNA) {
+      reac(yaw > 0 ? caras::GIRO_IZQ : caras::GIRO_DER); cdEvento = now + 4000;
     }
   } else curvaDesde = 0;
   if (fabsf(yaw) > GIRO_MAREO) {
