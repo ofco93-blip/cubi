@@ -34,7 +34,7 @@
 #define GIRO_SIGNO      1           // si en curva mira al lado contrario, pon -1
 #define UMBRAL_FRENO    0.25f       // g sostenidos medio segundo para estrellarse contra el vidrio (se ajusta en la app)
 #define UMBRAL_ACEL     0.25f
-#define UMBRAL_BACHE    0.35f
+#define UMBRAL_BACHE    0.4f        // golpe vertical (Lumi: 3,9 m/s²)
 #define GIRO_MAREO      70.0f
 #define MINUTOS_SUENO   5
 #define MINUTOS_APAGAR  10   // sin movimiento, sonido ni toque: apaga la pantalla (cuida el OLED)

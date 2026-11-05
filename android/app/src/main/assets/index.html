@@ -192,8 +192,9 @@ section[hidden] { display: none; }
     <div class="row"><span>Reaccionar a la música</span><label class="sw"><input type="checkbox" id="mus"><i></i></label></div>
     <div class="row"><span>Esperar a que el celular reproduzca</span><label class="sw"><input type="checkbox" id="mc"><i></i></label></div>
     <p class="note">Prendido: con Spotify (o tu app de música) en play baila de una, también por Android Auto, y usa la letra de la canción; si el celular no reproduce nada, baila con lo que oiga (radio, la música de la oficina); con un video del celular (reels, Facebook) no baila. Apagado: se guía solo por lo que oye su micrófono.</p>
-    <div hidden><label class="sl"><div class="row"><span>Empieza a cantar con</span><span id="vUv"></span></div>
-      <input type="range" id="uv" min="5" max="95" step="1"></label></div>
+    <label class="sl"><div class="row"><span>Sensibilidad del micrófono (boca)</span><span id="vUv"></span></div>
+      <input type="range" id="uv" min="5" max="95" step="1"></label>
+    <p class="note">Más alto: abre la boca con la voz más bajita. Más bajo: solo con la voz fuerte (no se le mete el ruido).</p>
     <label class="sl"><div class="row"><span>Qué tanto abre la boca</span><span id="vGb"></span></div>
       <input type="range" id="gb" min="30" max="300" step="5"></label>
     <div hidden><label class="sl"><div class="row"><span>Sensibilidad a la música</span><span id="vSk"></span></div>
@@ -352,7 +353,7 @@ function pintarEstado(j) {
     if (j.lab !== undefined) $('lab').checked = !!j.lab;
     if (j.ojos !== undefined && document.activeElement !== $('ojos')) $('ojos').value = '#' + j.ojos.toString(16).padStart(6, '0');
     $('bri').value = j.bri; $('vol').value = j.vol; $('son').checked = !!j.son; $('mus').checked = !!j.mus; if (j.mc !== undefined) $('mc').checked = !!j.mc;
-    $('uv').value = Math.round(j.uv * 100); $('gb').value = Math.round(j.gb * 100);
+    $('uv').value = 100 - Math.round(j.uv * 100); $('gb').value = Math.round(j.gb * 100);
     $('sk').value = Math.round((8 - j.sk) / 6.7 * 100); $('mg').value = j.mg;
     if (j.fr) $('fr').value = Math.round(j.fr * 100);
     etiquetas();
@@ -391,7 +392,7 @@ async function audio() {
 // ---------- ajustes ----------
 function etiquetas() {
   $('vUv').textContent = $('uv').value + '%';
-  $('mUmbral').style.left = $('uv').value + '%';
+  $('mUmbral').style.left = (100 - $('uv').value) + '%';
   $('vGb').textContent = ($('gb').value / 100).toFixed(1) + '×';
   $('vSk').textContent = $('sk').value + '%';
   $('vMg').textContent = $('mg').value + ' de 7';
@@ -401,7 +402,7 @@ function etiquetas() {
   $('vVol').textContent = $('vol').value + '%';
 }
 document.querySelectorAll('input[type=range]').forEach(r => r.addEventListener('input', etiquetas));
-$('uv').onchange = e => mandar('/ajuste?uv=' + (e.target.value / 100));
+$('uv').onchange = e => mandar('/ajuste?uv=' + ((100 - e.target.value) / 100));
 $('gb').onchange = e => mandar('/ajuste?gb=' + (e.target.value / 100));
 $('sk').onchange = e => mandar('/ajuste?sk=' + (8 - e.target.value / 100 * 6.7).toFixed(2));
 $('mg').onchange = e => mandar('/ajuste?mg=' + e.target.value);

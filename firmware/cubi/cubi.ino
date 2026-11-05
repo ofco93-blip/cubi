@@ -207,7 +207,7 @@ extern bool cantando;  // lo que decidió animar(): está cantando
 // Voz y boca a partir de la FFT del bloque (vR ya tiene magnitudes). Corre en la tarea de audio.
 void analizarVoz(bool hay) {
   static float vMod = 0, vPrev = 0, vozS = 0, vMax = 60, vMin = 60, boca = 0, ancho = 0.5f, hAvg = 0;
-  static bool canta = false; static uint8_t sube = 0;
+  static bool canta = false;
   float eb = 0, ev = 0, eh = 0, cw = 0, lg = 0, ar = 0;
   for (int k = 2; k <= 6; k++) eb += vR[k] * vR[k];
   for (int k = 9; k <= 96; k++) { float m = vR[k], e = m * m; ev += e; cw += e * k; lg += logf(m + 1); ar += m; }
@@ -223,8 +223,8 @@ void analizarVoz(bool hay) {
   rs += (frac - rs) * 0.3f;
   base += (rs - base) * (rs < base ? 0.05f : 0.003f);  // baja rápido, sube en ~10 s: lo que suena sin voz
   float vozMus = hay && (estilo >= BALADA || celPlay) ? constrain((rs - base) / fmaxf(0.06f, base * 0.5f), 0.f, 1.f) * (0.5f + 0.5f * modN) : 0;
-  vozS += ((hay ? fmaxf((0.5f * fracN + 0.5f * tonN) * modN, vozMus) : 0) - vozS) * 0.25f;  // ~120 ms
-  if (!canta && vozS > umbralVoz) { if (++sube >= 2) canta = true; } else sube = 0;  // 64 ms seguidos para arrancar
+  vozS += ((hay ? fmaxf((0.5f * fracN + 0.5f * tonN) * modN, vozMus) : 0) - vozS) * 0.45f;  // ~50 ms: la boca no se demora
+  if (!canta && vozS > umbralVoz) canta = true;
   if (canta && vozS < umbralVoz * 0.7f) canta = false;
 
   // Vocal (como uLipSync, pero con formantes porque el español tiene 5 vocales claras): se busca F1 y F2 en el
@@ -819,6 +819,7 @@ V acc{ 0, 0, 1 }, gyr{ 0, 0, 0 }, gLP{ 0, 0, 1 };
 float lon = 0, vert = 0, yaw = 0;
 int8_t adelante = ADELANTE_SIGNO;  // se invierte desde la app si al frenar se pone feliz
 uint32_t cdEvento = 0, mareoDesde = 0, lastImu = 0;
+V izqAcum{ 0, 0, 0 }; float pesoIzq = 0, pesoGuardado = 0;   // la "izquierda" del carro aprendida en las curvas (segundos)
 float dot(V a, V b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 
 bool imuLeer() {
@@ -847,6 +848,7 @@ void despertar(uint32_t now) {
 }
 
 void imuUpdate(uint32_t now) {
+  static uint32_t manoseado = 0;
   if (now - lastImu < 10 || !imuLeer()) return;
   lastImu = now;
   float gmag = sqrtf(dot(gyr, gyr));
@@ -858,7 +860,27 @@ void imuUpdate(uint32_t now) {
   V hz{ d.x - v * g.x, d.y - v * g.y, d.z - v * g.z };
   V f{ -g.z * g.x, -g.z * g.y, 1 - g.z * g.z };
   float fn = sqrtf(dot(f, f));
-  float l = fn > 0.3f ? dot(hz, f) / fn * adelante : 0;
+  // adelante, como Lumi: en una curva la fuerza apunta hacia adentro; con eso se aprende la izquierda del carro y
+  // adelante = izquierda × arriba. Así no importa cómo esté puesto Cubi ni hacia dónde mire el sensor. Mientras no ha
+  // aprendido (los primeros segundos de curvas) supone que la pantalla mira hacia atrás del carro.
+  static V hzS{ 0, 0, 0 };
+  hzS.x += (hz.x - hzS.x) * 0.07f; hzS.y += (hz.y - hzS.y) * 0.07f; hzS.z += (hz.z - hzS.z) * 0.07f;   // ~0,15 s
+  const float giroR = dot(gyr, g);                       // + gira a la izquierda (°/s)
+  if (now - manoseado > 2000 && fabsf(giroR) > 11 && sqrtf(dot(hzS, hzS)) > 0.08f) {
+    const float s = giroR > 0 ? 0.01f : -0.01f;
+    izqAcum.x += hzS.x * s; izqAcum.y += hzS.y * s; izqAcum.z += hzS.z * s; pesoIzq += 0.01f;
+    if (pesoIzq > pesoGuardado * 2 + 3) {
+      pesoGuardado = pesoIzq;
+      prefs.putFloat("izx", izqAcum.x); prefs.putFloat("izy", izqAcum.y); prefs.putFloat("izz", izqAcum.z); prefs.putFloat("izp", pesoIzq);
+    }
+  }
+  float l = 0;
+  if (pesoIzq >= 3) {
+    const float pi = dot(izqAcum, g); V iz{ izqAcum.x - pi * g.x, izqAcum.y - pi * g.y, izqAcum.z - pi * g.z };
+    V ad{ iz.y * g.z - iz.z * g.y, iz.z * g.x - iz.x * g.z, iz.x * g.y - iz.y * g.x };   // izquierda × arriba
+    const float na = sqrtf(dot(ad, ad));
+    if (na > 0.05f) l = dot(hz, ad) / na;
+  } else if (fn > 0.3f) l = dot(hz, f) / fn * adelante;
   // la vibración (motor, carretera, su propio parlante) sube y baja muy rápido: se promedia ~0,4 s y se va;
   // un frenón de verdad dura más que eso
   lon += (l - lon) * 0.025f;
@@ -876,7 +898,6 @@ void imuUpdate(uint32_t now) {
   // Quieto en la mesa o recién acomodado no es arrancar ni frenar: lo que queda fijo (la gravedad todavía mal estimada
   // tras moverlo de sitio) se descuenta, y si lo inclinan con la mano (giro que no es de curva) se espera 8 s.
   static float lonBase = 0;
-  static uint32_t manoseado = 0;
   lonBase += (lon - lonBase) * 0.001f;                     // ~10 s
   const float lonN = lon - lonBase;
   const float yawG = dot(gyr, g);
@@ -892,11 +913,11 @@ void imuUpdate(uint32_t now) {
     static uint32_t ultimoEvento = 0;
     // frenazo: medio segundo frenando duro, y no más de uno cada 20 s (el vidrio rajado cansa)
     static uint32_t ultimoFrenazo = 0;
-    if (frenaDesde && now - frenaDesde > 300 && (!ultimoFrenazo || now - ultimoFrenazo > 20000)) { reac(caras::FRENAZO); cdEvento = now + 4500; ultimoEvento = ultimoFrenazo = now; }
-    // cantando, solo frenazos y curvas: el bajo de la música sacude el carro y armaba baches y acelerones de la nada
+    if (frenaDesde && now - frenaDesde > 300 && (!ultimoFrenazo || now - ultimoFrenazo > 8000)) { reac(caras::FRENAZO); cdEvento = now + 4500; ultimoEvento = ultimoFrenazo = now; }
+    // cantando, sin acelerones: con el bajo de la música salían de la nada
     else if (aceleraDesde && now - aceleraDesde > 300 && !hayMusica) {  // arrancar después de un buen rato quieto: entra "a toda velocidad"
       reac(now - ultimoEvento > 60000 ? caras::ARRANQUE : caras::ACELERON); cdEvento = now + 4000; ultimoEvento = now;
-    } else if (fabsf(vert) > fmaxf(UMBRAL_BACHE, vibra * 5) && now - ultimoBache > 8000 && !hayMusica) {
+    } else if (fabsf(v) > fmaxf(UMBRAL_BACHE, vibra * 5) && now - ultimoBache > 3000) {   // también con música
       reac(caras::BACHE); cdEvento = now + 3000; ultimoEvento = ultimoBache = now;
     }
   }
@@ -1104,7 +1125,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
       ",\"estilo\":\"" + EST_NOM[estilo] + "\",\"bpm\":" + int(aBpm) + ",\"bat\":" + bat + ",\"usb\":" + (pmuOk && pmu.isVbusIn() ? 1 : 0) +
       ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"mc\":" + musicaCel + ",\"tam\":" + tamCara + ",\"carro\":" + apagarConCarro + ",\"lab\":" + labios + ",\"bm\":" + bocaMic + ",\"ojos\":" + colorOjos +
       ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
-      ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"fw\":" + VERSION_FW +
+      ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"curvas\":" + int(pesoIzq) + ",\"fw\":" + VERSION_FW +
       ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + ",\"paq\":" + prefs.getUChar("paq", 0) + "}";  // cuadros por segundo del último cuadro
   }
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
@@ -1267,8 +1288,9 @@ void setup() {
   caras::paquete(prefs.getUChar("paq", caras::CUBI_AZUL));
   umbralVoz = prefs.getFloat("uv", UMBRAL_VOZ); ganBoca = prefs.getFloat("gb", GANANCIA_BOCA);
   sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = UMBRAL_FRENO;
+  izqAcum = { prefs.getFloat("izx", 0), prefs.getFloat("izy", 0), prefs.getFloat("izz", 0) }; pesoGuardado = pesoIzq = prefs.getFloat("izp", 0);
   // la app ya no tiene estos ajustes de prueba: vuelven a los de fábrica (la boca, el brillo y el volumen sí se guardan)
-  umbralVoz = UMBRAL_VOZ; sensK = SONIDO_K; micGan = GANANCIA_MIC;
+  sensK = SONIDO_K; micGan = GANANCIA_MIC;
 
   // Reset de pantalla y táctil por el expansor TCA9554 (pines 0..2), misma secuencia que el firmware de fábrica V2.
   // Con pulsos cortos (20 ms) el panel puede quedar trabado tras regrabar: ver github.com/waveshareteam/ESP32-S3-Touch-AMOLED-1.8/issues/12
