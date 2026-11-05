@@ -1094,7 +1094,19 @@ String atender(const String &ruta, const Params &p, int &cod) {
       despertar(millis());
       if (r == caras::NINGUNA) r = caras::CURIOSA;  // nublado y templado: se asoma a mirar
       reac(r); caras::mostrarGrados(t, caras::duracion(r));
-    } else if ((r != antes || r == caras::LLUVIA) && r != caras::NINGUNA && modo == NORMAL && !asis && !hayMusica) reac(r);   // mientras llueva, cada vez
+    } else {
+      // solito: si empezó a llover o cambió el cielo, o la temperatura subió o bajó 3 grados desde la última vez que
+      // reaccionó, hace la animación y muestra los grados (así se entiende por qué, también con música)
+      static int tRef = -100;
+      caras::Reac q = caras::NINGUNA;
+      if ((r != antes || r == caras::LLUVIA) && r != caras::NINGUNA) q = r;   // mientras llueva, cada vez
+      else if (tRef > -100 && t - tRef >= 3) q = caras::CALOR;
+      else if (tRef > -100 && tRef - t >= 3) q = caras::FRIO;
+      if (tRef == -100) tRef = t;
+      if (q != caras::NINGUNA && modo == NORMAL && !asis && caras::reaccionActual() == caras::NINGUNA) {
+        despertar(millis()); reac(q); caras::mostrarGrados(t, caras::duracion(q)); tRef = t;
+      }
+    }
     antes = r; climaT = t; climaE = e;
     return "ok";
   }
