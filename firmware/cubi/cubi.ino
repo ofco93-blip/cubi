@@ -523,7 +523,9 @@ void animar(uint32_t now) {
     voz = false; emocion = 0;
     static uint32_t sostDesde = 0; static float anchoS = 0.5f, abreS = 0.8f;
     if (bocaMic) {   // su propio micrófono dice cuándo hay voz; la boca va como la de Copi (sin lip sync): abre y cierra parejo
-      voz = aCanta; bIn = 0.3f + 0.4f * fabsf(sinf(now * 0.0053f)); aIn = 0.5f;
+      static uint32_t vozHasta = 0;
+      if (aCanta) vozHasta = now + 400;   // el detector parpadea entre sílabas: sin esto la boca se cerraba de golpe
+      voz = now < vozHasta; bIn = 0.3f + 0.4f * fabsf(sinf(now * 0.0053f)); aIn = 0.5f;
       // nota sostenida: la misma vocal con voz fuerte. Desde 0,6 s sube la emoción hasta 1 a los 2,4 s (ojos cerrados,
       // las dos manos en el micrófono, y si sigue, tiembla de emoción); al soltarla, un guiño
       bool misma = fabsf(aAncho - anchoS) < 0.18f && fabsf(aAbre - abreS) < 0.18f;
@@ -822,7 +824,7 @@ uint32_t cdEvento = 0, mareoDesde = 0, lastImu = 0;
 V izqAcum{ 0, 0, 0 }; float pesoIzq = 0, pesoGuardado = 0;   // la "izquierda" del carro aprendida en las curvas (segundos)
 float dot(V a, V b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
 
-bool imuLeer() {
+bool imuLeer(V &acc, V &gyr) {
   uint8_t b[12];
   if (!imuAddr || !i2cR(imuAddr, 0x35, b, 12)) return false;
   int16_t v[6];
@@ -838,7 +840,7 @@ void imuInit() {
   i2cW(imuAddr, 0x02, 0x40); i2cW(imuAddr, 0x03, 0x15); i2cW(imuAddr, 0x04, 0x55); i2cW(imuAddr, 0x08, 0x03);
   delay(50);
   V s{ 0, 0, 0 };
-  for (int i = 0; i < 50; i++) { imuLeer(); s.x += acc.x; s.y += acc.y; s.z += acc.z; delay(5); }
+  for (int i = 0; i < 50; i++) { imuLeer(acc, gyr); s.x += acc.x; s.y += acc.y; s.z += acc.z; delay(5); }
   gLP = { s.x / 50, s.y / 50, s.z / 50 };
 }
 
@@ -847,10 +849,25 @@ void despertar(uint32_t now) {
   if (emoBase == SUENO) { emoBase = NEUTRAL; setEmo(SORPRESA, 900); }
 }
 
-void imuUpdate(uint32_t now) {
+// El sensor se lee a 100 Hz en su propia tarea: el loop tarda ~65 ms dibujando cada cuadro, y a ese ritmo (15 Hz) se
+// perdían los baches y los filtros (pensados para 100 Hz) aplastaban los frenones. El loop procesa las muestras en orden.
+struct MuestraImu { V a, w; uint32_t t; };
+QueueHandle_t colaImu = nullptr;
+void tareaImu(void *) {
+  for (;;) {
+    MuestraImu m;
+    if (!otaTotal && imuLeer(m.a, m.w)) { m.t = millis(); xQueueSend(colaImu, &m, 0); }
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+}
+void imuPaso(uint32_t now);
+void imuUpdate(uint32_t) {
+  MuestraImu m;
+  while (colaImu && xQueueReceive(colaImu, &m, 0)) { acc = m.a; gyr = m.w; lastImu = m.t; imuPaso(m.t); }
+}
+
+void imuPaso(uint32_t now) {
   static uint32_t manoseado = 0;
-  if (now - lastImu < 10 || !imuLeer()) return;
-  lastImu = now;
   float gmag = sqrtf(dot(gyr, gyr));
   // ponytail: gravedad por filtro lento (~8 s); en aceleraciones muy largas se "come" la señal. Fusión completa si hace falta.
   if (gmag < 20) { gLP.x += (acc.x - gLP.x) * 0.0012f; gLP.y += (acc.y - gLP.y) * 0.0012f; gLP.z += (acc.z - gLP.z) * 0.0012f; }
@@ -1330,6 +1347,7 @@ void setup() {
   caras::iniciar(esp_random());
 
   imuInit();
+  if (imuAddr) { colaImu = xQueueCreate(40, sizeof(MuestraImu)); xTaskCreatePinnedToCore(tareaImu, "imu", 3072, nullptr, 2, nullptr, 1); }
   lastMotion = millis();
   audioInit();
   sonar(S_ARRANQUE);
