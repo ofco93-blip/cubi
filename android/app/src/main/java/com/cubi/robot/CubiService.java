@@ -1538,8 +1538,8 @@ public class CubiService extends Service {
                     boolean fin = rec.acceptWaveForm(b, n);
                     String texto = fin ? rec.getResult() : rec.getPartialResult();
                     if (fin) {
-                        String t = texto.replaceAll("(?s).*\"text\"\\s*:\\s*\"([^\"]*)\".*", "$1").replace("[unk]", "algo").trim();
-                        if (!t.isEmpty() && !t.startsWith("{")) oidoOyo = t;
+                        String oyo = texto.replaceAll("(?s).*\"text\"\\s*:\\s*\"([^\"]*)\".*", "$1").replace("[unk]", "algo").trim();
+                        if (!oyo.isEmpty() && !oyo.startsWith("{")) oidoOyo = oyo;
                     }
                     if (HOLA.matcher(texto).find()) {
                         rec.reset();
