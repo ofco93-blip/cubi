@@ -1427,8 +1427,8 @@ public class CubiService extends Service {
         else if (listo) ui.postDelayed(revisar, 2000);  // con Cubi conectado se vuelve a mirar: con Android Auto no siempre llega el aviso de audio
         // "Hola Cubi" escucha solo cuando nadie más usa el micrófono ni hay llamada
         // ni con un video sonando (Facebook, reels): eso lo despertaba de la nada
-        // ni con música (con el parlante sonando no lo oye y el reconocedor gasta el celular sin parar)
-        boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva && ahora >= charlaHasta && !video && !play;
+        // con música SÍ escucha: en el carro la música sale por los parlantes del carro y uno le quiere hablar igual
+        boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva && ahora >= charlaHasta && !video;
         if (oidoQuiere && modelo != null && libre) arrancarOido();
         else pararOido();
     }
@@ -1587,7 +1587,7 @@ public class CubiService extends Service {
             return "Escuchando: di “Hola Cubi” u “Oye robot”." + m + (oidoOyo.isEmpty() ? "" : " Lo último que oyó: “" + oidoOyo + "”.") + sinRed;
         }
         if (!oidoError.isEmpty()) return "Falló el oído: " + oidoError;
-        return (musicaPlay ? "En pausa mientras suena música: háblale con doble toque." : "En pausa (video, llamada o Cubi hablando).") + sinRed;
+        return "En pausa (video, llamada o Cubi hablando)." + sinRed;
     }
 
     // ---------- actualización por Bluetooth ----------
