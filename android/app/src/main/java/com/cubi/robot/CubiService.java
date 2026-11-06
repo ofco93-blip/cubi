@@ -1450,8 +1450,12 @@ public class CubiService extends Service {
     static final String MODELO = "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip";
     // el modelo no conoce "Cubi": lo oye como cuba o cubo. Solo despierta con "Hola" + eso: con "Cubi" solo,
     // cualquier video o canción (reels) lo despertaba de la nada
-    static final String GRAMATICA = "[\"hola cubi\", \"hola cuba\", \"hola cubo\", \"[unk]\"]";
-    static final Pattern HOLA = Pattern.compile("\\bh?ola\\s+(cu|ku)[bv]\\w{0,2}\\b");
+    // "robot" sí está en el vocabulario del modelo: "Hola robot" / "Oye robot" se oyen mucho mejor que "cubi"
+    static final String GRAMATICA = "[\"hola cubi\", \"hola cuba\", \"hola cubo\", \"oye cuba\", \"oye cubo\", \"hola robot\", \"oye robot\", \"[unk]\"]";
+    static final Pattern HOLA = Pattern.compile("\\b(h?ola|oye)\\s+((cu|ku)[bv]\\w{0,2}|robot)\\b");
+    // para que la app muestre qué pasa: si el micrófono trae sonido, qué oyó por última vez y si falló algo
+    private volatile int nivelMic = -1;
+    private volatile String oidoOyo = "", oidoError = "";
     private volatile boolean oidoQuiere;
     private volatile Thread oido, hiloOido;
     private volatile int miSesion = -1;
@@ -1483,8 +1487,9 @@ public class CubiService extends Service {
                 modelo = new org.vosk.Model(dir.getAbsolutePath());
                 js("toast('Listo: di “Hola Cubi”')");
                 ui.post(this::revisarAsistente);
-            } catch (Exception e) {
-                js("toast(" + JSONObject.quote("No pude preparar “Hola Cubi”: " + e.getMessage()) + ")");
+            } catch (Throwable e) {   // también los errores de la librería (antes se quedaba "preparando" para siempre)
+                oidoError = String.valueOf(e.getMessage() != null ? e.getMessage() : e);
+                js("toast(" + JSONObject.quote("No pude preparar “Hola Cubi”: " + oidoError) + ")");
             }
             bajando = false;
         }).start();
@@ -1523,17 +1528,28 @@ public class CubiService extends Service {
                 miSesion = r.getAudioSessionId();
                 r.startRecording();
                 short[] b = new short[2048];
+                int pico = 0, bloques = 0;
+                oidoError = "";
                 while (oido == Thread.currentThread()) {
                     int n = r.read(b, 0, b.length);
-                    if (n < 0) break;
-                    String texto = rec.acceptWaveForm(b, n) ? rec.getResult() : rec.getPartialResult();
+                    if (n < 0) { oidoError = "el micrófono respondió " + n; break; }
+                    for (int i = 0; i < n; i++) pico = Math.max(pico, Math.abs(b[i]));
+                    if (++bloques >= 8) { nivelMic = Math.min(100, pico * 100 / 8000); pico = 0; bloques = 0; }   // ~1 s
+                    boolean fin = rec.acceptWaveForm(b, n);
+                    String texto = fin ? rec.getResult() : rec.getPartialResult();
+                    if (fin) {
+                        String t = texto.replaceAll("(?s).*\"text\"\\s*:\\s*\"([^\"]*)\".*", "$1").replace("[unk]", "algo").trim();
+                        if (!t.isEmpty() && !t.startsWith("{")) oidoOyo = t;
+                    }
                     if (HOLA.matcher(texto).find()) {
                         rec.reset();
                         ui.post(this::oyoHola);
                     }
                 }
-            } catch (Exception ignored) {  // sin permiso o sin micrófono: se reintenta en la próxima revisión
+            } catch (Throwable e) {  // sin permiso o sin micrófono: se reintenta en la próxima revisión (y la app lo muestra)
+                oidoError = String.valueOf(e.getMessage() != null ? e.getMessage() : e);
             } finally {
+                nivelMic = -1;
                 if (r != null) r.release();
                 if (oido == Thread.currentThread()) { oido = null; miSesion = -1; }
             }
@@ -1565,7 +1581,12 @@ public class CubiService extends Service {
         if (modelo == null) return bajando ? "Preparando el oído (la primera vez baja 40 MB)…" : "El oído no está listo: necesita internet una sola vez para bajarse.";
         if (!micFondo) return "Android no le dio el micrófono porque Cubi arrancó con la app cerrada: abre la app una vez.";
         String sinRed = hayInternet() ? "" : " Sin internet entiende: baila, música, pausa, siguiente, volumen, la hora, chistes y kamehameha.";
-        if (oido != null) return "Escuchando: di “Hola Cubi”." + sinRed;
+        if (oido != null) {
+            String m = nivelMic < 0 ? "" : nivelMic == 0 ? " ⚠️ El micrófono llega en silencio: otra app lo está usando o Android lo bloqueó (cierra y abre la app)."
+                : " Micrófono: " + nivelMic + "%.";
+            return "Escuchando: di “Hola Cubi” u “Oye robot”." + m + (oidoOyo.isEmpty() ? "" : " Lo último que oyó: “" + oidoOyo + "”.") + sinRed;
+        }
+        if (!oidoError.isEmpty()) return "Falló el oído: " + oidoError;
         return (musicaPlay ? "En pausa mientras suena música: háblale con doble toque." : "En pausa (video, llamada o Cubi hablando).") + sinRed;
     }
 
