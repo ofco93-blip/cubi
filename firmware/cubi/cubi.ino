@@ -677,6 +677,33 @@ void animar(uint32_t now) {
 // CARAS EN PANTALLA: el motor de Isa (caras.cpp) con lo que Cubi siente
 // =====================================================================================
 uint16_t *tmpPanel = nullptr;
+// Dos memorias como Lumi: mientras la tarea "pantalla" (núcleo 0) manda un cuadro al panel, el loop dibuja el otro.
+// Antes se dibujaba y después se mandaba, uno tras otro (~65 ms por cuadro, ~15 cuadros/s).
+uint16_t *memorias[2];
+struct Envio { uint16_t *mem; dib::Rect r; };
+QueueHandle_t colaPantalla = nullptr;
+SemaphoreHandle_t pantallaLibre = nullptr;
+void tareaPantalla(void *) {
+  Envio e;
+  for (;;) {
+    if (xQueueReceive(colaPantalla, &e, portMAX_DELAY) != pdTRUE) continue;
+    int w = e.r.x1 - e.r.x0, h = e.r.y1 - e.r.y0;
+    if (w > 0 && h > 0) {
+      if (w == dib::RW) panel->draw16bitRGBBitmap(0, e.r.y0, e.mem + (uint32_t)e.r.y0 * dib::RW, dib::RW, h);
+      else {
+        for (int f = 0; f < h; f++) memcpy(tmpPanel + (uint32_t)f * w, e.mem + (uint32_t)(e.r.y0 + f) * dib::RW + e.r.x0, w * 2);
+        panel->draw16bitRGBBitmap(e.r.x0, e.r.y0, tmpPanel, w, h);
+      }
+    }
+    xSemaphoreGive(pantallaLibre);
+  }
+}
+// todo lo demás que le habla al panel espera a que no se esté mandando un cuadro
+void brilloPanel(uint8_t b) {
+  if (pantallaLibre) xSemaphoreTake(pantallaLibre, portMAX_DELAY);
+  panel->setBrightness(b);
+  if (pantallaLibre) xSemaphoreGive(pantallaLibre);
+}
 int ritmoFijo = -1;  // un baile pedido desde la app para probarlo
 
 // Cada estilo que detecta el micrófono tiene su familia de bailes; elige uno al empezar la música y no lo cambia a mitad
@@ -756,7 +783,7 @@ void tocarPanel(int x, int y, uint32_t now) {
   for (int i = 0; i < 3; i++) {
     if (abs(x - (int)panelBx(i)) > 68 || abs(y - (int)PANEL_BY) > 46) continue;
     if (i == 0) { sonidoOn = !sonidoOn; guardar(); sonar(S_ESCUCHA); }
-    else if (i == 1) { brillo = brillo < 100 ? 150 : brillo < 200 ? 255 : 60; panel->setBrightness(brillo); }
+    else if (i == 1) { brillo = brillo < 100 ? 150 : brillo < 200 ? 255 : 60; brilloPanel(brillo); }
     else { panelAbierto = false; llamarAsistente(); }
     return;
   }
@@ -796,8 +823,7 @@ void pintar(uint32_t now) {
   }
   if (modo == RING && libreR) caras::reaccion(caras::LLAMADA);
 
-  uint16_t *fb = cv->getFramebuffer();
-  dib::fb = fb; dib::giro = rotacion == 3;
+  dib::fb = memorias[dib::cual]; dib::giro = rotacion == 3;
   dib::empezar();
   if (panelAbierto && now > panelHasta) panelAbierto = false;
   if (otaTotal || reinicioEn) caras::progreso(t, otaTotal ? float(otaHecho) / otaTotal : 1);
@@ -806,14 +832,10 @@ void pintar(uint32_t now) {
   static bool saludo = true;  // al prender saluda (después del primer cuadro: así arranca con el reloj de las caras al día)
   if (saludo) { saludo = false; reac(caras::SALUDO); }
   // solo se manda al panel lo que cambió (este cuadro y el anterior)
-  dib::Rect r = dib::terminar();
-  int w = r.x1 - r.x0, h = r.y1 - r.y0;
-  if (w <= 0 || h <= 0) return;
-  if (w == dib::RW) panel->draw16bitRGBBitmap(0, r.y0, fb + (uint32_t)r.y0 * dib::RW, dib::RW, h);
-  else {
-    for (int f = 0; f < h; f++) memcpy(tmpPanel + (uint32_t)f * w, fb + (uint32_t)(r.y0 + f) * dib::RW + r.x0, w * 2);
-    panel->draw16bitRGBBitmap(r.x0, r.y0, tmpPanel, w, h);
-  }
+  Envio env{ memorias[dib::cual], dib::terminar() };
+  xSemaphoreTake(pantallaLibre, portMAX_DELAY);   // espera a que termine de mandarse el cuadro anterior
+  xQueueSend(colaPantalla, &env, portMAX_DELAY);
+  dib::cual ^= 1;
 }
 
 // ---------- IMU QMI8658 ----------
@@ -1028,7 +1050,7 @@ void energiaUpdate(uint32_t now) {
     // Se apaga del todo para cuidar la batería; el AXP2101 lo vuelve a prender al conectar el USB (o con el botón PWR).
     emoBase = SUENO; setEmo(SUENO, 0); sonar(S_SUENO);
     for (uint32_t t0 = millis(); millis() - t0 < 2500;) { animar(millis()); pintar(millis()); delay(30); }
-    panel->setBrightness(0);
+    brilloPanel(0);
     pmu.shutdown();
   }
 }
@@ -1127,7 +1149,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     antes = r; climaT = t; climaE = e;
     return "ok";
   }
-  if (ruta == "/brillo") { despertar(millis()); brillo = constrain(p.get("v").toInt(), 0, 255); panel->setBrightness(brillo); return "ok"; }
+  if (ruta == "/brillo") { despertar(millis()); brillo = constrain(p.get("v").toInt(), 0, 255); brilloPanel(brillo); return "ok"; }
   if (ruta == "/ajuste") {
     if (p.has("vol")) { volumen = constrain(p.get("vol").toInt(), 0, 100); if (es) es8311_voice_volume_set(es, volumen, NULL); sonar(S_WHATSAPP); }
     if (p.has("son")) sonidoOn = p.get("son") == "1";
@@ -1140,7 +1162,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     if (p.has("mc")) musicaCel = p.get("mc") == "1";
     if (p.has("fr")) umbralFreno = constrain(p.get("fr").toFloat(), 0.15f, 0.9f);
     if (p.has("adl")) adelante = -adelante;  // al frenar se pone feliz: se invierte
-    if (p.has("rot")) { rotacion = rotacion == 3 ? 1 : 3; cv->setRotation(rotacion); memset(cv->getFramebuffer(), 0, 368 * 448 * 2); dib::todo(); }
+    if (p.has("rot")) { rotacion = rotacion == 3 ? 1 : 3; xSemaphoreTake(pantallaLibre, portMAX_DELAY); cv->setRotation(rotacion); memset(memorias[0], 0, 368 * 448 * 2); memset(memorias[1], 0, 368 * 448 * 2); dib::todo(); xSemaphoreGive(pantallaLibre); }
     if (p.has("uv")) umbralVoz = constrain(p.get("uv").toFloat(), 0.05f, 0.95f);
     if (p.has("gb")) ganBoca = constrain(p.get("gb").toFloat(), 0.3f, 3.f);
     if (p.has("sk")) sensK = constrain(p.get("sk").toFloat(), 1.3f, 8.f);
@@ -1295,7 +1317,7 @@ void serialDebug() {
     char ch = Serial.read();
     if (ch == 'c') {
       uint16_t dim[2] = { 368, 448 };
-      Serial.write("FB"); Serial.write((uint8_t *)dim, 4); Serial.write((uint8_t *)cv->getFramebuffer(), 368 * 448 * 2); Serial.flush();
+      Serial.write("FB"); Serial.write((uint8_t *)dim, 4); Serial.write((uint8_t *)memorias[dib::cual ^ 1], 368 * 448 * 2); Serial.flush();
     } else if (ch >= '0' && ch <= '8') { emoBase = NEUTRAL; demoHasta = 0; setEmo(Emo(ch - '0'), 8000); emoForzada = true; }
     else if (ch == 's' || ch == 'm') { emoHasta = 0; demo(ch == 's'); }
     else if (ch == 't') Serial.printf("cuadro %lu us (animar %lu, dibujar %lu, flush %lu)  ble=%d\n", (unsigned long)frameUs,
@@ -1344,6 +1366,13 @@ void setup() {
   panel->setBrightness(brillo);
   cv->fillScreen(0); cv->flush();
   tmpPanel = (uint16_t *)ps_malloc(368 * 448 * 2);
+  memorias[0] = cv->getFramebuffer();
+  memorias[1] = (uint16_t *)ps_malloc(368 * 448 * 2);
+  memset(memorias[1], 0, 368 * 448 * 2);
+  colaPantalla = xQueueCreate(1, sizeof(Envio));
+  pantallaLibre = xSemaphoreCreateBinary();
+  xSemaphoreGive(pantallaLibre);
+  xTaskCreatePinnedToCore(tareaPantalla, "pantalla", 4096, nullptr, 2, nullptr, 0);
   caras::iniciar(esp_random());
 
   imuInit();
@@ -1377,7 +1406,7 @@ void loop() {
   bool apagar = now - lastMotion > MINUTOS_APAGAR * 60000UL && modo == NORMAL && !asis && !otaTotal && !reinicioEn;
   if (apagar != pantallaOff) {
     pantallaOff = apagar;
-    panel->setBrightness(apagar ? 0 : brillo);
+    brilloPanel(apagar ? 0 : brillo);
     if (!apagar) dib::todo();  // al prender se manda la pantalla entera
   }
   if (pantallaOff) return;     // apagada no dibuja (ahorra batería); el audio, el movimiento y el Bluetooth siguen
