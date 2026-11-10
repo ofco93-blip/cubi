@@ -103,6 +103,7 @@ struct Pintura {
   float haloA = 0.35f;       // fuerza del brillo
   Col haloCol{255, 255, 255};
   float alfa = 1;
+  bool exacta = true;        // false: la distancia de la figura no es de fiar (elipses muy aplastadas): pixel por pixel
 };
 // paquete "Robot minimalista": todo en blanco (se quita el color y se deja qué tan claro es)
 extern bool blanco;
@@ -149,19 +150,36 @@ void figura1(float bx0, float by0, float bx1, float by1, const Pintura &p0, F d)
         cs[y - ty] = mezcla(p.arriba, p.abajo, lim((y + 0.5f - p.y0) * inv, 0, 1));
         vs[y - ty] = empacar(cs[y - ty].r, cs[y - ty].g, cs[y - ty].b);
       }
+      const float nada = fmaxf(0.5f, p.halo), salto = p.exacta ? 0.7f : 0;   // nada: de aquí para afuera no se pinta
       for (int x = tx; x < tx1; x++) {
         float fx = x + 0.5f;
-        for (int y = ty; y < ty1; y++) {
-          uint32_t i = idx(x, y);
-          if (lleno) { if (opaco) fb[i] = vs[y - ty]; else mezclar(i, cs[y - ty], p.alfa); continue; }
+        if (lleno) {
+          for (int y = ty; y < ty1; y++) { uint32_t i = idx(x, y); if (opaco) fb[i] = vs[y - ty]; else mezclar(i, cs[y - ty], p.alfa); }
+          continue;
+        }
+        // la distancia dice cuántos pixeles seguidos faltan para llegar al borde: esos se saltan (afuera) o se rellenan
+        // (adentro) sin volver a calcularla. El 0,7 es el margen por las figuras cuya distancia no es exacta.
+        for (int y = ty; y < ty1;) {
           float dd = d(fx, y + 0.5f);
+          if (dd >= nada) { y += 1 + (int)((dd - nada) * salto); continue; }
+          if (dd <= -0.5f) {
+            int y1 = y + 1 + (int)((-dd - 0.5f) * salto);
+            if (y1 > ty1) y1 = ty1;
+            // la distancia de algunas figuras (elipses aplastadas) exagera hacia adentro: si el último pixel del
+            // tramo no está adentro del todo, se va de a uno
+            if (y1 > y + 1 && d(fx, y1 - 0.5f) > -0.5f) y1 = y + 1;
+            for (; y < y1; y++) { uint32_t i = idx(x, y); if (opaco) fb[i] = vs[y - ty]; else mezclar(i, cs[y - ty], p.alfa); }
+            continue;
+          }
+          uint32_t i = idx(x, y);
           if (dd < 0.5f) {
-            if (dd > -0.5f && p.halo > 0) mezclar(i, p.haloCol, p.haloA * p.alfa);
+            if (p.halo > 0) mezclar(i, p.haloCol, p.haloA * p.alfa);
             mezclar(i, cs[y - ty], lim(0.5f - dd, 0, 1) * p.alfa);
-          } else if (dd < p.halo) {
+          } else {
             float k = 1.f - dd / p.halo;
             mezclar(i, p.haloCol, k * k * p.haloA * p.alfa);
           }
+          y++;
         }
       }
     }

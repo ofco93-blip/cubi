@@ -426,11 +426,13 @@ static void gorra(float x, float y, float ang) {
   pieza(m, -12, -124, 12, -100, plana(osc, y - 124, y - 100), [](float a, float b) { return dCirculo(a, b, 0, -110, 11); });
 }
 // sombrero vueltiao: ala ancha y copa crema con franjas negras
+// las elipses muy aplastadas no dan bien la distancia: esas figuras se calculan pixel por pixel
+static Pintura aOjo(Pintura p) { p.exacta = false; return p; }
 static void vueltiao(float x, float y, float ang) {
   Marco m = marco(x, y, ang);
   Col crema{245, 232, 200};
-  pieza(m, -176, -30, 176, 34, plana(crema, y - 30, y + 34, 0.85f), [](float a, float b) { return dElipse(a, b, 0, 2, 174, 30); });
-  pieza(m, -150, -24, 150, 30, solido(NEG), [](float a, float b) {
+  pieza(m, -176, -30, 176, 34, aOjo(plana(crema, y - 30, y + 34, 0.85f)), [](float a, float b) { return dElipse(a, b, 0, 2, 174, 30); });
+  pieza(m, -150, -24, 150, 30, aOjo(solido(NEG)), [](float a, float b) {
     return fminf(fabsf(dElipse(a, b, 0, 4, 140, 24)) - 3, fabsf(dElipse(a, b, 0, 4, 102, 17)) - 3);
   });
   pieza(m, -74, -112, 74, 8, plana(crema, y - 112, y + 8, 0.85f), [](float a, float b) { return dCaja(a, b, 0, -50, 72, 56, 30); });
@@ -677,6 +679,39 @@ static float pulsosVistos = 0, ultimoPulso = 1;
 // ---------------------------------------------------------------- Robot minimalista: los bailes
 // Los ojos no se transforman: son los de siempre, cabecean con el golpe, se mecen y miran el instrumento.
 // El baile lo hace el instrumento (extrasMini) y la boquita, que solo abre cuando el artista canta.
+// Micrófono con drama: lo pasa de una mano a la otra y, cuando el artista calla después de cantar (o en pleno coro),
+// se lo acerca a quien lo mira para que cante también
+static float ofreceAhora = 0;      // 0..1: el micrófono va hacia la pantalla ("¡canta tú!")
+static float ladoMic = 1;          // -1 = en la mano izquierda .. 1 = en la derecha (en el pase va por el medio)
+static void dramaMicro(const Entradas &e, float dt) {
+  static float cantoSeg = 0, calladoSeg = 0, ofreceHasta = -1, ofreceDesde = -1, proxOfrece = 4, proxCoro = 14;
+  static int ladoMeta = 1, fraseVista = -1;
+  static bool porSilencio = false;
+  const bool esMic = e.ritmo == R_KPOP;
+  if (e.canta) { cantoSeg += dt; calladoSeg = 0; } else { calladoSeg += dt; if (calladoSeg > 5) cantoSeg = 0; }
+  if (esMic && tAhora > proxOfrece && tAhora > ofreceHasta) {
+    const bool silencio = !e.canta && calladoSeg > 0.45f && cantoSeg > 2;          // calló: "¡tu turno!"
+    const bool coro = e.canta && cantoSeg > proxCoro && gritoZona > 0.5f;          // lleva rato cantando duro: "¡todos!"
+    if (silencio || coro) {
+      porSilencio = silencio;
+      ofreceDesde = tAhora; ofreceHasta = tAhora + (silencio ? 3.f : 240.f / fmaxf(e.bpm, 60));   // el coro: 4 golpes
+      proxOfrece = ofreceHasta + 8 + 8 * azar(); proxCoro = 12 + 12 * azar(); cantoSeg = 0;
+    }
+  }
+  // si el artista vuelve a cantar, Cubi recoge el micrófono para seguir
+  if (porSilencio && tAhora < ofreceHasta && e.canta && tAhora - ofreceDesde > 0.8f) ofreceHasta = tAhora;
+  const bool ofrece = esMic && tAhora < ofreceHasta;
+  ofreceAhora += ((ofrece ? 1.f : 0.f) - ofreceAhora) * lim(dt * 8, 0, 1);
+  // cada 8 golpes, a veces, lo pasa a la otra mano (tarda un golpe)
+  const int frase = (int)((pulsosVistos + e.pulso) / 8);
+  if (frase != fraseVista) {
+    fraseVista = frase;
+    if (esMic && !ofrece && hash(frase, 31) < 0.55f) ladoMeta = -ladoMeta;
+  }
+  const float paso = dt * fmaxf(e.bpm, 60) / 60 * 2;
+  ladoMic = ladoMic < ladoMeta ? fminf(ladoMic + paso, ladoMeta) : fmaxf(ladoMic - paso, ladoMeta);
+}
+
 static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float bl) {
   bool lento = e.ritmo == R_CORAZON || e.ritmo == R_JAZZ || e.ritmo == R_PIANO || e.ritmo == R_DISFRUTA || e.ritmo == R_GUITARRA;
   mover(r, (lento ? 12 : 6) * vaiven, -18 + (lento ? 5 : 10) * g);
@@ -696,10 +731,27 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
     mover(r, 16 * B * vaiven, -10 * B * g);
     r.L.incl += 0.12f * B * vaiven; r.R.incl += 0.12f * B * vaiven;
   }
+  dramaMicro(e, dtB);
+  {   // cada 8 golpes un pasito distinto, al azar: que no baile siempre igual
+    const float f2 = pulsosVistos + e.pulso, A = lento ? 0.5f : 1;
+    const int frase = (int)(f2 / 8);
+    switch ((int)(hash(frase, 21) * 6)) {
+      case 1: mover(r, 0, -8 * A * fabsf(sinf(f2 * PI * 2))); break;                          // doble rebote
+      case 2: mover(r, 10 * A * cosf(f2 * PI * 0.5f), 7 * A * sinf(f2 * PI * 0.5f)); break;   // la cabeza en círculo
+      case 3: {                                                                               // se inclina a un lado y aguanta
+        const float d = ((int)f2 / 2) % 2 ? 1.f : -1.f;
+        mover(r, 14 * A * d, 0); r.L.incl += 0.1f * d; r.R.incl += 0.1f * d;
+        break;
+      }
+      case 4: escalar(r, 1 + 0.07f * A * g, 1 + 0.07f * A * g); break;                        // late con el golpe
+      case 5: mover(r, 0, 6 * A * sinf(f2 * PI * 0.25f)); r.L.y -= 5 * A * vaiven; r.R.y += 5 * A * vaiven; break;   // sube un ojo y baja el otro
+      default: break;
+    }
+  }
   if (e.canta) {                                      // cantando: cada 4 golpes una expresión distinta, en orden al azar
     const float f = pulsosVistos + e.pulso;
     const int barra = (int)(f / 4);
-    int ex = (int)(hash(barra, 9) * 8);
+    int ex = (int)(hash(barra, 9) * 10);
     if (ex == 7 && hash(barra, 11) > 0.35f) ex = 0;    // los corazones salen solo de vez en cuando
     r.L.incl = r.R.incl = 0.06f * sinf(f * PI * 0.25f);   // ladea la cabeza suave con la música
     switch (ex) {
@@ -714,6 +766,8 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
       }
       case 5: escalar(r, 1.18f, 1.0f + 0.12f * e.boca); break;                              // asombro: ojos grandes con la voz
       case 6: r.L.incl = 0.32f; r.R.incl = -0.05f; r.L.y -= 6; mirar(r, 0.25f, 0); break;   // pícaro: una ceja arriba
+      case 8: tapas(r, 0.8f); mirar(r, 0, -0.3f); mover(r, 8 * sinf(f * PI * 0.25f), -6); break;   // sentido: ojos casi cerrados, se mece
+      case 9: escalar(r, 0.94f, 0.9f); r.L.incl = r.R.incl = 0.16f; mover(r, 0, 10 * g); break;    // intenso: mirada fija al público, cabecea
       default: r.corazon = 1; escalar(r, 1.05f, 1.05f); mover(r, 0, 6 * g); break;         // ojitos de corazón
     }
   } else if (e.ritmo == R_KPOP) { feliz(r, 1); mover(r, 0, 8 * g); }   // micrófono sin voz: ojos cerrados, "tun, tun"
@@ -740,6 +794,16 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
     escalar(r, 1 - 0.15f * Z, 1);
     r.by -= 22 * Z;                                     // la boca sube un poquito, hacia los ojos
   }
+  if (e.ritmo == R_KPOP && fabsf(ladoMic) < 0.95f) mirar(r, 0.5f * ladoMic, 0.4f);   // en el pase sigue el micrófono con los ojos
+  if (ofreceAhora > 0.01f) {                          // "¡canta tú!": ojos grandes y abiertos mirándote, cejas arriba, anima con el golpe
+    const float O = ofreceAhora;
+    r.L.feliz *= 1 - O; r.R.feliz *= 1 - O; r.corazon *= 1 - O;
+    r.L.tapa *= 1 - O; r.R.tapa *= 1 - O;
+    mirar(r, 0, 0.15f * O);
+    escalar(r, 1 + 0.1f * O, 1 + 0.1f * O);
+    mover(r, 0, -8 * O + 9 * O * g);
+    r.L.incl = r.R.incl = r.L.incl * (1 - O) + 0.1f * O * vaiven;
+  }
   if (rockeroAhora > 0.01f) {                         // roquero: ojos apretados, cejas bravas, cabecea duro con el golpe
     const float K = rockeroAhora;
     tapas(r, 0.7f * K); r.L.incl = r.R.incl = 0.25f * K;
@@ -749,7 +813,7 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
 }
 
 static void anillo(float x, float y, float R, float grosor, float alfa) {
-  figura(x - R - grosor, y - R - grosor, x + R + grosor, y + R + grosor, solido(BL, alfa, 6),
+  figura(x - R - grosor, y - R - grosor, x + R + grosor, y + R + grosor, solido(BL, alfa),
          [=](float px, float py) { return fabsf(dCirculo(px, py, x, y, R)) - grosor; });
 }
 
@@ -758,7 +822,7 @@ static void anillo(float x, float y, float R, float grosor, float alfa) {
 static inline float smin(float a, float b, float k) { return -smax(-a, -b, k); }
 static void aPantalla(const Marco &m, float a, float b, float &x, float &y) { x = m.x + (a * m.c - b * m.s) * m.e; y = m.y + (a * m.s + b * m.c) * m.e; }
 static void arcoTrazo(float x, float y, float R, float a0, float a1, float g, float alfa) {
-  figura(x - R - g, y - R - g, x + R + g, y + R + g, solido(BL, alfa, 6), [=](float px, float py) { return dArco(px, py, x, y, R, a0, a1) - g; });
+  figura(x - R - g, y - R - g, x + R + g, y + R + g, solido(BL, alfa), [=](float px, float py) { return dArco(px, py, x, y, R, a0, a1) - g; });
 }
 // manito: palma con pulgar; "apunta" saca el índice, si no es un puño que agarra. ang = hacia dónde van los dedos
 static void manoBlanca(float x, float y, float ang, float e, bool apunta, float alfa = 1) {
@@ -769,7 +833,7 @@ static void manoBlanca(float x, float y, float ang, float e, bool apunta, float 
     return smin(p, dSegmento(a, b, 2, 9, 14, 13, 5.5f), 4);
   };
   pieza(m, -27, -25, 45, 25, solido(NEG, alfa), [=](float a, float b) { return d(a, b) - 4; });   // borde negro: la separa de lo que toca
-  pieza(m, -22, -20, 40, 20, solido(BL, alfa, 6), d);
+  pieza(m, -22, -20, 40, 20, solido(BL, alfa), d);
 }
 // disco de vinilo de línea: borde, surcos que giran y el centro
 static void disco(float x, float y, float R, float giro, float alfa) {
@@ -790,9 +854,9 @@ static void guitarraLinea(float x, float y, float ang, float e, bool electrica, 
     float d = smin(dElipse(a, b, 0, 0, 36, 26), dSegmento(a, b, 8, -12, 34, -30, 9), 8);    // eléctrica: dos cuernos
     return smin(d, dSegmento(a, b, 8, 12, 28, 26, 8), 8);
   };
-  pieza(m, -42, -46, 72, 42, solido(BL, alfa, 6), [=](float a, float b) { return fabsf(cuerpo(a, b)) - t; });
-  pieza(m, n0 - 4, -9, 134, 9, solido(BL, alfa, 6), [=](float a, float b) { return fabsf(dCaja(a, b, (n0 + 130) / 2, 0, (130 - n0) / 2, 5.5f, 3)) - t * 0.8f; });
-  pieza(m, 126, -14, 162, 14, solido(BL, alfa, 6), [=](float a, float b) { return fabsf(dCaja(a, b, 144, electrica ? -3 : 0, 12, 8, 4)) - t * 0.8f; });
+  pieza(m, -42, -46, 72, 42, solido(BL, alfa), [=](float a, float b) { return fabsf(cuerpo(a, b)) - t; });
+  pieza(m, n0 - 4, -9, 134, 9, solido(BL, alfa), [=](float a, float b) { return fabsf(dCaja(a, b, (n0 + 130) / 2, 0, (130 - n0) / 2, 5.5f, 3)) - t * 0.8f; });
+  pieza(m, 126, -14, 162, 14, solido(BL, alfa), [=](float a, float b) { return fabsf(dCaja(a, b, 144, electrica ? -3 : 0, 12, 8, 4)) - t * 0.8f; });
   if (electrica) for (int i = 0; i < 2; i++) {                       // pastillas
     float pa = -12 + i * 14;
     pieza(m, pa - 6, -15, pa + 6, 15, solido(BL, alfa), [=](float a, float b) { return fabsf(dCaja(a, b, pa, 0, 3, 11, 2)) - 1.8f; });
@@ -810,16 +874,16 @@ static void guitarraLinea(float x, float y, float ang, float e, bool electrica, 
 static void saxoLinea(float x, float y, float ang, float e, float alfa) {
   Marco m = marco(x, y, ang, e);
   auto tubo = [=](float a, float b) { return smin(dCapsula2(a, b, -6, -70, 5, 0, 22, 13), dCapsula2(a, b, 6, 36, 13, 34, 4, 19), 10); };
-  pieza(m, -24, -80, 58, 54, solido(BL, alfa, 6), [=](float a, float b) { return fabsf(tubo(a, b)) - 2.6f; });
-  pieza(m, -24, -92, -2, -64, solido(BL, alfa, 6), [=](float a, float b) { return dSegmento(a, b, -6, -70, -18, -86, 3); });    // boquilla
+  pieza(m, -24, -80, 58, 54, solido(BL, alfa), [=](float a, float b) { return fabsf(tubo(a, b)) - 2.6f; });
+  pieza(m, -24, -92, -2, -64, solido(BL, alfa), [=](float a, float b) { return dSegmento(a, b, -6, -70, -18, -86, 3); });    // boquilla
   for (int i = 0; i < 3; i++) { float kx, ky; aPantalla(m, -3 + i * 1.5f, -40 + i * 18, kx, ky); circulo(kx, ky, 3.5f * e, BL, alfa); }   // llaves
 }
 // micrófono de línea: cabeza en (x, y) y el mango hacia ang
 static void microLinea(float x, float y, float ang, float e, float alfa) {
   Marco m = marco(x, y, ang, e);
-  pieza(m, -20, -20, 20, 20, solido(BL, alfa, 6), [=](float a, float b) { return fabsf(dCirculo(a, b, 0, 0, 15)) - 2.6f; });
+  pieza(m, -20, -20, 20, 20, solido(BL, alfa), [=](float a, float b) { return fabsf(dCirculo(a, b, 0, 0, 15)) - 2.6f; });
   pieza(m, -14, -14, 14, 14, solido(BL, 0.7f * alfa), [=](float a, float b) { return fmaxf(fminf(fabsf(a) - 1.2f, fabsf(b) - 1.2f), dCirculo(a, b, 0, 0, 13)); });
-  pieza(m, 12, -10, 66, 10, solido(BL, alfa, 6), [=](float a, float b) { return fabsf(dCapsula2(a, b, 17, 0, 7, 60, 0, 4.5f)) - 2.4f; });
+  pieza(m, 12, -10, 66, 10, solido(BL, alfa), [=](float a, float b) { return fabsf(dCapsula2(a, b, 17, 0, 7, 60, 0, 4.5f)) - 2.4f; });
 }
 // teléfono: ícono verde redondo con el auricular blanco; tiembla mientras timbra y suelta ondas a los lados
 static void telefonoIcono(float x, float y, float R, float u, float alfa) {
@@ -842,15 +906,17 @@ static void telefonoIcono(float x, float y, float R, float u, float alfa) {
 }
 
 // la mano libre, a la izquierda de la cara: 0 puño arriba con el golpe, 1 saluda de lado a lado, 2 apunta al cielo
-static void manoLibre(const Entradas &e, int n, float g, int paso, float a) {
-  const Ojo &o = ahora.L;
-  const float f = n + e.pulso, x0 = o.x - o.w / 2 - 40, y0 = o.y + o.h / 2 + 34;
-  float x = x0, y = y0, ang = -PI / 2;
+// lado: -1 a la izquierda de la cara (como siempre), 1 a la derecha (cuando el micrófono está en la otra mano)
+static void manoLibre(const Entradas &e, int n, float g, int paso, float a, int lado = -1) {
+  const Ojo &o = lado < 0 ? ahora.L : ahora.R;
+  const float f = n + e.pulso, x0 = o.x + lado * (o.w / 2 + 40), y0 = o.y + o.h / 2 + 34;
+  float dx = 0, y = y0, ang = -PI / 2;
   bool apunta = false;
   if (paso == 0) { y = y0 - 50 * (1 - g); ang = -PI / 2 - 0.2f; }                       // puño que sube y baja
-  else if (paso == 1) { ang = -PI / 2 + 0.6f * sinf(f * PI); x = x0 + 10 * sinf(f * PI); y = y0 - 40; }   // saludo
-  else { apunta = true; ang = -PI / 2 + 0.25f; y = y0 - 30 - 30 * (1 - g); x = x0 + 8; }   // apunta arriba
-  manoBlanca(x, y, ang, 1.1f, apunta, fminf(1.f, a * 1.6f));   // blanca sólida y más grande: que se vea el paso
+  else if (paso == 1) { ang = -PI / 2 + 0.6f * sinf(f * PI); dx = 10 * sinf(f * PI); y = y0 - 40; }   // saludo
+  else { apunta = true; ang = -PI / 2 + 0.25f; y = y0 - 30 - 30 * (1 - g); dx = 8; }   // apunta arriba
+  if (lado > 0) { dx = -dx; ang = PI - ang; }                                            // al otro lado, en espejo
+  manoBlanca(x0 + dx, y, ang, 1.1f, apunta, fminf(1.f, a * 1.6f));   // blanca sólida y más grande: que se vea el paso
 }
 
 // Los instrumentos van abajo: crecen con la cara pero un poco menos y anclados al borde de abajo, para no salirse de la
@@ -937,7 +1003,7 @@ static void extrasMini(float u, const Entradas &e) {
         figura(tx - kx / 2, yT, tx + kx / 2, yB, solido(BL, 0.45f + 0.55f * a, 12),
                [=](float px, float py) { return dCaja(px, py, tx, yc, kx / 2 - 3, (yB - yT) / 2 - 3, 4); });
       }
-      figura(x0 - 4, yT - 4, x0 + 10 * kx + 4, yB + 4, solido(BL, 1, 6),
+      figura(x0 - 4, yT - 4, x0 + 10 * kx + 4, yB + 4, solido(BL, 1),
              [=](float px, float py) { return fabsf(dCaja(px, py, CX, yc, 5 * kx, (yB - yT) / 2, 8)) - 2.4f; });
       for (int k = 1; k < 10; k++) linea(x0 + k * kx, yT + 2, x0 + k * kx, yB - 2, 1.4f, BL, 0.8f);
       for (int k = 0; k < 9; k++) {
@@ -952,22 +1018,35 @@ static void extrasMini(float u, const Entradas &e) {
       break;
     }
     case R_KPOP: {                                      // micrófono de línea frente a la boquita, con la manito
-      // en el "¡aaah!" el micrófono se corre para que quepa la boca grande
-      float mx = ahora.bx + 56 + 46 * gritoAhora, my = ahora.by + 4, ang = 0.95f + 0.15f * sinf((n + e.pulso) * PI * 0.5f * veces) - 0.2f * ahora.boca, hx, hy;   // lo mueve al cantar, más rápido en lo fuerte
-      microLinea(mx, my, ang, 1.3f, 1);
-      aPantalla(marco(mx, my, ang, 1.3f), 42, 0, hx, hy);
-      manoBlanca(hx, hy, ang - PI / 2, 0.85f, false);
-      if (emoAhora > 0.3f) {                            // nota larga: el micrófono con las dos manos
-        aPantalla(marco(mx, my, ang, 1.3f), 64, 0, hx, hy);
-        manoBlanca(hx, hy, ang - PI / 2 - 0.25f, 0.85f, false, lim(emoAhora * 2 - 0.6f, 0, 1));
-      } else if (e.canta || bailaAhora > 0.05f) manoLibre(e, n, gv, (n / 8) % 3, fmaxf(bailaAhora, 0.6f));   // la otra mano baila
+      // lado: en qué mano está (en el pase va por debajo de la boquita). O: cuánto se lo acerca a quien mira.
+      const float lado = ladoMic, O = suave(ofreceAhora), pase = 1 - fabsf(lado);
+      const int sg = lado >= 0 ? 1 : -1;
+      // lo mueve al cantar, más rápido en lo fuerte; en el "¡aaah!" se corre para que quepa la boca grande
+      const float a0 = 0.95f + 0.15f * sinf((n + e.pulso) * PI * 0.5f * veces) - 0.2f * ahora.boca;
+      float ang = PI / 2 - lado * (PI / 2 - a0);
+      float mx = ahora.bx + lado * (56 + 46 * gritoAhora), my = ahora.by + 4 + 36 * suave(pase), esc = 1.3f, hx, hy;
+      // "¡canta tú!": el micrófono viene al centro y crece hacia la pantalla, de frente, latiendo con el golpe
+      mx += (ahora.bx - mx) * O; my += (ahora.by + 44 - my) * O; ang += (PI / 2 - ang) * O;
+      esc *= 1 + O * (0.85f + 0.07f * g);
+      if (O > 0.05f) for (int i = 0; i < 2; i++) {       // ondas que salen del micrófono: "te toca"
+        const float q = fmodf(f * 0.5f + i * 0.5f, 1.f);
+        anillo(mx, my, 15 * esc + 8 + 24 * q, 2.2f, 0.8f * O * campana(q, 0, 1));
+      }
+      microLinea(mx, my, ang, esc, 1);
+      aPantalla(marco(mx, my, ang, esc), 42, 0, hx, hy);
+      manoBlanca(hx, hy, ang - sg * PI / 2, 0.85f, false);
+      if (emoAhora > 0.3f && O < 0.05f) {               // nota larga: el micrófono con las dos manos
+        aPantalla(marco(mx, my, ang, esc), 64, 0, hx, hy);
+        manoBlanca(hx, hy, ang - sg * (PI / 2 + 0.25f), 0.85f, false, lim(emoAhora * 2 - 0.6f, 0, 1));
+      } else if (O > 0.3f) manoLibre(e, n, gv, 1, O, -sg);   // la otra mano te anima: "¡dale!"
+      else if (pase < 0.2f && (e.canta || bailaAhora > 0.05f)) manoLibre(e, n, gv, (n / 8) % 3, fmaxf(bailaAhora, 0.6f), -sg);   // la otra mano baila
       break;
     }
     default:                                            // ecualizador: barritas blancas que saltan con la música
       for (int i = 0; i < 9; i++) {
         const float x = CX + (i - 4) * 36, a = 0.45f + 0.55f * fabsf(sinf(u * (2.6f + 0.37f * i) + i * 1.7f));
         const float h = 14 + 70 * lim(e.nivel * 1.4f, 0.15f, 1) * a * (0.65f + 0.35f * gv);
-        figura(x - 12, H - 14 - h, x + 12, H - 10, solido(BL, 0.95f, 6), [=](float px, float py) { return dCaja(px, py, x, H - 12 - h / 2, 10, h / 2, 10); });
+        figura(x - 12, H - 14 - h, x + 12, H - 10, solido(BL, 0.95f), [=](float px, float py) { return dCaja(px, py, x, H - 12 - h / 2, 10, h / 2, 10); });
       }
       break;
   }
@@ -982,7 +1061,25 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
   switch (laBase) {
     case REPOSO:
       // Cubi: en reposo con ojitos de sueño que respiran, y la cara se pasea despacio (que no se queme el OLED)
-      mirada(t, lx, ly); mirar(r, 0.5f * lx, 0.5f * ly); tapas(r, fmaxf(bl, (elPaquete == MINIMALISTA ? 0.4f : 0.58f) + 0.06f * sinf(t * 0.8f)));
+      mirada(t, lx, ly); mirar(r, 0.5f * lx, 0.5f * ly);
+      {
+        // cada 7 s, a veces, un gesto suelto y distinto (curiosea, bosteza, se alegra, piensa, sospecha, se sacude):
+        // que se vea vivo aunque no pase nada
+        float tapa = (elPaquete == MINIMALISTA ? 0.4f : 0.58f) + 0.06f * sinf(t * 0.8f);
+        const int gi = (int)(t / 7);
+        const float gu = t - gi * 7, k = tramo(gu, 0.3f, 0.7f) * (1 - tramo(gu, 2.1f, 2.6f));
+        const float d = hash(gi, 6) < 0.5f ? -1.f : 1.f;
+        if (k > 0.01f) switch ((int)(hash(gi, 5) * 10)) {
+          case 4: tapa *= 1 - k; escalar(r, 1 + 0.08f * k, 1 + 0.08f * k); r.L.incl = r.R.incl = 0.16f * k * d; mirar(r, 0.6f * k * d, 0); break;   // curiosea
+          case 5: tapa += (1 - tapa) * k; mover(r, 0, -6 * k); if (!soloOjos()) { r.boca = 0.5f * k; r.bAncho = 0.7f; } break;                     // bosteza
+          case 6: if (k > 0.5f) feliz(r, 1); mover(r, 0, -9 * k * fabsf(sinf(gu * 9))); break;                                                     // se alegra
+          case 7: tapa *= 1 - 0.8f * k; mirar(r, 0.45f * k * d, -0.7f * k); break;                                                                // piensa
+          case 8: tapa += (0.66f - tapa) * k; mirar(r, 0.9f * k * sinf((gu - 0.3f) * 2.6f) * d, 0); break;                                        // sospecha
+          case 9: tapa *= 1 - k; mover(r, 9 * k * sinf(gu * 15), 0); break;                                                                       // se sacude
+          default: break;
+        }
+        tapas(r, fmaxf(bl, tapa));
+      }
       mover(r, 26 * sinf(t * 0.051f), 14 * sinf(t * 0.033f + 1));
       vel = 3;
       break;
@@ -1077,6 +1174,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       // bailando o cantando nunca con cara de preocupado: la inclinación negativa son cejas tristes
       r.L.incl = fmaxf(r.L.incl, 0); r.R.incl = fmaxf(r.R.incl, 0);
       r.boca = e.canta && abre > 0 ? fmaxf(e.boca * (elPaquete == MINIMALISTA ? 1 : abre), 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;
+      if (comoMini() && ofreceAhora > 0.3f) r.boca = 0;       // le pasó el micrófono a quien mira: se calla y escucha
       {   // nota sostenida (un "aaah" con la misma vocal): emocion crece con lo que dura, y entre más dura más drama
         static float tE = 0; const float dE = lim(t - tE, 0, 0.1f); tE = t;
         emoAhora += ((e.canta ? e.emocion : 0) - emoAhora) * lim(dE * 6, 0, 1);
