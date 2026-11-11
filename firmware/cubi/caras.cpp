@@ -2083,11 +2083,16 @@ static void pintarCalles(float X, float Yc, float Y0, float s, float RR, float a
     }
   }
 }
-// el carro: la puntita azul de Cubi, mirando hacia arriba
+// el carro, como el marcador de navegación de Google: un halo azul clarito que late, un disco blanco y adentro la
+// flecha azul con la muesca abajo, mirando hacia arriba
 static void carrito(float cx, float cy, float e, float a) {
-  figura(cx - 14 * e, cy - 16 * e, cx + 14 * e, cy + 14 * e, solido(BLANCO, a), [=](float px, float py) { return dTriangulo(px, py, cx, cy - 10 * e, cx - 8 * e, cy + 8 * e, cx + 8 * e, cy + 8 * e) - 3.5f * e; });
-  ConColor cc;
-  figura(cx - 12 * e, cy - 14 * e, cx + 12 * e, cy + 12 * e, degr(AZUL, cy - 10 * e, cy + 8 * e, 0, a), [=](float px, float py) { return dTriangulo(px, py, cx, cy - 10 * e, cx - 8 * e, cy + 8 * e, cx + 8 * e, cy + 8 * e) - 1.5f * e; });
+  const float late = 0.5f + 0.5f * sinf(tAhora * 2.4f);
+  figura(cx - 30 * e, cy - 30 * e, cx + 30 * e, cy + 30 * e, solido(Col{70, 150, 255}, (0.16f + 0.1f * late) * a), [=](float px, float py) { return dCirculo(px, py, cx, cy, (21 + 5 * late) * e); });
+  figura(cx - 16 * e, cy - 16 * e, cx + 16 * e, cy + 16 * e, solido(BLANCO, a), [=](float px, float py) { return dCirculo(px, py, cx, cy, 13.5f * e); });
+  figura(cx - 12 * e, cy - 12 * e, cx + 12 * e, cy + 12 * e, solido(Col{26, 115, 232}, a), [=](float px, float py) {
+    const float tx = cx, ty = cy - 8.5f * e, my = cy + 2.5f * e;                       // la punta y la muesca
+    return fminf(dTriangulo(px, py, tx, ty, cx - 7 * e, cy + 6.5f * e, cx, my), dTriangulo(px, py, tx, ty, cx, my, cx + 7 * e, cy + 6.5f * e)) - 0.8f * e;
+  });
 }
 // el mini mapa en un círculo, dentro de la tarjeta de giro
 static void miniMapa(float cx, float cy, float R, float a) {
@@ -2099,7 +2104,7 @@ static void miniMapa(float cx, float cy, float R, float a) {
 }
 // la flecha del giro en un disco azul: lado -1 izquierda, 1 derecha, 0 derecho
 static void discoGiro(float dx, float ty, float R, float lado, float u, float a) {
-  const float e = R / 44, emp = lado * 4 * sinf(u * 5);
+  const float e = R / 44, emp = lado * 4 * sinf(tAhora * 5);
   {
     ConColor cc;
     figura(dx - R - 18, ty - R - 18, dx + R + 18, ty + R + 18, degr(AZUL, ty - R, ty + R, 14, a), [=](float px, float py) { return dCirculo(px, py, dx, ty, R); });
@@ -2112,7 +2117,7 @@ static void discoGiro(float dx, float ty, float R, float lado, float u, float a)
       return fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13 * e, yt + 13 * e, 4.6f * e));
     });
   } else {
-    const float sube = 4 * sinf(u * 5), y0 = ty + 24 * e - sube, y1 = ty - 22 * e - sube;                                  // hacia arriba, empujando
+    const float sube = 4 * sinf(tAhora * 5), y0 = ty + 24 * e - sube, y1 = ty - 22 * e - sube;                                  // hacia arriba, empujando
     figura(dx - R, ty - R, dx + R, ty + R, solido(BLANCO, a), [=](float px, float py) {
       float d = fminf(dSegmento(px, py, dx, y0, dx, y1, 4.6f * e), dSegmento(px, py, dx, y1, dx - 14 * e, y1 + 14 * e, 4.6f * e));
       return fminf(d, dSegmento(px, py, dx, y1, dx + 14 * e, y1 + 14 * e, 4.6f * e));
@@ -2131,7 +2136,7 @@ static void pantallaMapa(float lado, float u, float a) {
   figura(CX - bw - 4, by - bh - 4, CX + bw + 4, by + bh + 4, solido(Col{14, 20, 38}, 0.94f * a), [=](float px, float py) { return dCaja(px, py, CX, by, bw, bh, 24); });
   figura(CX - bw - 4, by - bh - 4, CX + bw + 4, by + bh + 4, solido(Col{70, 110, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCaja(px, py, CX, by, bw, bh, 24)) - 1.3f; });
   const bool hayM = tAhora < gradosHasta && gradosM;
-  discoGiro(CX - bw + 44, by, 30 + (hayM && gradosN <= 60 ? 3 * fabsf(sinf(u * 7)) : 0), lado, u, a);
+  discoGiro(CX - bw + 44, by, 30 + (hayM && gradosN <= 60 ? 3 * fabsf(sinf(tAhora * 7)) : 0), lado, u, a);
   const float xt = CX + 36;
   if (hayM) {
     char b[16];
@@ -2300,13 +2305,13 @@ static void extrasReac(float u, bool delante) {
         const float ty = 286 + 26 * (1 - suave(lim(u / 0.45f, 0, 1))), tw = 196, th = 62;     // entra subiendo
         figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{14, 20, 38}, a), [=](float px, float py) { return dCaja(px, py, CX, ty, tw, th, 30); });
         figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{70, 110, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCaja(px, py, CX, ty, tw, th, 30)) - 1.3f; });
-        discoGiro(CX - tw + 66, ty, 44 + (ya ? 4 * fabsf(sinf(u * 7)) : 0), lado, u, a);
+        discoGiro(CX - tw + 66, ty, 44 + (ya ? 4 * fabsf(sinf(tAhora * 7)) : 0), lado, u, a);
         if (lado != 0) {
           // una manito, del lado del giro, señala hacia allá empujando
-          manoBlanca(CX + lado * (148 + 8 * fabsf(sinf(u * 5))), 124 + 26 * (1 - a), lado > 0 ? 0 : PI, 0.85f, true, a);
+          manoBlanca(CX + lado * (148 + 8 * fabsf(sinf(tAhora * 5))), 124 + 26 * (1 - a), lado > 0 ? 0 : PI, 0.85f, true, a);
         } else {
           // el volante, de línea blanca, con las dos manitos: lo mece como quien maneja derecho
-          const float vx = CX, vy = 172 + 26 * (1 - a), VR = 44, rot = 0.16f * sinf(u * 3);
+          const float vx = CX, vy = 172 + 26 * (1 - a), VR = 44, rot = 0.16f * sinf(tAhora * 3);
           anillo(vx, vy, VR, 4, a); anillo(vx, vy, 10, 3, a);
           for (int k2 = 0; k2 < 3; k2++) {
             const float an = rot + PI / 2 + k2 * 2.094f;                                                                 // tres radios: abajo y a los lados
@@ -2381,6 +2386,12 @@ void cuadro(float t, float dt, const Entradas &e) {
   tAhora = t; curvaAhora = e.curva;
   dib::blanco = elPaquete == ATARDECER;   // el minimalista va con los colores de Lumi azul
   dib::zoom = elTamano; dib::zx = CX; dib::zy = 250;   // crece hacia arriba y a los lados; abajo casi no se corta
+  // modo mapa (el celular va mandando la posición): la pantalla de navegación se queda fija; ni la música ni el
+  // tiempo la quitan, solo otra reacción o que el celular deje de mandar
+  if (esMaps(laReac) && t - mapaT < 8 && t - reacDesde - reacExtra > 2.5f) {
+    reacExtra = t - reacDesde - 2.5f;
+    if (gradosM && gradosHasta > 0) gradosHasta = fmaxf(gradosHasta, t + 1);   // los metros tampoco se van
+  }
   if (laReac != NINGUNA && t - reacDesde - reacExtra >= DURA[laReac]) laReac = NINGUNA;
   if (laReac == PUM && pumCuenta >= 0 && t - reacDesde - pumCuenta > 5.6f) laReac = NINGUNA;   // terminó de reírse
   float vel;

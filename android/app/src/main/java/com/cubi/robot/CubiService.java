@@ -559,7 +559,8 @@ public class CubiService extends Service {
             mapaPedido = ahora; mapaCargando = true; mapaForzar = false;
             new Thread(() -> bajarCalles(lat, lon)).start();
         }
-        if (mapaListo && lejos < 375)
+        // la posición solo se manda con una ruta andando en Maps o Waze: mientras llegue, Cubi deja el mapa fijo
+        if (mapaListo && lejos < 375 && ahora - navCuando < 120000)
             enviar(String.format(Locale.US, "asis|/mapa?x=%d&y=%d&r=%d&v=%d", Math.round(dx), Math.round(dy), Math.round(mapaRumbo), navCompleto() ? 1 : 0));
     }
 
