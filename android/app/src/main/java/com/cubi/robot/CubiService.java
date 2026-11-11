@@ -971,6 +971,9 @@ public class CubiService extends Service {
         enviar("asis|/evento?tipo=whatsapp");
     }
 
+    // modo mapa: Cubi se queda fijo en la pantalla de navegación mientras haya ruta (para probar cómo sería un segundo Cubi solo de mapas)
+    boolean navMapa() { return getSharedPreferences("cubi", 0).getBoolean("navMapa", false); }
+    void navMapaOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("navMapa", si).apply(); }
     boolean navActiva() { return getSharedPreferences("cubi", 0).getBoolean("nav", true); }
     void navOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("nav", si).apply(); if (!si) navUltima = ""; }
     private volatile String navUltima = "", navDecision = "";
@@ -988,7 +991,7 @@ public class CubiService extends Service {
 
     // lado: lo que dice el dibujo de la flecha (-1 izquierda, 1 derecha, 0 no se sabe); el texto manda si lo dice
     void indicacion(String t, int lado) {
-        anotarMaps(t + (lado < 0 ? " [dibujo: izquierda]" : lado > 0 ? " [dibujo: derecha]" : ""));
+        anotarMaps(t + (lado < 0 ? " [dibujo: izquierda]" : lado == 1 ? " [dibujo: derecha]" : lado == 2 ? " [dibujo: derecho]" : ""));
         String s = t.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
         long ahora = System.currentTimeMillis();
         navUltima = s.length() > 70 ? s.substring(0, 70) + "…" : s; navCuando = ahora;
@@ -1001,8 +1004,13 @@ public class CubiService extends Service {
         }
         int i = primero(s, "izquierda", "left"), d = primero(s, "derecha", "right");
         boolean porTexto = i >= 0 || d >= 0;
-        String dir = i >= 0 && (d < 0 || i < d) ? "maps_izq" : d >= 0 ? "maps_der" : lado < 0 ? "maps_izq" : lado > 0 ? "maps_der" : "";
-        if (dir.isEmpty()) { navDecision = "sin giro (recto o no se entiende)"; return; }
+        boolean rectoTexto = s.contains("recto") || s.contains("derecho") || s.contains("continúa") || s.contains("continua")
+                || s.contains("sigue") || s.contains("straight") || s.contains("continue");
+        String dir = i >= 0 && (d < 0 || i < d) ? "maps_izq" : d >= 0 ? "maps_der" : lado < 0 ? "maps_izq" : lado == 1 ? "maps_der"
+                : lado == 2 || rectoTexto ? "maps_recto" : "";
+        if (dir.isEmpty()) { navDecision = "no se entiende la indicación"; return; }
+        boolean recto = dir.equals("maps_recto"), mapa = navMapa();
+        if (recto) porTexto = rectoTexto && lado != 2;
         double metros = -1;
         Matcher m = DISTANCIA.matcher(s);
         if (m.find()) {
@@ -1010,16 +1018,17 @@ public class CubiService extends Service {
             String u = m.group(2);
             metros = u.equals("km") ? v * 1000 : u.equals("mi") ? v * 1609 : u.equals("m") ? v : v * 0.3048;
         }
-        String cual = (dir.equals("maps_izq") ? "izquierda" : "derecha") + (metros >= 0 ? " en " + Math.round(metros) + " m" : "")
+        String cual = (recto ? "derecho" : dir.equals("maps_izq") ? "izquierda" : "derecha") + (metros >= 0 ? (recto ? " por " : " en ") + Math.round(metros) + " m" : "")
                 + (porTexto ? " (por el texto)" : " (por el dibujo)");
         // cada giro se muestra dos veces: cuando falta poco (300 m) y cuando ya toca (60 m)
         String etapa = metros >= 0 && metros <= 60 ? "ya" : "cerca";
         String giro = dir + etapa + DISTANCIA.matcher(s).replaceAll("").replaceAll("\\s+", " ").trim();  // el giro sin la distancia
-        if (metros > 300) { navDecision = cual + ", todavía lejos"; return; }
-        navDecision = cual + ", flecha mostrada";
+        // derecho se muestra una vez por indicación, a cualquier distancia; en modo mapa todo se muestra siempre
+        if (metros > 300 && !recto && !mapa) { navDecision = cual + ", todavía lejos"; return; }
+        navDecision = cual + (mapa ? ", en pantalla (modo mapa)" : ", flecha mostrada");
         // el texto de Maps cambia solo (la hora de llegada): la misma flecha no se repite antes de 25 s
         // ya cerquita (150 m) se manda cada vez que cambia la distancia: Cubi mantiene la indicación hasta que se gira
-        boolean seguido = metros >= 0 && metros <= 150 && ahora - flechaCuando > 1200;
+        boolean seguido = (mapa || (!recto && metros >= 0 && metros <= 150)) && ahora - flechaCuando > 1200;
         if (!seguido && (giro.equals(giroAvisado) || ((dir + etapa).equals(flechaAntes) && ahora - flechaCuando < 25000))) return;
         giroAvisado = giro; flechaAntes = dir + etapa; flechaCuando = ahora;
         // la calle: el texto sin la distancia ni los tiempos, corto para que quepa
@@ -1027,7 +1036,7 @@ public class CubiService extends Service {
         if (calle.length() > 26) calle = calle.substring(0, 26).trim();
         String q = "";
         try { if (!calle.isEmpty()) q = "&t=" + URLEncoder.encode(calle, "UTF-8").replace("+", "%20"); } catch (Exception ignored) { }
-        enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : "") + q);
+        enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : "") + q + (mapa ? "&q=1" : ""));
     }
 
     private static int primero(String s, String a, String b) {

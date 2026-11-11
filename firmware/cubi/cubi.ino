@@ -446,7 +446,7 @@ const Nota *sonidoReac(caras::Reac r) {
 void reac(caras::Reac r) {
   using namespace caras;
   const Reac ya = reaccionActual();
-  if (ya == MAPS_IZQ || ya == MAPS_DER) {
+  if (ya == MAPS_IZQ || ya == MAPS_DER || ya == MAPS_RECTO) {
     if (r == BACHE || r == FRENAZO || r == ACELERON || r == ARRANQUE || r == GIRO_IZQ || r == GIRO_DER || r == MAREO) return;
     if (r == ya) { reaccion(r); return; }
   }
@@ -1094,7 +1094,8 @@ String atender(const String &ruta, const Params &p, int &cod) {
   if (ruta == "/r") {  // una reacción de caricatura por su nombre (saludo, frenazo, amor, lluvia...)
     String n = p.get("n");
     for (int i = 1; i < caras::N_REAC; i++) if (n == caras::NOMBRE_REAC[i]) {
-      despertar(millis()); reac(caras::Reac(i));
+      despertar(millis());
+      if (p.get("q") == "1") caras::reaccion(caras::Reac(i)); else reac(caras::Reac(i));   // q=1: sin sonido (el modo mapa manda muchas)
       caras::mostrarCalle(p.get("t").c_str());   // la calle del giro, si viene
       if (p.get("m").length()) caras::mostrarGrados(p.get("m").toInt(), fmaxf(caras::duracion(caras::Reac(i)), 4), true);   // la altitud en metros, 4 s para alcanzar a leerla
       return "ok";

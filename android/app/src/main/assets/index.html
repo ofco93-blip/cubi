@@ -213,6 +213,8 @@ section[hidden] { display: none; }
     <div class="row"><span>Flechas de Google Maps y Waze</span><label class="sw"><input type="checkbox" id="nav"><i></i></label></div>
     <p class="note">Con una ruta puesta en el celular, Cubi muestra la flecha del próximo giro y los metros que faltan: una vez cuando falta poco (300 m) y otra cuando ya toca (60 m). Y celebra al llegar.</p>
     <p class="note" id="navAhora"></p>
+    <div class="row"><span>Modo mapa (pantalla de navegación fija)</span><label class="sw"><input type="checkbox" id="navMapa"><i></i></label></div>
+    <p class="note">Para probar cómo sería un segundo Cubi solo de navegación: mientras haya una ruta, Cubi se queda en la pantalla de giro (flecha, metros y calle) en vez de bailar, sin sonar.</p>
     <div class="row"><span>Reaccionar al clima</span><label class="sw"><input type="checkbox" id="clima"><i></i></label></div>
     <p class="note" id="climaNota">Solito: cuando empieza a llover, sale el sol o la temperatura sube o baja 3 grados, hace su animación y muestra los grados. Con lluvia saca la sombrilla, con sol se alegra, con calor suda y con frío tirita. Usa tu ubicación aproximada (~1 km) y se actualiza cada 20 minutos.</p>
   </div>
@@ -286,7 +288,7 @@ const CARAS = [  // reacciones de caricatura (las de Isa): [nombre en Cubi, text
   ['saludo', 'Saludo', '#7CF7FF'], ['risa', 'Risa', '#FFE66B'], ['amor', 'Amor', '#FF8FCF'], ['sorpresa', 'Sorpresa', '#FFFFFF'],
   ['guino', 'Guiño', '#7CF7FF'], ['curiosa', 'Curioso', '#9CC9FF'], ['caricia', 'Caricia', '#FFB86B'], ['mareo', 'Mareado', '#C6FF6B'],
   ['frenazo', 'Frenazo', '#FF6A3D'], ['aceleron', 'Acelerón', '#FFD23F'], ['arranque', 'Arranque', '#7CF7FF'], ['bache', 'Hueco', '#C3B5FF'],
-  ['izq', 'Curva izq.', '#9CC9FF'], ['der', 'Curva der.', '#9CC9FF'], ['maps_izq', 'Maps izq.', '#6FE3F0'], ['maps_der', 'Maps der.', '#6FE3F0'],
+  ['izq', 'Curva izq.', '#9CC9FF'], ['der', 'Curva der.', '#9CC9FF'], ['maps_izq', 'Maps izq.', '#6FE3F0'], ['maps_der', 'Maps der.', '#6FE3F0'], ['maps_recto', 'Maps derecho', '#6FE3F0'],
   ['llegamos', 'Llegamos', '#FFE66B'], ['sol', 'Sol', '#FFD23F'], ['lluvia', 'Lluvia', '#9CC9FF'], ['frio', 'Frío', '#EDEBFF'],
   ['calor', 'Calor', '#FF6A3D'], ['bateria', 'Batería', '#C6FF6B'],
 ];
@@ -427,6 +429,8 @@ $('nav').onchange = e => { Android.navCubi(e.target.checked); navAhora(); };
 function navAhora() { if (window.Android && Android.estadoNav) $('navAhora').innerHTML = '<b>Ahora:</b> ' + Android.estadoNav(); }
 if (window.Android && Android.navActiva) setTimeout(() => { $('nav').checked = Android.navActiva(); navAhora(); }, 500);
 setInterval(navAhora, 3000);
+$('navMapa').onchange = e => Android.navMapaCubi(e.target.checked);
+if (window.Android && Android.navMapa) setTimeout(() => { $('navMapa').checked = Android.navMapa(); }, 500);
 if (window.Android) setTimeout(() => gpsEstado(Android.gpsActivo()), 500);
 function climaEstado(si) { $('clima').checked = si; }
 function climaTexto(s) { if (s) $('climaNota').textContent = s; }

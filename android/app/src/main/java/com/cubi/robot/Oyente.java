@@ -39,7 +39,7 @@ public class Oyente extends NotificationListenerService {
 
     // Google Maps no escribe "gira a la izquierda": manda el giro como un dibujo de flecha (el ícono grande).
     // Se mira hacia dónde cae la punta (la parte de arriba del dibujo) respecto al palo (la parte de abajo).
-    // -1 izquierda, 1 derecha, 0 no se sabe (recto, rotonda, sin dibujo).
+    // -1 izquierda, 1 derecha, 2 derecho (la flecha va hacia arriba), 0 no se sabe (sin dibujo).
     // ponytail: heurística a ojo; si falla con algún giro, el Capturador guarda el texto y se afina con ejemplos reales
     private int ladoDelDibujo(Notification n) {
         try {
@@ -69,7 +69,7 @@ public class Oyente extends NotificationListenerService {
         }
         if (na < 6 || nb < 6) return 0;
         double dif = (sa / na - sb / nb) / T;
-        return dif < -0.1 ? -1 : dif > 0.1 ? 1 : 0;
+        return dif < -0.1 ? -1 : dif > 0.1 ? 1 : 2;
     }
 
     private static String texto(Bundle x, String k) {

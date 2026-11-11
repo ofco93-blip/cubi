@@ -8,9 +8,10 @@ using namespace dib;
 const char *NOMBRE_BASE[N_BASE] = {"reposo", "escucha", "habla", "canta", "piensa", "duerme", "telefono"};
 const char *NOMBRE_REAC[N_REAC] = {"", "saludo", "bache", "frenazo", "aceleron", "arranque", "izq", "der", "caricia",
                                    "whatsapp", "llamada", "calor", "risa", "sorpresa", "amor", "mareo", "maps_izq", "maps_der",
-                                   "llegamos", "sol", "lluvia", "frio", "bateria", "guino", "curiosa", "kamehameha", "confeti"};
+                                   "llegamos", "sol", "lluvia", "frio", "bateria", "guino", "curiosa", "kamehameha", "confeti", "maps_recto"};
 static const float DURA[N_REAC] = {0, 2.6f, 2.4f, 4.0f, 2.8f, 2.8f, 2.4f, 2.4f, 2.6f, 6.0f, 6.0f, 7.5f, 2.0f, 2.0f, 4.0f,
-                                   3.2f, 4.5f, 4.5f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f, 5.0f, 20.0f};
+                                   3.2f, 4.5f, 4.5f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f, 5.0f, 20.0f, 4.5f};
+static bool esMaps(Reac r) { return r == MAPS_IZQ || r == MAPS_DER || r == MAPS_RECTO; }   // las indicaciones de Maps / Waze
 float duracion(Reac r) { return DURA[r]; }
 const char *NOMBRE_RITMO[N_RITMO] = {"pop", "urbano", "electro", "tropical", "kpop", "corazon", "groove", "guitarra", "disfruta", "rock",
                                      "jazz", "dj", "piano", "barras", "manos", "acordeon", "vela"};
@@ -1918,10 +1919,12 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       mover(r, 18 * sinf(u * 5), 6 * sinf(u * 7));
       vel = 30;
       break;
+    case MAPS_RECTO:                                                 // sigue derecho: se asoma por encima del volante
     case MAPS_IZQ:
     case MAPS_DER: {                                                 // mira hacia donde hay que girar
-      float lado = laReac == MAPS_IZQ ? -1 : 1, k = tramo(u, 0, 0.25f) * (1 - tramo(u, 4.0f, 4.5f));
-      escalar(r, 1 - 0.36f * k, 1 - 0.3f * k); mover(r, 0, -44 * k); mirar(r, 0.35f * lado * k, 0.2f * k);   // suben un poco y miran hacia el giro
+      float lado = laReac == MAPS_IZQ ? -1 : laReac == MAPS_DER ? 1 : 0, k = tramo(u, 0, 0.25f) * (1 - tramo(u, 4.0f, 4.5f));
+      escalar(r, 1 - 0.36f * k, 1 - 0.3f * k); mover(r, 0, -44 * k); mirar(r, 0.35f * lado * k, 0.2f * k);
+      if (lado == 0) mover(r, 6 * k * sinf(u * 3), -8 * k);   // derecho: más arriba (abajo va el volante) y se mece manejando   // suben un poco y miran hacia el giro
       r.L.incl = r.R.incl = 0.12f * lado * k; r.boca = 0;
       vel = 20;
       break;
@@ -2150,11 +2153,12 @@ static void extrasReac(float u, bool delante) {
         }
       }
       break;
+    case MAPS_RECTO:
     case MAPS_IZQ:
     case MAPS_DER:
       if (delante) {
         // tarjeta de giro abajo: la flecha en un disco azul (el azul de Cubi), los metros grandes, la calle y cuánto falta
-        const float lado = laReac == MAPS_IZQ ? -1 : 1, a = tramo(u, 0.15f, 0.45f) * (1 - tramo(u, 4.0f, 4.5f));
+        const float lado = laReac == MAPS_IZQ ? -1 : laReac == MAPS_DER ? 1 : 0, a = tramo(u, 0.15f, 0.45f) * (1 - tramo(u, 4.0f, 4.5f));
         const bool hayM = tAhora < gradosHasta && gradosM, ya = hayM && gradosN <= 60;        // ya toca girar
         const float ty = 286 + 26 * (1 - suave(lim(u / 0.45f, 0, 1))), tw = 196, th = 62;     // entra subiendo
         figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{14, 20, 38}, a), [=](float px, float py) { return dCaja(px, py, CX, ty, tw, th, 30); });
@@ -2164,14 +2168,33 @@ static void extrasReac(float u, bool delante) {
           ConColor cc;
           figura(dx - R - 18, ty - R - 18, dx + R + 18, ty + R + 18, degr(AZUL, ty - R, ty + R, 14, a), [=](float px, float py) { return dCirculo(px, py, dx, ty, R); });
         }
-        const float x0 = dx - lado * 13 + emp, x1 = dx + lado * 20 + emp, yt = ty - 6;
-        figura(dx - 44, ty - 40, dx + 44, ty + 40, solido(BLANCO, a), [=](float px, float py) {
-          float d = fminf(dSegmento(px, py, x0, ty + 24, x0, yt, 4.6f), dSegmento(px, py, x0, yt, x1, yt, 4.6f));        // sube y dobla
-          d = fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt - 13, 4.6f));                                        // la punta
-          return fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt + 13, 4.6f));
-        });
-        // una manito, del lado del giro, señala hacia allá empujando
-        manoBlanca(CX + lado * (148 + 8 * fabsf(sinf(u * 5))), 124 + 26 * (1 - a), lado > 0 ? 0 : PI, 0.85f, true, a);
+        if (lado != 0) {
+          const float x0 = dx - lado * 13 + emp, x1 = dx + lado * 20 + emp, yt = ty - 6;
+          figura(dx - 44, ty - 40, dx + 44, ty + 40, solido(BLANCO, a), [=](float px, float py) {
+            float d = fminf(dSegmento(px, py, x0, ty + 24, x0, yt, 4.6f), dSegmento(px, py, x0, yt, x1, yt, 4.6f));      // sube y dobla
+            d = fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt - 13, 4.6f));                                      // la punta
+            return fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt + 13, 4.6f));
+          });
+          // una manito, del lado del giro, señala hacia allá empujando
+          manoBlanca(CX + lado * (148 + 8 * fabsf(sinf(u * 5))), 124 + 26 * (1 - a), lado > 0 ? 0 : PI, 0.85f, true, a);
+        } else {
+          const float sube = 4 * sinf(u * 5), y0 = ty + 24 - sube, y1 = ty - 22 - sube;                                  // flecha hacia arriba, empujando
+          figura(dx - 44, ty - 40, dx + 44, ty + 40, solido(BLANCO, a), [=](float px, float py) {
+            float d = fminf(dSegmento(px, py, dx, y0, dx, y1, 4.6f), dSegmento(px, py, dx, y1, dx - 14, y1 + 14, 4.6f));
+            return fminf(d, dSegmento(px, py, dx, y1, dx + 14, y1 + 14, 4.6f));
+          });
+          // el volante, de línea blanca, con las dos manitos: lo mece como quien maneja derecho
+          const float vx = CX, vy = 172 + 26 * (1 - a), VR = 44, rot = 0.16f * sinf(u * 3);
+          anillo(vx, vy, VR, 4, a); anillo(vx, vy, 10, 3, a);
+          for (int k2 = 0; k2 < 3; k2++) {
+            const float an = rot + PI / 2 + k2 * 2.094f;                                                                 // tres radios: abajo y a los lados
+            linea(vx + cosf(an) * 12, vy + sinf(an) * 12, vx + cosf(an) * (VR - 3), vy + sinf(an) * (VR - 3), 3, BL, a);
+          }
+          for (int s2 = -1; s2 <= 1; s2 += 2) {
+            const float an = rot - PI / 2 + s2 * 0.95f;                                                                  // las manos a las 10 y a las 2
+            manoBlanca(vx + cosf(an) * VR, vy + sinf(an) * VR, an + PI / 2 * s2, 0.7f, false, a);
+          }
+        }
         const float xt = CX + 62;                                                               // los textos, a la derecha del disco
         if (hayM) {
           char b[16];
@@ -2222,7 +2245,7 @@ Base baseActual() { return laBase; }
 // la indicación de Maps se mantiene: si llega otra igual mientras está en pantalla, no vuelve a empezar, solo dura más
 static float reacExtra = 0;
 void reaccion(Reac r) {
-  if (r == laReac && (r == MAPS_IZQ || r == MAPS_DER)) { reacExtra = fmaxf(reacExtra, tAhora - reacDesde - 1.5f); return; }
+  if (r == laReac && esMaps(r)) { reacExtra = fmaxf(reacExtra, tAhora - reacDesde - 1.5f); return; }
   laReac = r; reacDesde = tAhora; pumCuenta = -1; reacExtra = 0;
 }
 Reac reaccionActual() { return laReac; }
@@ -2251,7 +2274,7 @@ void cuadro(float t, float dt, const Entradas &e) {
   boca(ahora);
   if (laReac != NINGUNA) extrasReac(u, true); else extrasBase(t, e, true);
   dib::zoom = 1;                                                  // lo de arriba (los grados) va sin zoom, pegado al borde
-  if (t < gradosHasta && !(gradosM && (laReac == MAPS_IZQ || laReac == MAPS_DER))) {   // "24°" arriba, entra y sale suave (con la flecha de Maps los metros van en su pantalla)
+  if (t < gradosHasta && !(gradosM && esMaps(laReac))) {   // "24°" arriba, entra y sale suave (con la flecha de Maps los metros van en su pantalla)
     float a = fminf(lim((t - gradosDesde) / 0.3f, 0, 1), lim((gradosHasta - t) / 0.4f, 0, 1));
     const Col c = BLANCO;
     char b[16];

@@ -55,6 +55,7 @@ int main(int argc, char **argv) {
   const float FPS = 25, dt = 1 / FPS;
   if (!esBase) { base(REPOSO); for (int r = 1; r < N_REAC; r++) if (que == NOMBRE_REAC[r]) { cuadro(0, dt, Entradas()); reaccion((Reac)r); } }
   if (que == "maps_izq" || que == "maps_der") { mostrarGrados(que == "maps_izq" ? 120 : 40, 4.5f, true); mostrarCalle(que == "maps_izq" ? "Calle 85" : "Carrera 15 con 100"); }   // la flecha con los metros que faltan
+  if (que == "maps_recto") { mostrarGrados(1200, 4.5f, true); mostrarCalle("Autopista Norte"); }
   if (que == "altura") { cuadro(0, dt, Entradas()); reaccion(SORPRESA); mostrarGrados(2600, 4, true); }   // subimos a 2.600 m
   if (que == "clima") { cuadro(0, dt, Entradas()); reaccion(SOL); mostrarGrados(28, duracion(SOL)); }   // "Cubi, ¿cómo está el clima?"
   static uint8_t rgb[dib::W * dib::H * 3];
