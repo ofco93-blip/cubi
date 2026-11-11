@@ -16,7 +16,7 @@ void cuentaPum();                       // la pistola de confeti empieza la cuen
 
 // ritmos de la música (cada uno con su baile y su instrumento)
 enum Ritmo : uint8_t { R_POP, R_URBANO, R_ELECTRO, R_TROPICAL, R_KPOP, R_CORAZON, R_GROOVE, R_GUITARRA, R_DISFRUTA, R_ROCK,
-                       R_JAZZ, R_DJ, R_PIANO, R_BARRAS, N_RITMO };   // los 4 últimos son de Cubi
+                       R_JAZZ, R_DJ, R_PIANO, R_BARRAS, R_TROMPETA, R_ACORDEON, N_RITMO };   // los 4 últimos son de Cubi
 extern const char *NOMBRE_RITMO[N_RITMO];
 
 // lo que llega de los sensores en cada cuadro

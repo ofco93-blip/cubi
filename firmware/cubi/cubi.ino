@@ -815,7 +815,8 @@ void pintar(uint32_t now) {
       else if (++fuera >= 4) { fase -= err; fuera = 0; }   // 4 golpes seguidos fuera del pulso: se re-engancha a ellos
     }
     fase = fmodf(fase, 1000.f);
-    en.bpm = bpm; en.pulso = fase - floorf(fase); en.ritmo = elegirRitmo(now);
+    const float fv = fase + ADELANTO_GOLPE * bpm / 60;   // adelantado: que el golpe se vea cuando suena, no despues
+    en.bpm = bpm; en.pulso = fv - floorf(fv); en.ritmo = elegirRitmo(now);
   }
   bool libreR = caras::reaccionActual() == caras::NINGUNA;
   if (b == caras::REPOSO && libreR && now > proxGesto) {  // en reposo, de vez en cuando un guiño o cara de curiosa

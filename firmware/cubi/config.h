@@ -34,6 +34,7 @@
 #define GIRO_SIGNO      1           // si en curva mira al lado contrario, pon -1
 #define UMBRAL_FRENO    0.25f       // g sostenidos medio segundo para estrellarse contra el vidrio (se ajusta en la app)
 #define UMBRAL_ACEL     0.25f
+#define ADELANTO_GOLPE  0.09f       // s: lo que tarda en verse un golpe (micro + dibujo + pantalla); el baile se adelanta eso
 #define UMBRAL_BACHE    0.4f        // golpe vertical (Lumi: 3,9 m/s²)
 #define GIRO_MAREO      70.0f
 #define MINUTOS_SUENO   5
