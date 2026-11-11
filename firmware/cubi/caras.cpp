@@ -1186,10 +1186,6 @@ static void extrasMini(float u, const Entradas &e) {
       }
       break;
   }
-  if (explotaAhora > 0.02f) {                         // la música entró de golpe: dos ondas desde el centro
-    zi.soltar();
-    for (int i = 0; i < 2; i++) { const float q = lim(1 - explotaAhora + 0.25f * i, 0, 1); anillo(CX, H / 2, 70 + 190 * q, 3, 0.7f * (1 - q)); }
-  }
 }
 
 static Rostro deBase(float t, const Entradas &e, float &vel) {
