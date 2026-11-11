@@ -446,12 +446,102 @@ public class CubiService extends Service {
         if (!gpsActivo() || checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
         oyeGps = this::posicion;
         // cada 5 s y sin distancia mínima: parado también tiene que avisar, si no nunca sabría que ya llegamos
-        try { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, 5000, 0, oyeGps, Looper.getMainLooper()); }
+        try { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, navMapa() ? 1000 : 5000, 0, oyeGps, Looper.getMainLooper());   // con el mini mapa, cada segundo }
         catch (Exception e) { oyeGps = null; }
+    }
+
+    // ---------- mini mapa: las calles de alrededor (OpenStreetMap) y por dónde va el carro, para la tarjeta de giro ----------
+    // Solo con "Modo mapa" prendido y una ruta andando. La posición sale del celular hacia overpass-api.de (el servicio
+    // público de OpenStreetMap) cada vez que se avanza unos 110 m, para pedir las calles de 240 m a la redonda.
+    private volatile double mapaLat0, mapaLon0;
+    private volatile boolean mapaListo, mapaCargando;
+    private long mapaPedido;
+    private float mapaRumbo;
+    private volatile String mapaEstado = "Mini mapa: esperando el GPS.";
+
+    private void mapaGps(Location l) {
+        long ahora = System.currentTimeMillis();
+        if (!navMapa() || !navActiva() || ahora - navCuando > 120000) return;
+        if (l.hasBearing() && l.hasSpeed() && l.getSpeed() > 1.5f) mapaRumbo = l.getBearing();   // parado, el rumbo del GPS no sirve
+        final double lat = l.getLatitude(), lon = l.getLongitude();
+        double dy = (lat - mapaLat0) * 111320, dx = (lon - mapaLon0) * 111320 * Math.cos(Math.toRadians(mapaLat0));
+        double lejos = Math.hypot(dx, dy);
+        if ((!mapaListo || lejos > 110) && !mapaCargando && ahora - mapaPedido > 8000) {
+            mapaPedido = ahora; mapaCargando = true;
+            new Thread(() -> bajarCalles(lat, lon)).start();
+        }
+        if (mapaListo && lejos < 250)
+            enviar(String.format(Locale.US, "asis|/mapa?x=%d&y=%d&r=%d", Math.round(dx), Math.round(dy), Math.round(mapaRumbo)));
+    }
+
+    private void bajarCalles(double lat, double lon) {
+        try {
+            String q = "[out:json][timeout:10];way[highway~\"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street)(_link)?$\"](around:240,"
+                    + String.format(Locale.US, "%.5f,%.5f", lat, lon) + ");out geom;";
+            HttpURLConnection h = (HttpURLConnection) new URL("https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(q, "UTF-8")).openConnection();
+            h.setConnectTimeout(8000); h.setReadTimeout(12000);
+            h.setRequestProperty("User-Agent", "robot-app");
+            java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+            try (java.io.InputStream in = h.getInputStream()) { byte[] b = new byte[8192]; for (int n; (n = in.read(b)) > 0; ) o.write(b, 0, n); }
+            JSONArray els = new JSONObject(o.toString("UTF-8")).getJSONArray("elements");
+            double kx = 111320 * Math.cos(Math.toRadians(lat));
+            java.util.ArrayList<String> avenidas = new java.util.ArrayList<>(), calles = new java.util.ArrayList<>();
+            for (int e = 0; e < els.length(); e++) {
+                JSONObject w = els.getJSONObject(e);
+                JSONArray g = w.optJSONArray("geometry");
+                if (g == null) continue;
+                String tipo = w.optJSONObject("tags") == null ? "" : w.getJSONObject("tags").optString("highway");
+                boolean grande = tipo.startsWith("motorway") || tipo.startsWith("trunk") || tipo.startsWith("primary") || tipo.startsWith("secondary");
+                StringBuilder sb = new StringBuilder(); int n = 0, ax = -1, ay = -1;
+                for (int i = 0; i <= g.length(); i++) {
+                    boolean fuera = i == g.length();
+                    int qx = 0, qy = 0;
+                    if (!fuera) {
+                        JSONObject p = g.getJSONObject(i);
+                        double dx = (p.getDouble("lon") - lon) * kx, dy = (p.getDouble("lat") - lat) * 111320;
+                        fuera = Math.abs(dx) > 250 || Math.abs(dy) > 250;
+                        qx = 128 + (int) Math.round(dx / 2); qy = 128 + (int) Math.round(dy / 2);   // de a 2 m, 128 = el centro
+                    }
+                    if (fuera) {   // se salió del cuadro (o se acabó): lo que iba es un tramo
+                        if (n >= 2) (grande ? avenidas : calles).add((grande ? "1" : "0") + sb);
+                        sb = new StringBuilder(); n = 0; ax = ay = -1;
+                    } else if (qx != ax || qy != ay) { sb.append(String.format("%02x%02x", qx, qy)); n++; ax = qx; ay = qy; }
+                }
+            }
+            // Cubi guarda hasta 78 tramos y 390 puntos: primero las avenidas
+            java.util.ArrayList<String> todas = new java.util.ArrayList<>();
+            int puntos = 0;
+            for (java.util.ArrayList<String> grupo : java.util.Arrays.asList(avenidas, calles)) for (String v : grupo) {
+                int np = (v.length() - 1) / 4;
+                if (todas.size() >= 78 || puntos + np > 390) continue;
+                todas.add(v); puntos += np;
+            }
+            if (todas.isEmpty()) { mapaEstado = "Mini mapa: no hay calles en el mapa por aquí."; return; }
+            java.util.ArrayList<String> partes = new java.util.ArrayList<>();
+            StringBuilder parte = new StringBuilder();
+            for (String v : todas) {
+                if (parte.length() > 0 && parte.length() + 1 + v.length() > 200) { partes.add(parte.toString()); parte = new StringBuilder(); }
+                if (parte.length() > 0) parte.append('.');
+                parte.append(v);
+            }
+            partes.add(parte.toString());
+            for (int i = 0; i < partes.size(); i++) {   // de a poquito: Cubi atiende una orden por cuadro
+                boolean fin = i == partes.size() - 1;
+                if (fin) { mapaLat0 = lat; mapaLon0 = lon; mapaListo = true; }
+                enviar("asis|/mapa?w=" + partes.get(i) + (i == 0 ? "&n=1" : "") + (fin ? "&f=1" : ""));
+                Thread.sleep(160);
+            }
+            mapaEstado = "Mini mapa: " + todas.size() + " tramos de calle.";
+        } catch (Exception e) {
+            mapaEstado = "Mini mapa: no pude bajar las calles (¿hay internet?).";
+        } finally {
+            mapaCargando = false;
+        }
     }
 
     private void posicion(Location l) {
         long ahora = System.currentTimeMillis();
+        mapaGps(l);
         if (l.hasSpeed()) kmh = l.getSpeed() * 3.6f;
         altura(l);
         getSharedPreferences("cubi", 0).edit()
@@ -973,7 +1063,7 @@ public class CubiService extends Service {
 
     // modo mapa: Cubi se queda fijo en la pantalla de navegación mientras haya ruta (para probar cómo sería un segundo Cubi solo de mapas)
     boolean navMapa() { return getSharedPreferences("cubi", 0).getBoolean("navMapa", false); }
-    void navMapaOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("navMapa", si).apply(); }
+    void navMapaOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("navMapa", si).apply(); mapaListo = false; gps(); }
     boolean navActiva() { return getSharedPreferences("cubi", 0).getBoolean("nav", true); }
     void navOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("nav", si).apply(); if (!si) navUltima = ""; }
     private volatile String navUltima = "", navDecision = "";
@@ -984,9 +1074,10 @@ public class CubiService extends Service {
     String estadoNav() {
         if (!navActiva()) return "Apagado.";
         if (!puedeTocarMusica()) return "Falta el acceso a notificaciones: sin eso Cubi no ve las indicaciones.";
+        String mini = !navMapa() ? "" : " " + (gpsActivo() ? mapaEstado : "Mini mapa: prende “Usar el GPS” para que salga.");
         if (navUltima.isEmpty()) return "Esperando una ruta: empieza a navegar en Google Maps o Waze con el celular (con Android Auto en la pantalla del carro, Maps no le avisa al celular).";
         long hace = (System.currentTimeMillis() - navCuando) / 1000;
-        return "Lo último que vio (hace " + (hace < 90 ? hace + " s" : hace / 60 + " min") + "): “" + navUltima + "” → " + navDecision + ".";
+        return "Lo último que vio (hace " + (hace < 90 ? hace + " s" : hace / 60 + " min") + "): “" + navUltima + "” → " + navDecision + "." + mini;
     }
 
     // lado: lo que dice el dibujo de la flecha (-1 izquierda, 1 derecha, 0 no se sabe); el texto manda si lo dice

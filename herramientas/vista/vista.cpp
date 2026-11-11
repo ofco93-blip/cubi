@@ -55,6 +55,20 @@ int main(int argc, char **argv) {
   const float FPS = 25, dt = 1 / FPS;
   if (!esBase) { base(REPOSO); for (int r = 1; r < N_REAC; r++) if (que == NOMBRE_REAC[r]) { cuadro(0, dt, Entradas()); reaccion((Reac)r); } }
   if (que == "maps_izq" || que == "maps_der") { mostrarGrados(que == "maps_izq" ? 120 : 40, 4.5f, true); mostrarCalle(que == "maps_izq" ? "Calle 85" : "Carrera 15 con 100"); }   // la flecha con los metros que faltan
+  bool mapaDemo = que.rfind("maps_", 0) == 0;   // calles de prueba: una cuadrícula con dos avenidas
+  if (mapaDemo) {
+    std::string w; bool pri = true;
+    auto h2 = [](int v) { char b[3]; snprintf(b, 3, "%02x", v); return std::string(b); };
+    auto via = [&](int cl, int x0, int y0, int x1, int y1) {
+      if (!w.empty()) w += ".";
+      w += cl ? "1" : "0";
+      for (int k = 0; k <= 4; k++) w += h2(128 + (x0 + (x1 - x0) * k / 4) / 2) + h2(128 + (y0 + (y1 - y0) * k / 4) / 2);
+      if (w.size() > 180) { mapaVias(w.c_str(), pri, false); pri = false; w.clear(); }
+    };
+    for (int g = -240; g <= 240; g += 80) { via(g == 0, g, -250, g + 30, 250); via(g == 80, -250, g, 250, g - 20); }
+    via(0, -200, -250, 120, 250);
+    mapaVias(w.c_str(), pri, true);
+  }
   if (que == "maps_recto") { mostrarGrados(1200, 4.5f, true); mostrarCalle("Autopista Norte"); }
   if (que == "altura") { cuadro(0, dt, Entradas()); reaccion(SORPRESA); mostrarGrados(2600, 4, true); }   // subimos a 2.600 m
   if (que == "clima") { cuadro(0, dt, Entradas()); reaccion(SOL); mostrarGrados(28, duracion(SOL)); }   // "Cubi, ¿cómo está el clima?"
@@ -86,6 +100,7 @@ int main(int argc, char **argv) {
       }
     }
     if (que == "confeti" && i == (int)(1.5f * FPS)) cuentaPum();
+    if (mapaDemo) mapaPos(4 * sinf(t), -150 + t * 14, que == "maps_der" ? 25 * t / 4.5f : que == "maps_izq" ? -25 * t / 4.5f : 0);   // va andando
     dib::empezar(); if (que == "actualizando") progreso(t, t / seg); else cuadro(t, dt, e); dib::terminar();
     for (int y = 0; y < dib::H; y++) for (int x = 0; x < dib::W; x++) {
       uint16_t p = mem[dib::idx(x, y)]; uint8_t *q = rgb + (y * dib::W + x) * 3;

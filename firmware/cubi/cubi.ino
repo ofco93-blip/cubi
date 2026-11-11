@@ -1126,6 +1126,11 @@ String atender(const String &ruta, const Params &p, int &cod) {
     for (int i = 0; i < caras::N_RITMO; i++) if (p.get("r") == caras::NOMBRE_RITMO[i]) ritmoFijo = i;
     return "ok";
   }
+  if (ruta == "/mapa") {   // mini mapa: el celular manda las calles de alrededor (por partes) y, cada segundo, dónde va el carro
+    if (p.has("w")) caras::mapaVias(p.get("w").c_str(), p.get("n") == "1", p.get("f") == "1");
+    if (p.has("x")) caras::mapaPos(p.get("x").toFloat(), p.get("y").toFloat(), p.get("r").toFloat());
+    return "ok";
+  }
   if (ruta == "/pum") { despertar(millis()); caras::cuentaPum(); sonar(S_CUENTA); return "ok"; }   // 3, 2, 1, ¡pum! y risa
   if (ruta == "/musica") {  // el celular avisa play o pausa (con play baila de una) y, por la letra, si el artista canta
     if (p.has("play")) { celPlay = p.get("play") == "1"; if (!celPlay) { estilo = NADA; celVozHasta = 0; } }
