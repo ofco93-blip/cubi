@@ -971,19 +971,38 @@ public class CubiService extends Service {
         enviar("asis|/evento?tipo=whatsapp");
     }
 
-    void indicacion(String t) {
-        anotarMaps(t);
-        String s = t.toLowerCase(Locale.ROOT);
+    boolean navActiva() { return getSharedPreferences("cubi", 0).getBoolean("nav", true); }
+    void navOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("nav", si).apply(); if (!si) navUltima = ""; }
+    private volatile String navUltima = "", navDecision = "";
+    private long navCuando, flechaCuando;
+    private String flechaAntes = "";
+
+    // para la app: por qué salen o no las flechas
+    String estadoNav() {
+        if (!navActiva()) return "Apagado.";
+        if (!puedeTocarMusica()) return "Falta el acceso a notificaciones: sin eso Cubi no ve las indicaciones.";
+        if (navUltima.isEmpty()) return "Esperando una ruta: empieza a navegar en Google Maps o Waze con el celular (con Android Auto en la pantalla del carro, Maps no le avisa al celular).";
+        long hace = (System.currentTimeMillis() - navCuando) / 1000;
+        return "Lo último que vio (hace " + (hace < 90 ? hace + " s" : hace / 60 + " min") + "): “" + navUltima + "” → " + navDecision + ".";
+    }
+
+    // lado: lo que dice el dibujo de la flecha (-1 izquierda, 1 derecha, 0 no se sabe); el texto manda si lo dice
+    void indicacion(String t, int lado) {
+        anotarMaps(t + (lado < 0 ? " [dibujo: izquierda]" : lado > 0 ? " [dibujo: derecha]" : ""));
+        String s = t.toLowerCase(Locale.ROOT).replaceAll("\\s+", " ").trim();
         long ahora = System.currentTimeMillis();
+        navUltima = s.length() > 70 ? s.substring(0, 70) + "…" : s; navCuando = ahora;
         if ((s.contains("llegaste") || s.contains("has llegado") || s.contains("you have arrived") || s.contains("arrived at"))
                 && ahora - llegadaAvisada > 60000) {
             llegadaAvisada = ahora;
+            navDecision = "¡llegamos!";
             enviar("asis|/r?n=llegamos");
             return;
         }
         int i = primero(s, "izquierda", "left"), d = primero(s, "derecha", "right");
-        String dir = i >= 0 && (d < 0 || i < d) ? "maps_izq" : d >= 0 ? "maps_der" : "";
-        if (dir.isEmpty()) return;
+        boolean porTexto = i >= 0 || d >= 0;
+        String dir = i >= 0 && (d < 0 || i < d) ? "maps_izq" : d >= 0 ? "maps_der" : lado < 0 ? "maps_izq" : lado > 0 ? "maps_der" : "";
+        if (dir.isEmpty()) { navDecision = "sin giro (recto o no se entiende)"; return; }
         double metros = -1;
         Matcher m = DISTANCIA.matcher(s);
         if (m.find()) {
@@ -991,10 +1010,17 @@ public class CubiService extends Service {
             String u = m.group(2);
             metros = u.equals("km") ? v * 1000 : u.equals("mi") ? v * 1609 : u.equals("m") ? v : v * 0.3048;
         }
-        String giro = dir + DISTANCIA.matcher(s).replaceAll("").replaceAll("\\s+", " ").trim();  // el giro sin la distancia
-        if (giro.equals(giroAvisado) || metros > 250) return;  // cada giro se muestra una vez, ya cerquita
-        giroAvisado = giro;
-        enviar("asis|/r?n=" + dir);
+        String cual = (dir.equals("maps_izq") ? "izquierda" : "derecha") + (metros >= 0 ? " en " + Math.round(metros) + " m" : "")
+                + (porTexto ? " (por el texto)" : " (por el dibujo)");
+        // cada giro se muestra dos veces: cuando falta poco (300 m) y cuando ya toca (60 m)
+        String etapa = metros >= 0 && metros <= 60 ? "ya" : "cerca";
+        String giro = dir + etapa + DISTANCIA.matcher(s).replaceAll("").replaceAll("\\s+", " ").trim();  // el giro sin la distancia
+        if (metros > 300) { navDecision = cual + ", todavía lejos"; return; }
+        navDecision = cual + ", flecha mostrada";
+        // el texto de Maps cambia solo (la hora de llegada): la misma flecha no se repite antes de 25 s
+        if (giro.equals(giroAvisado) || ((dir + etapa).equals(flechaAntes) && ahora - flechaCuando < 25000)) return;
+        giroAvisado = giro; flechaAntes = dir + etapa; flechaCuando = ahora;
+        enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : ""));
     }
 
     private static int primero(String s, String a, String b) {

@@ -2213,7 +2213,7 @@ void cuadro(float t, float dt, const Entradas &e) {
     char b[16];
     if (gradosM) {                                                 // "2.600 m"
       if (gradosN >= 1000) snprintf(b, sizeof b, "%d.%03d m", gradosN / 1000, gradosN % 1000); else snprintf(b, sizeof b, "%d m", gradosN);
-      texto(b, CX, 46, 48, c, a);
+      texto(b, CX, laReac == MAPS_IZQ || laReac == MAPS_DER ? H - 40 : 46, 48, c, a);   // con la flecha de Maps van abajo: arriba está la flecha
     } else {
     snprintf(b, sizeof b, "%d", gradosN);
     const float tam = 52, x = CX - 8, ancho = anchoTexto(b, tam), gx = x + ancho / 2 + 12, gy = 30;

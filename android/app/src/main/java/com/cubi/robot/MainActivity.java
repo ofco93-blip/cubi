@@ -467,6 +467,21 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean navActiva() {
+            return CubiService.yo == null || CubiService.yo.navActiva();
+        }
+
+        @JavascriptInterface
+        public void navCubi(boolean si) {
+            if (CubiService.yo != null) CubiService.yo.navOn(si);
+        }
+
+        @JavascriptInterface
+        public String estadoNav() {
+            return CubiService.yo == null ? "" : CubiService.yo.estadoNav();
+        }
+
+        @JavascriptInterface
         public boolean holaActivo() {
             return CubiService.yo != null && CubiService.yo.holaActivo();
         }
