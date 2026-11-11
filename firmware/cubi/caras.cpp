@@ -2170,8 +2170,8 @@ static void extrasReac(float u, bool delante) {
           d = fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt - 13, 4.6f));                                        // la punta
           return fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt + 13, 4.6f));
         });
-        for (int s2 = -1; s2 <= 1; s2 += 2)                                                     // las dos manitos señalan hacia el giro, empujando
-          manoBlanca(CX + s2 * 148 + lado * 8 * fabsf(sinf(u * 5 + (s2 > 0 ? 0.6f : 0))), 124 + 26 * (1 - a), lado > 0 ? 0 : PI, 0.85f, true, a);
+        // una manito, del lado del giro, señala hacia allá empujando
+        manoBlanca(CX + lado * (148 + 8 * fabsf(sinf(u * 5))), 124 + 26 * (1 - a), lado > 0 ? 0 : PI, 0.85f, true, a);
         const float xt = CX + 62;                                                               // los textos, a la derecha del disco
         if (hayM) {
           char b[16];
