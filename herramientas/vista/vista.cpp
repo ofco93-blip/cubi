@@ -75,7 +75,7 @@ int main(int argc, char **argv) {
         auto canta = [&](float cada, float calla, float b0, float b1) { e.canta = fmodf(t, cada) < cada - calla; e.boca = e.canta ? b0 + (b1 - b0) * fabsf(sinf(t * 5.3f)) : 0; };
         if (t < 1) {}                                                              // todavia no arranca
         else if (t < 9) { e.nivel = 0.33f + lat; canta(2.7f, 0.5f, 0.2f, 0.5f); }  // verso suave
-        else if (t < 13) { e.nivel = 0.55f + lat; canta(2.7f, 0.5f, 0.3f, 0.6f); } // sube
+        else if (t < 13) { e.nivel = 0.64f + lat; canta(2.7f, 0.5f, 0.3f, 0.6f); } // sube
         else if (t < 14.2f) { e.nivel = 0.03f; }                                   // silencio antes del coro
         else if (t < 24) { e.nivel = 0.88f + lat; e.voz = 1; canta(3.2f, 0.4f, 0.55f, 1); }   // coro duro
         else if (t < 27) { e.nivel = 0.7f + lat; e.canta = true; e.boca = 0.6f + 0.3f * fabsf(sinf(t * 6)); e.voz = 1; e.emocion = 1; }   // nota larga

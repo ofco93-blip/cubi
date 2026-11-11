@@ -685,6 +685,7 @@ static float explotaAhora = 0;     // 1 -> 0: la música entró de golpe (el cor
 static float veniaDesde = -100;    // cuándo empezó la venia del final de la canción
 static float sonoSeg = 0, ultCantaT = -100;   // cuánto lleva sonando; último cuadro en que estaba cantando
 static int ladoCanta = 1;          // hacia qué lado canta esta frase: cambia con cada respiro, como respondiéndose
+static float guinoHasta = -1;      // acaba de pasarse el micrófono: te guiña el ojo
 static int manoPaso = 0;           // qué hace la mano libre: 0 puño (sin voz), 1 saluda (canta), 2 apunta al cielo (nota alta)
 // Nada va por turnos ni en bucle: cada gesto sale de lo que suena en ese momento y solo uno a la vez.
 //   canta suave o nota larga  -> el micrófono al centro con las dos manos
@@ -697,7 +698,7 @@ static void dramaMicro(const Entradas &e, float dt) {
   static float cantoSeg = 0, calladoSeg = 0, ofreceHasta = -1, ofreceDesde = -1, proxOfrece = 4, proxCoro = 14;
   static float proxLanza = 0, proxPase = 0, proxExplota = 0, suaveSeg = 0, mudoSeg = 0, tensoSeg = 0, manoDesde = 0;
   static int ladoMeta = 1;
-  static bool porSilencio = false, respiro = false, duro = false;
+  static bool porSilencio = false, respiro = false, duro = false, pasando = false;
   const bool esMic = e.ritmo == R_KPOP;
   ultCantaT = tAhora;
   nivR += (e.nivel - nivR) * lim(dt * 6, 0, 1); nivL += (e.nivel - nivL) * lim(dt * 0.5f, 0, 1);
@@ -745,13 +746,15 @@ static void dramaMicro(const Entradas &e, float dt) {
   // entra la música de golpe -> lo lanza; respiro entre frases -> lo pasa por debajo
   if (quieto && dosAhora < 0.3f) {
     if (entra && tAhora > proxLanza) { ladoMeta = -ladoMeta; lanzaMic = true; proxLanza = tAhora + 6; proxPase = tAhora + 4; }
-    else if (acabaDeRespirar && tAhora > proxPase && tAhora < proxOfrece) { ladoMeta = -ladoMeta; lanzaMic = false; proxPase = tAhora + 5; }
+    else if (acabaDeRespirar && tAhora > proxPase && tAhora < proxOfrece) { ladoMeta = -ladoMeta; lanzaMic = false; proxPase = tAhora + 5; pasando = true; }
   }
   // la mano libre: según la voz, y aguanta al menos segundo y medio para no temblar entre una y otra
-  const int quiere = !e.canta ? 0 : (e.boca > 0.6f || e.voz > 0.8f) ? 2 : 1;
+  // sin voz: puño con el golpe; canta: saluda; canta con ganas: te señala; nota alta: apunta al cielo
+  const int quiere = !e.canta ? 0 : (e.boca > 0.6f || e.voz > 0.8f) ? 2 : nivR > 0.55f ? 4 : 1;
   if (quiere != manoPaso && tAhora - manoDesde > 1.5f) { manoPaso = quiere; manoDesde = tAhora; }
   const float paso = dt * fmaxf(e.bpm, 60) / 60 * (lanzaMic ? 1.2f : 2);   // lanzado tarda más: se ve volar
   ladoMic = ladoMic < ladoMeta ? fminf(ladoMic + paso, ladoMeta) : fmaxf(ladoMic - paso, ladoMeta);
+  if (pasando && ladoMic == ladoMeta) { pasando = false; guinoHasta = tAhora + 0.8f; }   // lo recibió: guiño
 }
 // la venia del final: cierra los ojitos y baja la cabeza
 static bool venia(Rostro &r) {
@@ -870,6 +873,10 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
     mover(r, 0, -8 * O + 9 * O * g);
     r.L.incl = r.R.incl = r.L.incl * (1 - O) + 0.1f * O * vaiven;
   }
+  if (tAhora < guinoHasta) {                          // guiña el ojo del lado donde quedó el micrófono, el otro bien abierto
+    Ojo &o = ladoMic > 0 ? r.R : r.L, &q = ladoMic > 0 ? r.L : r.R;
+    o.feliz = 1; o.tapa = 0; q.feliz = 0; q.tapa = 0; r.corazon = 0;
+  }
   if (tensionAhora > 0.01f) {                         // silencio antes del coro: ojos bien abiertos, quieto, tiembla apenas
     const float T = tensionAhora;
     r.L.feliz *= 1 - T; r.R.feliz *= 1 - T; r.corazon *= 1 - T; r.L.tapa *= 1 - T; r.R.tapa *= 1 - T;
@@ -987,7 +994,7 @@ static void telefonoIcono(float x, float y, float R, float u, float alfa) {
 static void manoLibre(const Entradas &e, int n, float g, int paso, float a, int lado = -1) {
   const Ojo &o = lado < 0 ? ahora.L : ahora.R;
   const float f = n + e.pulso, x0 = o.x + lado * (o.w / 2 + 40), y0 = o.y + o.h / 2 + 34;
-  float dx = 0, y = y0, ang = -PI / 2;
+  float dx = 0, y = y0, ang = -PI / 2, esc = 1.1f;
   bool apunta = false;
   if (paso == 0) { y = y0 - 50 * (1 - g); ang = -PI / 2 - 0.2f; }                       // puño que sube y baja
   else if (paso == 1) { ang = -PI / 2 + 0.6f * sinf(f * PI); dx = 10 * sinf(f * PI); y = y0 - 40; }   // saludo
@@ -997,9 +1004,10 @@ static void manoLibre(const Entradas &e, int n, float g, int paso, float a, int 
     for (int s2 = -1; s2 <= 1; s2 += 2)                                                // rayitas del golpe (no hay mesa)
       linea(x0 - lado * 14 + s2 * 30, y0 + 46, x0 - lado * 14 + s2 * (44 + 10 * (1 - k)), y0 + 54, 2.2f, BL, k * fminf(1.f, a * 1.6f));
   }
+  else if (paso == 4) { apunta = true; ang = 0.95f; y = y0 - 14 + 8 * g; dx = 14; esc = 1.15f + 0.4f * g; }   // te señala: el dedo hacia ti, crece con el golpe
   else { apunta = true; ang = -PI / 2 + 0.25f; y = y0 - 30 - 30 * (1 - g); dx = 8; }   // apunta arriba
   if (lado > 0) { dx = -dx; ang = PI - ang; }                                            // al otro lado, en espejo
-  manoBlanca(x0 + dx, y, ang, 1.1f, apunta, fminf(1.f, a * 1.6f));   // blanca sólida y más grande: que se vea el paso
+  manoBlanca(x0 + dx, y, ang, esc, apunta, fminf(1.f, a * 1.6f));   // blanca sólida y más grande: que se vea el paso
 }
 
 // Los instrumentos van abajo: crecen con la cara pero un poco menos y anclados al borde de abajo, para no salirse de la
@@ -1114,7 +1122,7 @@ static void extrasMini(float u, const Entradas &e) {
       float ang = PI / 2 - lado * (PI / 2 - a0);
       const float vuelo = lanzaMic ? 1 - lado * lado : 0, D = suave(dosAhora) * (1 - O);   // vuelo: qué tan alto va el lanzado
       const bool enVuelo = vuelo > 0.08f;
-      if (lanzaMic) ang += lado * 2 * PI;                // lanzado: da vueltas en el aire
+      if (lanzaMic) ang += (lado + 1) * PI;              // lanzado: una sola vuelta en el aire
       float mx = ahora.bx + lado * (56 + 46 * gritoAhora), my = ahora.by + 4 + (lanzaMic ? -135 * vuelo : 36 * suave(pase)), esc = 1.3f, hx, hy;
       my -= (3 + 14 * Em) * g * (1 - vuelo); mx += lado * 9 * Em * vaiven * (1 - vuelo);   // marca el golpe: poquito en baladas, mucho en lo movido
       mx += (ahora.bx - mx) * D; my += (ahora.by + 62 - my) * D; ang += (PI / 2 - ang) * D;   // dos manos: al centro, de pie
