@@ -13,7 +13,7 @@ static const float DURA[N_REAC] = {0, 2.6f, 2.4f, 4.0f, 2.8f, 2.8f, 2.4f, 2.4f, 
                                    3.2f, 3.0f, 3.0f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f, 5.0f, 20.0f};
 float duracion(Reac r) { return DURA[r]; }
 const char *NOMBRE_RITMO[N_RITMO] = {"pop", "urbano", "electro", "tropical", "kpop", "corazon", "groove", "guitarra", "disfruta", "rock",
-                                     "jazz", "dj", "piano", "barras", "trompeta", "acordeon"};
+                                     "jazz", "dj", "piano", "barras", "manos", "acordeon", "vela"};
 
 // ---------------------------------------------------------------- medidas (ojos grandes y redondos, como Copi)
 constexpr float CX = W / 2.f, EY = 166, EX = 88, EW = 104, EH = 164, MY = 296, MIRA = 50;
@@ -763,7 +763,7 @@ static bool venia(Rostro &r) {
 }
 
 static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float bl) {
-  bool lento = e.ritmo == R_CORAZON || e.ritmo == R_JAZZ || e.ritmo == R_PIANO || e.ritmo == R_DISFRUTA || e.ritmo == R_GUITARRA;
+  bool lento = e.ritmo == R_CORAZON || e.ritmo == R_JAZZ || e.ritmo == R_PIANO || e.ritmo == R_DISFRUTA || e.ritmo == R_GUITARRA || e.ritmo == R_VELA;
   // lenta y suave: movimientos largos y chiquitos; movida y fuerte: cortos y marcados. En el silencio tenso, quieto.
   const float E = lim(0.5f * lim((e.bpm - 70) / 70, 0, 1) + 0.5f * lim(nivL * 1.4f, 0, 1), 0, 1);
   g *= (0.55f + 0.75f * E) * (1 - tensionAhora); vaiven *= 1 - tensionAhora;
@@ -1030,7 +1030,7 @@ static void extrasMini(float u, const Entradas &e) {
   const int nv = n * veces + (int)fv;                                  // cuántos toques van
   switch (e.ritmo) {
     case R_ROCK: case R_GROOVE: {                       // guitarra eléctrica: la manito rasguea a la velocidad del nivel
-      float gx = CX - 62, gy = H - 36, ang = -0.22f - 0.08f * gv, hx, hy;   // abajo y acostada: el mástil pasa debajo de la boquita
+      float gx = CX - 62 + 18 * vaiven, gy = H - 36, ang = -0.22f - 0.08f * gv + 0.07f * vaiven, hx, hy;   // se mece de lado a lado   // abajo y acostada: el mástil pasa debajo de la boquita
       guitarraLinea(gx, gy, ang, 1, true, 4 * gv, 1);
       aPantalla(marco(gx, gy, ang, 1), 0, -14 + 26 * (1 - gv), hx, hy);
       manoBlanca(hx, hy, ang + 1.9f, 0.85f, false);
@@ -1039,7 +1039,7 @@ static void extrasMini(float u, const Entradas &e) {
       break;
     }
     case R_GUITARRA: case R_DISFRUTA: {                 // guitarra acústica: rasguea a la velocidad del nivel
-      float rasga = gv, gx = CX - 70, gy = H - 38, ang = -0.2f, hx, hy;
+      float rasga = gv, gx = CX - 70 + 18 * vaiven, gy = H - 38, ang = -0.2f + 0.07f * vaiven, hx, hy;   // se mece de lado a lado
       guitarraLinea(gx, gy, ang, 1.05f, false, 3 * rasga, 1);
       aPantalla(marco(gx, gy, ang, 1.05f), 22, -16 + 26 * (1 - rasga), hx, hy);
       manoBlanca(hx, hy, ang + 1.9f, 0.85f, false);
@@ -1047,12 +1047,16 @@ static void extrasMini(float u, const Entradas &e) {
       manoBlanca(hx, hy, ang - 1.5f, 0.8f, false);
       break;
     }
-    case R_TROPICAL:                                    // maracas a los lados: se sacuden en el 2 y el 4
+    case R_TROPICAL:                                    // maracas en las manos: se turnan, suben, giran y dejan rayitas al sacudir
       for (int s2 = -1; s2 <= 1; s2 += 2) {
-        float sh = (nv + (s2 > 0)) % 2 ? gv : 0.25f * gv, x = CX + s2 * 150, y = EY + 70;   // más adentro: no se salen   // se turnan, a la velocidad del nivel
-        float ang = s2 * 0.35f + 0.5f * sh * sinf(u * 40), hx = x + sinf(ang) * 38, hy = y - cosf(ang) * 38;
-        linea(x, y, hx, hy, 4, BL, 0.95f);
-        volumen(hx - 16, hy - 16, hx + 16, hy + 16, 0.95f, [=](float px, float py) { return dCirculo(px, py, hx, hy, 15); });
+        const float sh = (nv + (s2 > 0)) % 2 ? gv : 0.25f * gv;                       // 1 = le toca a esta
+        const float x = CX + s2 * (132 - 16 * sh), y = EY + 104 - 58 * sh;
+        const float ang = s2 * (0.3f + 0.55f * sh) + 0.4f * sh * sinf(u * 45), hx = x + sinf(ang) * 46, hy = y - cosf(ang) * 46;
+        linea(x, y, hx, hy, 4.5f, BL, 1);
+        volumen(hx - 22, hy - 22, hx + 22, hy + 22, 1, [=](float px, float py) { return dElipse(px, py, hx, hy, 17, 21); });
+        manoBlanca(x, y + 4, -PI / 2, 0.75f, false);
+        const float af = s2 > 0 ? -0.5f : PI - 0.5f;                                   // rayitas hacia afuera
+        for (int i = 0; i < 2; i++) arcoTrazo(hx, hy, 32 + 11 * i, af - 0.45f, af + 0.45f, 2, sh * (1 - 0.4f * i));
       }
       break;
     case R_JAZZ: {                                      // saxofón con la manito: se mece de lado a lado, más rápido en lo fuerte
@@ -1105,12 +1109,14 @@ static void extrasMini(float u, const Entradas &e) {
       const float lado = ladoMic, O = suave(ofreceAhora), pase = 1 - fabsf(lado);
       const int sg = lado >= 0 ? 1 : -1;
       // lo mueve al cantar, más rápido en lo fuerte; en el "¡aaah!" se corre para que quepa la boca grande
-      const float a0 = 0.95f + 0.15f * sinf((n + e.pulso) * PI * 0.5f * veces) - 0.2f * ahora.boca;
+      const float Em = lim(0.5f * lim((e.bpm - 70) / 70, 0, 1) + 0.5f * lim(nivL * 1.4f, 0, 1), 0, 1);   // lenta y suave 0 .. movida y fuerte 1
+      const float a0 = 0.95f + (0.06f + 0.22f * Em) * sinf((n + e.pulso) * PI * 0.5f * veces) - 0.2f * ahora.boca;
       float ang = PI / 2 - lado * (PI / 2 - a0);
       const float vuelo = lanzaMic ? 1 - lado * lado : 0, D = suave(dosAhora) * (1 - O);   // vuelo: qué tan alto va el lanzado
       const bool enVuelo = vuelo > 0.08f;
       if (lanzaMic) ang += lado * 2 * PI;                // lanzado: da vueltas en el aire
       float mx = ahora.bx + lado * (56 + 46 * gritoAhora), my = ahora.by + 4 + (lanzaMic ? -135 * vuelo : 36 * suave(pase)), esc = 1.3f, hx, hy;
+      my -= (3 + 14 * Em) * g * (1 - vuelo); mx += lado * 9 * Em * vaiven * (1 - vuelo);   // marca el golpe: poquito en baladas, mucho en lo movido
       mx += (ahora.bx - mx) * D; my += (ahora.by + 62 - my) * D; ang += (PI / 2 - ang) * D;   // dos manos: al centro, de pie
       // "¡canta tú!": el micrófono viene al centro y crece hacia la pantalla, de frente, latiendo con el golpe
       mx += (ahora.bx - mx) * O; my += (ahora.by + 44 - my) * O; ang += (PI / 2 - ang) * O;
@@ -1134,37 +1140,31 @@ static void extrasMini(float u, const Entradas &e) {
       else if (pase < 0.2f && (e.canta || bailaAhora > 0.05f)) manoLibre(e, n, gv, golpeAhora > 0.3f ? 3 : manoPaso, fmaxf(bailaAhora, 0.6f), -sg);   // la otra mano baila
       break;
     }
-    case R_POP: {                                       // batería: bombo al centro, caja y platillo; las baquetas se turnan
-      const float cx = CX - 88, cy = H - 38, px = CX + 92, py = H - 82;
-      anillo(CX, H - 44, 30 * (1 + 0.07f * g), 2.6f, 1); anillo(CX, H - 44, 9, 2, 0.8f);
-      figura(cx - 36, cy - 20, cx + 36, cy + 20, solido(BL, 1), [=](float qx, float qy) { return fabsf(dCaja(qx, qy, cx, cy, 30, 13, 6)) - 2.4f; });   // caja
-      const bool der = nv % 2;
-      const float pl = der ? gv : 0;                    // el platillo se ladea cuando le pega
-      linea(px, py + 4, px, H - 12, 2, BL, 0.9f);
-      linea(px - 34, py + 8 * pl, px + 34, py - 8 * pl, 3, BL, 1);
+    case R_MANOS: {                                     // canta con las manos: se turnan con el golpe y las abre en lo fuerte
+      zi.soltar();
+      const float drama = fmaxf(emoAhora, gritoZona);   // nota larga o parte fuerte: las dos arriba y abiertas
       for (int s2 = -1; s2 <= 1; s2 += 2) {
-        const float hit = (s2 > 0) == der ? gv : 0;     // 1 = acaba de pegar
-        const float tx = s2 < 0 ? cx + 8 : px - 12, ty = (s2 < 0 ? cy - 16 : py - 5) - 36 * (1 - hit);
-        const float hx = CX + s2 * 42, hy = (s2 < 0 ? H - 84 : H - 108) - 12 * (1 - hit);
-        linea(hx, hy, tx, ty, 2.4f, BL, 1);
-        manoBlanca(hx, hy, atan2f(ty - hy, tx - hx), 0.7f, false);
+        const Ojo &o = s2 < 0 ? ahora.L : ahora.R;
+        const float toca = (n % 2 == (s2 > 0)) ? gv : 0.3f * gv;
+        const float x = CX + s2 * (186 + 5 * sinf(f * PI * 0.5f) + 4 * drama);   // pegadas al borde: que no tapen los ojos ni se salgan
+        const float y = o.y + o.h / 2 + 40 - (24 + 40 * lim(nivR * 1.3f, 0, 1)) * toca - 60 * drama + 6 * drama * sinf(u * 30);
+        manoBlanca(x, y, -PI / 2 + s2 * (0.45f - 0.5f * toca + 0.4f * drama), 1.05f, false);
       }
       break;
     }
-    case R_TROMPETA: {                                  // trompeta: la levanta con cada toque, aprieta los pistones y salen notas
-      const float ang = -0.12f - 0.14f * gv;
-      float hx, hy;
-      Marco m = marco(CX - 70, H - 44, ang, 1.05f);
-      pieza(m, -8, -10, 96, 10, solido(BL, 1), [=](float a, float b) { return fabsf(dCaja(a, b, 44, 0, 46, 3.5f, 3.5f)) - 2.2f; });        // tubo
-      pieza(m, 84, -30, 148, 30, solido(BL, 1), [=](float a, float b) { return fabsf(dCapsula2(a, b, 94, 0, 4, 122, 0, 20)) - 2.4f; });   // campana
-      pieza(m, 14, 0, 74, 28, solido(BL, 1), [=](float a, float b) { return fabsf(dCaja(a, b, 44, 13, 24, 8, 8)) - 2; });                  // la vuelta del tubo
-      for (int i = 0; i < 3; i++) {                     // pistones: baja el que toca
-        const float pa = 32 + i * 12, ab = (nv + i) % 3 == 0 ? 5 * gv : 0;
-        pieza(m, pa - 5, -22, pa + 5, 2, solido(BL, 1), [=](float a, float b) { return dSegmento(a, b, pa, -14 + ab, pa, -3, 2.4f); });
-      }
-      aPantalla(m, 44, -22, hx, hy); manoBlanca(hx, hy, ang + PI / 2, 0.7f, false);
-      aPantalla(m, 150, -6, hx, hy);
-      for (int i = 0; i < 2; i++) { const float q = fmodf(u * 0.5f + i * 0.5f, 1.f); notaColor(hx + 44 * q, hy - 50 * q + 6 * sinf(q * 9), 14, BL, 0.9f * campana(q, 0, 1)); }
+    case R_VELA: {                                      // vela en la mano: la mece despacio y la levanta en lo fuerte
+      const float lento = sinf(f * PI * 0.5f), sube = 18 * lim(fmaxf(emoAhora, gritoZona), 0, 1);
+      const float x = CX + 176 + 12 * lento, y = H - 54 - sube, tilt = 0.12f * lento;
+      const float tx = x + sinf(tilt) * 44, ty = y - cosf(tilt) * 44;                 // la punta de la vela
+      Marco m = marco(x, y, tilt, 1);
+      pieza(m, -14, -48, 14, 6, solido(BL, 1), [=](float a, float b) { return fabsf(dCaja(a, b, 0, -21, 8, 21, 4)) - 2.4f; });   // la vela
+      pieza(m, -3, -56, 3, -42, solido(BL, 1), [=](float a, float b) { return dSegmento(a, b, 0, -44, 0, -51, 1.4f); });        // el pabilo
+      const float fs = 12 * (1 + 0.12f * sinf(u * 23) + 0.25f * gv), fx = tx - 5 * lento + 2 * sinf(u * 17), fy = ty - 12 - fs;   // la llama se queda atrás al mecer
+      figura(fx - fs, fy - fs * 1.9f, fx + fs, fy + fs * 1.1f, solido(BL, 1, 10), [=](float px, float py) { return dGota(px, py, fx, fy, fs); });
+      anillo(fx, fy - 4, fs + 12 + 4 * gv, 1.6f, 0.35f + 0.25f * gv);                 // el resplandor
+      manoBlanca(x, y + 6, tilt - PI / 2, 0.85f, false);
+      zi.soltar();
+      if (e.canta) manoLibre(e, n, gv, emoAhora > 0.3f || gritoZona > 0.5f ? 2 : 1, 1);   // la otra mano: saluda lento, al cielo en lo fuerte
       break;
     }
     case R_ACORDEON: {                                  // acordeón: el fuelle abre y cierra con la música

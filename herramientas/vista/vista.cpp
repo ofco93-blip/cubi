@@ -63,7 +63,7 @@ int main(int argc, char **argv) {
     if (que == "habla" || que == "telefono") { float s = fabsf(sinf(t * 9.5f)) * (0.5f + 0.5f * sinf(t * 2.3f)); e.boca = (fmodf(t, 2.2f) < 1.7f) ? s : 0; }
     if (que == "canta") {
       e.ritmo = ritmo; e.canta = voz;
-      float bpm = ritmo == R_GUITARRA || ritmo == R_DISFRUTA || ritmo == R_PIANO || ritmo == R_JAZZ ? 84 : ritmo == R_URBANO ? 94 : ritmo == R_ELECTRO || ritmo == R_DJ ? 126 : ritmo == R_ROCK ? 140 : 104;
+      float bpm = ritmo == R_GUITARRA || ritmo == R_DISFRUTA || ritmo == R_PIANO || ritmo == R_JAZZ || ritmo == R_VELA ? 84 : ritmo == R_URBANO ? 94 : ritmo == R_ELECTRO || ritmo == R_DJ ? 126 : ritmo == R_ROCK ? 140 : 104;
       e.bpm = bpm; e.pulso = fmodf(t * bpm / 60, 1);
       e.canta = voz && fmodf(t, 4) < 2.5f; e.boca = e.canta ? 0.35f + 0.45f * fabsf(sinf(t * 5.3f)) : 0;
       e.ancho = 0.5f + 0.5f * sinf(t * 2.3f);   // las vocales cambian: a, e, i, o, u

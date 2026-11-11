@@ -494,7 +494,7 @@ public class CubiService extends Service {
     static final String MODELO_CLAUDE = "claude-haiku-5-5";
     static final List<String> REACCIONES = Arrays.asList("kamehameha", "confeti", "risa", "sorpresa", "amor", "saludo", "guino",
             "curiosa", "mareo", "llegamos");
-    static final List<String> BAILES = Arrays.asList("rock", "pop", "tropical", "urbano", "electro", "jazz", "dj", "guitarra", "kpop", "piano", "trompeta", "acordeon");
+    static final List<String> BAILES = Arrays.asList("rock", "pop", "tropical", "urbano", "electro", "jazz", "dj", "guitarra", "kpop", "piano", "manos", "acordeon", "vela");
     // Personalidades: el nombre y las reglas de carácter se eligen y editan en la app. Las reglas técnicas (SISTEMA:
     // trucos, acciones, cómo hablar por la voz del celular) son fijas y van siempre después.
     static final String[][] PERSONAS_BASE = {
@@ -545,7 +545,7 @@ public class CubiService extends Service {
             + "- dice: lo que dices.\n"
             + "- truco: una animación en tu pantalla, exactamente una de: ninguno, kamehameha, confeti, risa, sorpresa, amor, "
             + "saludo, guino, curiosa, mareo, llegamos, baile_rock, baile_pop, baile_tropical, baile_urbano, baile_electro, "
-            + "baile_jazz, baile_dj, baile_guitarra, baile_kpop, baile_piano, baile_trompeta, baile_acordeon.\n"
+            + "baile_jazz, baile_dj, baile_guitarra, baile_kpop, baile_piano, baile_manos, baile_acordeon, baile_vela.\n"
             + "  kamehameha: cargas una bola de energía y la lanzas hacia adelante. Solo di algo cortico antes, como "
             + "'¡Mira esto!'; el canto 'Ka-me-ha-me-ha' lo hago yo justo después.\n"
             + "  confeti: cuando te pidan 'mata a', 'dispárale a' o 'acaba con' alguien. En este carro siempre es una broma entre "
@@ -1119,7 +1119,7 @@ public class CubiService extends Service {
     private String ritmoMandado = "";
 
     static final String[][] INSTRUMENTOS = {{"pop", "kpop"}, {"electronica", "dj"}, {"urbano", "dj"}, {"rock", "rock"},
-            {"acustica", "guitarra"}, {"tropical", "tropical"}, {"jazz", "jazz"}, {"piano", "piano"}, {"percusion", "pop"}, {"acordeon", "acordeon"}, {"trompeta", "trompeta"}};
+            {"acustica", "guitarra"}, {"tropical", "tropical"}, {"jazz", "jazz"}, {"piano", "piano"}, {"percusion", "pop"}, {"acordeon", "acordeon"}, {"ranchera", "manos"}, {"balada", "vela"}};
 
     private void pedirInstrumento(String titulo, String artista, String id) {
         if (claveClaude().isEmpty()) return;  // sin clave: el micrófono adivina el estilo como antes
@@ -1133,7 +1133,7 @@ public class CubiService extends Service {
                                 + "En 'instrumento' responde exactamente uno: pop (pop, k-pop, r&b, baladas pop, cualquier canción "
                                 + "donde manda la voz), electronica (electrónica, house, EDM, dance), urbano (reggaetón, trap, hip hop), "
                                 + "rock (rock, metal, punk), acustica (folk, cantautor, country, acústico), tropical (salsa, cumbia, "
-                                + "merengue, bachata), acordeon (vallenato, norteño, cumbia de acordeón), trompeta (mariachi, ranchera, banda, ska), jazz (jazz, blues, soul con vientos), piano (baladas de piano, "
+                                + "merengue, bachata), acordeon (vallenato, norteño, cumbia de acordeón), ranchera (mariachi, ranchera, banda, corridos), balada (baladas románticas, boleros, despecho, canciones lentas y sentidas), jazz (jazz, blues, soul con vientos), piano (baladas de piano, "
                                 + "clásica), percusion (solo si la batería o los tambores son lo principal, como un solo de batería). "
                                 + "Si dudas, pop. En 'empiezaPiano' pon true solo si la canción arranca con un piano solo "
                                 + "antes de que entre la voz o el resto de la banda.");
@@ -1146,7 +1146,8 @@ public class CubiService extends Service {
                 else if (g.contains("electr") || g.contains("house") || g.contains("dance") || g.contains("edm")
                         || g.contains("reggaet") || g.contains("urban") || g.contains("trap") || g.contains("hip")) elegido = "dj";
                 else if (g.contains("vallenato") || g.contains("acorde") || g.contains("norte")) elegido = "acordeon";
-                else if (g.contains("trompeta") || g.contains("mariachi") || g.contains("ranch") || g.contains("banda") || g.contains("ska")) elegido = "trompeta";
+                else if (g.contains("mariachi") || g.contains("ranch") || g.contains("banda") || g.contains("corrido")) elegido = "manos";
+                else if (g.contains("balada") || g.contains("bolero") || g.contains("despecho")) elegido = "vela";
                 else if (g.contains("salsa") || g.contains("cumbia") || g.contains("merengue") || g.contains("bachata")
                         || g.contains("tropical")) elegido = "tropical";
                 else if (g.contains("jazz") || g.contains("blues") || g.contains("soul")) elegido = "jazz";
