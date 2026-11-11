@@ -214,7 +214,14 @@ section[hidden] { display: none; }
     <p class="note">Con una ruta puesta en el celular, Cubi muestra la flecha del próximo giro y los metros que faltan: una vez cuando falta poco (300 m) y otra cuando ya toca (60 m). Y celebra al llegar.</p>
     <p class="note" id="navAhora"></p>
     <div class="row"><span>Modo mapa (pantalla de navegación fija)</span><label class="sw"><input type="checkbox" id="navMapa"><i></i></label></div>
-    <p class="note">Para probar cómo sería un segundo Cubi solo de navegación: mientras haya una ruta, Cubi se queda en la pantalla de giro (flecha, metros y calle) en vez de bailar, sin sonar. Con “Usar el GPS” prendido, además sale un mini mapa con las calles de alrededor: para eso el celular le manda tu posición a OpenStreetMap (overpass-api.de) mientras haya una ruta. La línea azul de la ruta no se puede sacar de Maps.</p>
+    <p class="note">Para probar cómo sería un segundo Cubi solo de navegación: mientras haya una ruta, Cubi se queda en la pantalla de giro (flecha, metros y calle) en vez de bailar, sin sonar. Con “Usar el GPS” prendido, además sale un mini mapa con las calles de alrededor: para eso el celular le manda tu posición a OpenStreetMap (overpass-api.de) mientras haya una ruta. La línea azul de Maps no se puede sacar; para ver una ruta, escribe el destino aquí abajo.</p>
+    <div class="row"><span>Mapa completo (sin el muñequito)</span><label class="sw"><input type="checkbox" id="navCompleto"><i></i></label></div>
+    <p class="note">Apagado: Cubi con la manito o el volante y la tarjeta con el mini mapa. Prendido: el mapa en toda la pantalla, con el carrito, la ruta y arriba la barra con el giro, los metros y la calle.</p>
+    <input type="text" id="destino" placeholder="Destino de la ruta (ej: Centro Comercial Andino, Bogotá)" autocomplete="off"
+      style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font:inherit;margin:6px 0">
+    <button class="btn" id="trazar">Trazar ruta en el mapa</button>
+    <button class="btn" id="quitarRuta">Quitar ruta</button>
+    <p class="note">La ruta la calcula un servicio libre (OSRM), no Google: puede no ser la misma que te da Maps. Para buscar el destino y trazarla, el celular manda el destino y tu posición a nominatim.openstreetmap.org y router.project-osrm.org.</p>
     <div class="row"><span>Reaccionar al clima</span><label class="sw"><input type="checkbox" id="clima"><i></i></label></div>
     <p class="note" id="climaNota">Solito: cuando empieza a llover, sale el sol o la temperatura sube o baja 3 grados, hace su animación y muestra los grados. Con lluvia saca la sombrilla, con sol se alegra, con calor suda y con frío tirita. Usa tu ubicación aproximada (~1 km) y se actualiza cada 20 minutos.</p>
   </div>
@@ -430,6 +437,10 @@ function navAhora() { if (window.Android && Android.estadoNav) $('navAhora').inn
 if (window.Android && Android.navActiva) setTimeout(() => { $('nav').checked = Android.navActiva(); navAhora(); }, 500);
 setInterval(navAhora, 3000);
 $('navMapa').onchange = e => Android.navMapaCubi(e.target.checked);
+$('navCompleto').onchange = e => Android.navCompletoCubi(e.target.checked);
+$('trazar').onclick = () => { if (window.Android) { Android.destinoCubi($('destino').value); navAhora(); } };
+$('quitarRuta').onclick = () => { $('destino').value = ''; if (window.Android) { Android.destinoCubi(''); navAhora(); } };
+if (window.Android && Android.navCompleto) setTimeout(() => { $('navCompleto').checked = Android.navCompleto(); $('destino').value = Android.destinoTexto(); }, 500);
 if (window.Android && Android.navMapa) setTimeout(() => { $('navMapa').checked = Android.navMapa(); }, 500);
 if (window.Android) setTimeout(() => gpsEstado(Android.gpsActivo()), 500);
 function climaEstado(si) { $('clima').checked = si; }

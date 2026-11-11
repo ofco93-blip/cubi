@@ -15,6 +15,7 @@ void mostrarGrados(int g, float seg, bool metros = false);
 // mini mapa: calles alrededor (w: clase y puntos en hex, separadas por punto) y dónde va el carro (metros y rumbo)
 void mapaVias(const char *w, bool primero, bool fin);
 void mapaPos(float x, float y, float rumbo);
+void mapaVista(bool completo);      // true: en la navegación, el mapa completo en vez de Cubi con las flechas
 void mostrarCalle(const char *c);   // la calle del próximo giro (con la flecha de Maps); "" la quita
 void cuentaPum();                       // la pistola de confeti empieza la cuenta 3 2 1 (cuando el celular termina de hablar)   // los grados del clima arriba en la pantalla, por unos segundos
 

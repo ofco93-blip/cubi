@@ -46,6 +46,7 @@ int main(int argc, char **argv) {
   if (que.rfind("mini_", 0) == 0) { paquete(MINIMALISTA); que = que.substr(5); }
   for (auto pq : {std::make_pair("novas_", NOVA_S), std::make_pair("kiras_", KIRA_S), std::make_pair("colores_", ATARDECER), std::make_pair("ovalo_", OVALO), std::make_pair("neon_", NEON), std::make_pair("simple_", SIMPLE)})   // las caras nuevas, igual que mini_
     if (que.rfind(pq.first, 0) == 0) { paquete(pq.second); que = que.substr(strlen(pq.first)); }   // mini_x = la misma cara en el paquete minimalista
+  if (que.rfind("mapa_", 0) == 0) { mapaVista(true); que = "maps_" + que.substr(5); }   // mapa_x = la misma indicación con el mapa completo
   bool guion = que.rfind("cancion_", 0) == 0;   // cancion_x = una cancion con partes: verso suave, silencio, coro duro, nota larga, solo, final
   if (guion) que = "canta_" + que.substr(8);
   bool voz = que.rfind("baila_", 0) != 0;   // baila_x = el mismo baile en una parte sin voz
@@ -62,11 +63,12 @@ int main(int argc, char **argv) {
     auto via = [&](int cl, int x0, int y0, int x1, int y1) {
       if (!w.empty()) w += ".";
       w += cl ? "1" : "0";
-      for (int k = 0; k <= 4; k++) w += h2(128 + (x0 + (x1 - x0) * k / 4) / 2) + h2(128 + (y0 + (y1 - y0) * k / 4) / 2);
+      for (int k = 0; k <= 4; k++) w += h2(128 + (x0 + (x1 - x0) * k / 4) / 3) + h2(128 + (y0 + (y1 - y0) * k / 4) / 3);
       if (w.size() > 180) { mapaVias(w.c_str(), pri, false); pri = false; w.clear(); }
     };
-    for (int g = -240; g <= 240; g += 80) { via(g == 0, g, -250, g + 30, 250); via(g == 80, -250, g, 250, g - 20); }
+    for (int g = -320; g <= 320; g += 80) { via(g == 0, g - 40, -330, g + 40, 330); via(g == 80, -330, g + 12, 330, g - 12); }
     via(0, -200, -250, 120, 250);
+    { const int gx = que == "maps_der" ? 250 : -250; w += std::string(w.empty() ? "" : ".") + "2" + h2(128 - 60 / 3) + h2(128 - 330 / 3) + h2(128 + 12 / 3) + h2(128 + 80 / 3) + (que == "maps_recto" ? h2(128 + 40 / 3) + h2(128 + 330 / 3) : h2(128 + gx / 3) + h2(128 + (gx > 0 ? 60 : 100) / 3)); }   // la ruta
     mapaVias(w.c_str(), pri, true);
   }
   if (que == "maps_recto") { mostrarGrados(1200, 4.5f, true); mostrarCalle("Autopista Norte"); }

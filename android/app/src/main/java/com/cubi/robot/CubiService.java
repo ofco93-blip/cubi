@@ -454,84 +454,178 @@ public class CubiService extends Service {
     // Solo con "Modo mapa" prendido y una ruta andando. La posición sale del celular hacia overpass-api.de (el servicio
     // público de OpenStreetMap) cada vez que se avanza unos 110 m, para pedir las calles de 240 m a la redonda.
     private volatile double mapaLat0, mapaLon0;
-    private volatile boolean mapaListo, mapaCargando;
+    private volatile boolean mapaListo, mapaCargando, mapaForzar;
     private long mapaPedido;
     private float mapaRumbo;
     private volatile String mapaEstado = "Mini mapa: esperando el GPS.";
+    // la ruta: el destino lo escribe uno en la app; se busca en OpenStreetMap (nominatim) y la ruta la calcula OSRM
+    // (router.project-osrm.org, gratis y sin cuenta). No es la ruta de Google: es la de ese servicio.
+    private volatile double destLat = Double.NaN, destLon;
+    private volatile String destNombre = "", rutaEstado = "";
+    private volatile double[] rutaLat, rutaLon;
+    private volatile boolean rutaCalculando, destBuscando;
+    private long rutaPedida, destIntento;
+
+    boolean navCompleto() { return getSharedPreferences("cubi", 0).getBoolean("navCompleto", false); }
+    void navCompletoOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("navCompleto", si).apply(); }
+    String destinoTexto() { return getSharedPreferences("cubi", 0).getString("destino", ""); }
+
+    // el destino escrito en la app ("" lo quita)
+    void destino(String txt) {
+        final String q = txt == null ? "" : txt.trim();
+        getSharedPreferences("cubi", 0).edit().putString("destino", q).apply();
+        destLat = Double.NaN; rutaLat = null; rutaLon = null; rutaPedida = 0; mapaForzar = true;
+        if (q.isEmpty()) { rutaEstado = ""; destNombre = ""; return; }
+        if (destBuscando) return;
+        destBuscando = true; destIntento = System.currentTimeMillis();
+        rutaEstado = "Ruta: buscando “" + q + "”…";
+        new Thread(() -> {
+            try {
+                String u = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + URLEncoder.encode(q, "UTF-8");
+                Location aqui = antesGps;   // cerca de donde está el carro primero
+                if (aqui != null) u += String.format(Locale.US, "&viewbox=%.3f,%.3f,%.3f,%.3f", aqui.getLongitude() - 0.6, aqui.getLatitude() + 0.6,
+                        aqui.getLongitude() + 0.6, aqui.getLatitude() - 0.6);
+                JSONArray r = new JSONArray(bajarTexto(u));
+                if (r.length() == 0) { rutaEstado = "Ruta: no encontré “" + q + "”. Prueba con la dirección o agrega la ciudad."; return; }
+                JSONObject o = r.getJSONObject(0);
+                String nombre = o.optString("display_name", q);
+                destNombre = nombre.contains(",") ? nombre.substring(0, nombre.indexOf(',')) : nombre;
+                destLon = o.getDouble("lon"); destLat = o.getDouble("lat");
+                rutaEstado = "Ruta: destino “" + destNombre + "”; se traza cuando el GPS diga dónde estás.";
+            } catch (Exception e) {
+                rutaEstado = "Ruta: no pude buscar el destino (¿hay internet?).";
+            } finally {
+                destBuscando = false;
+            }
+        }).start();
+    }
+
+    private static String bajarTexto(String u) throws Exception {
+        HttpURLConnection h = (HttpURLConnection) new URL(u).openConnection();
+        h.setConnectTimeout(8000); h.setReadTimeout(12000);
+        h.setRequestProperty("User-Agent", "robot-app");
+        java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+        try (java.io.InputStream in = h.getInputStream()) { byte[] b = new byte[8192]; for (int n; (n = in.read(b)) > 0; ) o.write(b, 0, n); }
+        return o.toString("UTF-8");
+    }
+
+    private void calcularRuta(double lat, double lon) {
+        try {
+            JSONObject r = new JSONObject(bajarTexto(String.format(Locale.US,
+                    "https://router.project-osrm.org/route/v1/driving/%.5f,%.5f;%.5f,%.5f?overview=full&geometries=geojson", lon, lat, destLon, destLat)));
+            JSONObject ruta = r.getJSONArray("routes").getJSONObject(0);
+            JSONArray c = ruta.getJSONObject("geometry").getJSONArray("coordinates");
+            double[] la = new double[c.length()], lo = new double[c.length()];
+            for (int i = 0; i < c.length(); i++) { lo[i] = c.getJSONArray(i).getDouble(0); la[i] = c.getJSONArray(i).getDouble(1); }
+            rutaLat = la; rutaLon = lo; mapaForzar = true;
+            rutaEstado = String.format(Locale.US, "Ruta: %.1f km hasta “%s”.", ruta.optDouble("distance", 0) / 1000, destNombre);
+        } catch (Exception e) {
+            rutaEstado = "Ruta: no pude calcularla (¿hay internet?).";
+        } finally {
+            rutaCalculando = false;
+        }
+    }
+
+    // qué tan lejos de la línea de la ruta va el carro, en metros
+    private double fueraDeRuta(double lat, double lon) {
+        double[] la = rutaLat, lo = rutaLon;
+        if (la == null || la.length < 2) return 1e9;
+        double kx = 111320 * Math.cos(Math.toRadians(lat)), mejor = 1e9;
+        for (int i = 1; i < la.length; i++) {
+            double ax = (lo[i - 1] - lon) * kx, ay = (la[i - 1] - lat) * 111320, bx = (lo[i] - lon) * kx, by = (la[i] - lat) * 111320;
+            double vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy, t = l2 == 0 ? 0 : Math.max(0, Math.min(1, -(ax * vx + ay * vy) / l2));
+            mejor = Math.min(mejor, Math.hypot(ax + t * vx, ay + t * vy));
+        }
+        return mejor;
+    }
 
     private void mapaGps(Location l) {
         long ahora = System.currentTimeMillis();
-        if (!navMapa() || !navActiva() || ahora - navCuando > 120000) return;
+        if (!navMapa() || !navActiva()) return;
+        // el destino guardado se vuelve a buscar al arrancar (una vez por minuto si falla)
+        if (Double.isNaN(destLat) && !destinoTexto().isEmpty() && !destBuscando && ahora - destIntento > 60000) destino(destinoTexto());
+        boolean hayDestino = !Double.isNaN(destLat);
+        if (ahora - navCuando > 120000 && !hayDestino) return;   // sin ruta en Maps ni destino propio no hay mapa
         if (l.hasBearing() && l.hasSpeed() && l.getSpeed() > 1.5f) mapaRumbo = l.getBearing();   // parado, el rumbo del GPS no sirve
         final double lat = l.getLatitude(), lon = l.getLongitude();
+        // la ruta: la primera vez, y otra vez si el carro se sale más de 70 m de la línea (máximo cada 20 s)
+        if (hayDestino && !rutaCalculando && ahora - rutaPedida > 20000 && (rutaLat == null || fueraDeRuta(lat, lon) > 70)) {
+            rutaPedida = ahora; rutaCalculando = true;
+            new Thread(() -> calcularRuta(lat, lon)).start();
+        }
         double dy = (lat - mapaLat0) * 111320, dx = (lon - mapaLon0) * 111320 * Math.cos(Math.toRadians(mapaLat0));
         double lejos = Math.hypot(dx, dy);
-        if ((!mapaListo || lejos > 110) && !mapaCargando && ahora - mapaPedido > 8000) {
-            mapaPedido = ahora; mapaCargando = true;
+        if ((!mapaListo || lejos > 130 || mapaForzar) && !mapaCargando && (ahora - mapaPedido > 8000 || mapaForzar)) {
+            mapaPedido = ahora; mapaCargando = true; mapaForzar = false;
             new Thread(() -> bajarCalles(lat, lon)).start();
         }
-        if (mapaListo && lejos < 250)
-            enviar(String.format(Locale.US, "asis|/mapa?x=%d&y=%d&r=%d", Math.round(dx), Math.round(dy), Math.round(mapaRumbo)));
+        if (mapaListo && lejos < 375)
+            enviar(String.format(Locale.US, "asis|/mapa?x=%d&y=%d&r=%d&v=%d", Math.round(dx), Math.round(dy), Math.round(mapaRumbo), navCompleto() ? 1 : 0));
+    }
+
+    // corta una línea en los tramos que caen dentro del cuadro de 375 m y los escribe como los entiende Cubi (de a 3 m)
+    private static void tramos(double[] la, double[] lo, double lat, double lon, String clase, java.util.ArrayList<String> sale) {
+        double kx = 111320 * Math.cos(Math.toRadians(lat));
+        StringBuilder sb = new StringBuilder(); int n = 0, ax = -1, ay = -1;
+        for (int i = 0; i <= la.length; i++) {
+            boolean fuera = i == la.length;
+            int qx = 0, qy = 0;
+            if (!fuera) {
+                double dx = (lo[i] - lon) * kx, dy = (la[i] - lat) * 111320;
+                fuera = Math.abs(dx) > 375 || Math.abs(dy) > 375;
+                qx = 128 + (int) Math.round(dx / 3); qy = 128 + (int) Math.round(dy / 3);   // 128 = el centro
+            }
+            if (fuera) {   // se salió del cuadro (o se acabó): lo que iba es un tramo
+                if (n >= 2) sale.add(clase + sb);
+                sb = new StringBuilder(); n = 0; ax = ay = -1;
+            } else if (qx != ax || qy != ay) { sb.append(String.format("%02x%02x", qx, qy)); n++; ax = qx; ay = qy; }
+        }
     }
 
     private void bajarCalles(double lat, double lon) {
         try {
-            String q = "[out:json][timeout:10];way[highway~\"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street)(_link)?$\"](around:240,"
+            String q = "[out:json][timeout:10];way[highway~\"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street)(_link)?$\"](around:360,"
                     + String.format(Locale.US, "%.5f,%.5f", lat, lon) + ");out geom;";
-            HttpURLConnection h = (HttpURLConnection) new URL("https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(q, "UTF-8")).openConnection();
-            h.setConnectTimeout(8000); h.setReadTimeout(12000);
-            h.setRequestProperty("User-Agent", "robot-app");
-            java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
-            try (java.io.InputStream in = h.getInputStream()) { byte[] b = new byte[8192]; for (int n; (n = in.read(b)) > 0; ) o.write(b, 0, n); }
-            JSONArray els = new JSONObject(o.toString("UTF-8")).getJSONArray("elements");
-            double kx = 111320 * Math.cos(Math.toRadians(lat));
-            java.util.ArrayList<String> avenidas = new java.util.ArrayList<>(), calles = new java.util.ArrayList<>();
+            JSONArray els = new JSONObject(bajarTexto("https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(q, "UTF-8"))).getJSONArray("elements");
+            java.util.ArrayList<String> ruta = new java.util.ArrayList<>(), avenidas = new java.util.ArrayList<>(), calles = new java.util.ArrayList<>();
+            double[] rla = rutaLat, rlo = rutaLon;
+            if (rla != null && rlo != null) tramos(rla, rlo, lat, lon, "2", ruta);
             for (int e = 0; e < els.length(); e++) {
                 JSONObject w = els.getJSONObject(e);
                 JSONArray g = w.optJSONArray("geometry");
                 if (g == null) continue;
                 String tipo = w.optJSONObject("tags") == null ? "" : w.getJSONObject("tags").optString("highway");
                 boolean grande = tipo.startsWith("motorway") || tipo.startsWith("trunk") || tipo.startsWith("primary") || tipo.startsWith("secondary");
-                StringBuilder sb = new StringBuilder(); int n = 0, ax = -1, ay = -1;
-                for (int i = 0; i <= g.length(); i++) {
-                    boolean fuera = i == g.length();
-                    int qx = 0, qy = 0;
-                    if (!fuera) {
-                        JSONObject p = g.getJSONObject(i);
-                        double dx = (p.getDouble("lon") - lon) * kx, dy = (p.getDouble("lat") - lat) * 111320;
-                        fuera = Math.abs(dx) > 250 || Math.abs(dy) > 250;
-                        qx = 128 + (int) Math.round(dx / 2); qy = 128 + (int) Math.round(dy / 2);   // de a 2 m, 128 = el centro
-                    }
-                    if (fuera) {   // se salió del cuadro (o se acabó): lo que iba es un tramo
-                        if (n >= 2) (grande ? avenidas : calles).add((grande ? "1" : "0") + sb);
-                        sb = new StringBuilder(); n = 0; ax = ay = -1;
-                    } else if (qx != ax || qy != ay) { sb.append(String.format("%02x%02x", qx, qy)); n++; ax = qx; ay = qy; }
-                }
+                double[] la = new double[g.length()], lo = new double[g.length()];
+                for (int i = 0; i < g.length(); i++) { la[i] = g.getJSONObject(i).getDouble("lat"); lo[i] = g.getJSONObject(i).getDouble("lon"); }
+                tramos(la, lo, lat, lon, grande ? "1" : "0", grande ? avenidas : calles);
             }
-            // Cubi guarda hasta 78 tramos y 390 puntos: primero las avenidas
+            // Cubi guarda hasta 158 tramos y 890 puntos: primero la ruta, luego las avenidas
             java.util.ArrayList<String> todas = new java.util.ArrayList<>();
             int puntos = 0;
-            for (java.util.ArrayList<String> grupo : java.util.Arrays.asList(avenidas, calles)) for (String v : grupo) {
+            for (java.util.ArrayList<String> grupo : java.util.Arrays.asList(ruta, avenidas, calles)) for (String v : grupo) {
                 int np = (v.length() - 1) / 4;
-                if (todas.size() >= 78 || puntos + np > 390) continue;
+                if (todas.size() >= 158 || puntos + np > 890) continue;
                 todas.add(v); puntos += np;
             }
             if (todas.isEmpty()) { mapaEstado = "Mini mapa: no hay calles en el mapa por aquí."; return; }
             java.util.ArrayList<String> partes = new java.util.ArrayList<>();
             StringBuilder parte = new StringBuilder();
             for (String v : todas) {
+                // un tramo muy largo se parte para que quepa en un mensaje (repite el punto del corte)
+                while (v.length() > 197) { partes.add((parte.length() > 0 ? parte + "." : "") + v.substring(0, 197)); parte = new StringBuilder(); v = v.charAt(0) + v.substring(193); }
                 if (parte.length() > 0 && parte.length() + 1 + v.length() > 200) { partes.add(parte.toString()); parte = new StringBuilder(); }
                 if (parte.length() > 0) parte.append('.');
                 parte.append(v);
             }
-            partes.add(parte.toString());
+            if (parte.length() > 0) partes.add(parte.toString());
             for (int i = 0; i < partes.size(); i++) {   // de a poquito: Cubi atiende una orden por cuadro
                 boolean fin = i == partes.size() - 1;
                 if (fin) { mapaLat0 = lat; mapaLon0 = lon; mapaListo = true; }
                 enviar("asis|/mapa?w=" + partes.get(i) + (i == 0 ? "&n=1" : "") + (fin ? "&f=1" : ""));
                 Thread.sleep(160);
             }
-            mapaEstado = "Mini mapa: " + todas.size() + " tramos de calle.";
+            mapaEstado = "Mini mapa: " + todas.size() + " tramos de calle" + (ruta.isEmpty() ? "" : ", con la ruta") + ".";
         } catch (Exception e) {
             mapaEstado = "Mini mapa: no pude bajar las calles (¿hay internet?).";
         } finally {
@@ -1074,7 +1168,7 @@ public class CubiService extends Service {
     String estadoNav() {
         if (!navActiva()) return "Apagado.";
         if (!puedeTocarMusica()) return "Falta el acceso a notificaciones: sin eso Cubi no ve las indicaciones.";
-        String mini = !navMapa() ? "" : " " + (gpsActivo() ? mapaEstado : "Mini mapa: prende “Usar el GPS” para que salga.");
+        String mini = !navMapa() ? "" : " " + (gpsActivo() ? mapaEstado + (rutaEstado.isEmpty() ? "" : " " + rutaEstado) : "Mini mapa: prende “Usar el GPS” para que salga.");
         if (navUltima.isEmpty()) return "Esperando una ruta: empieza a navegar en Google Maps o Waze con el celular (con Android Auto en la pantalla del carro, Maps no le avisa al celular).";
         long hace = (System.currentTimeMillis() - navCuando) / 1000;
         return "Lo último que vio (hace " + (hace < 90 ? hace + " s" : hace / 60 + " min") + "): “" + navUltima + "” → " + navDecision + "." + mini;

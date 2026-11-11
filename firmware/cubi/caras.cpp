@@ -2008,29 +2008,32 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
   return r;
 }
 
-// ---------------------------------------------------------------- mini mapa: las calles de alrededor (las manda el celular)
-// Las calles llegan en metros desde un punto de origen, de a 2 m (un byte por coordenada: 128 = el origen), y la posición
+// ---------------------------------------------------------------- mapa: las calles de alrededor y la ruta (las manda el celular)
+// Las calles llegan en metros desde un punto de origen, de a 3 m (un byte por coordenada: 128 = el origen), y la posición
 // llega aparte cada segundo. Hay dos juegos: uno se dibuja mientras el otro se carga, y al terminar se cambian.
+// Clases: 0 calle, 1 avenida, 2 la ruta.
 namespace {
-struct Calles { uint8_t x[400], y[400]; uint16_t ini[81]; uint8_t clase[80]; int nv = 0, np = 0; };
+constexpr int MAX_VIAS = 160, MAX_PUNTOS = 900;
+constexpr float MAPA_M = 3;                                           // metros por unidad
+struct Calles { uint8_t x[MAX_PUNTOS], y[MAX_PUNTOS]; uint16_t ini[MAX_VIAS + 1]; uint8_t clase[MAX_VIAS]; int nv = 0, np = 0; };
 Calles callesA, callesB, *callesHay = &callesA, *callesCarga = &callesB;
-float mapaT = -100, mpx = 0, mpy = 0, mrumbo = 0, mtx = 0, mty = 0, mtr = 0;
-bool mapaSalta = true;
+float mapaT = -100, mpx = 0, mpy = 0, mrumbo = 0, mtx = 0, mty = 0, mtr = 0, mapaTU = 0;
+bool mapaSalta = true, mapaCompleto = false;
 int hexv(char c) { return c <= '9' ? c - '0' : (c | 32) - 'a' + 10; }
 }
-// w: calles separadas por punto; cada una es su clase ('1' avenida, '0' calle) y luego 4 letras hex por punto (x, y)
+// w: tramos separados por punto; cada uno es su clase ('0', '1' o '2') y luego 4 letras hex por punto (x, y)
 void mapaVias(const char *w, bool primero, bool fin) {
   Calles &c = *callesCarga;
   if (primero) { c.nv = 0; c.np = 0; }
-  while (*w && c.nv < 80) {
-    c.clase[c.nv] = *w++ == '1'; c.ini[c.nv] = c.np;
+  while (*w && c.nv < MAX_VIAS) {
+    c.clase[c.nv] = lim(*w++ - '0', 0, 2); c.ini[c.nv] = c.np;
     while (*w && *w != '.') {
       if (!w[1] || !w[2] || !w[3]) { w += strlen(w); break; }
-      if (c.np < 400) { c.x[c.np] = hexv(w[0]) * 16 + hexv(w[1]); c.y[c.np] = hexv(w[2]) * 16 + hexv(w[3]); c.np++; }
+      if (c.np < MAX_PUNTOS) { c.x[c.np] = hexv(w[0]) * 16 + hexv(w[1]); c.y[c.np] = hexv(w[2]) * 16 + hexv(w[3]); c.np++; }
       w += 4;
     }
     if (*w == '.') w++;
-    if (c.np - c.ini[c.nv] >= 2) c.nv++; else c.np = c.ini[c.nv];   // una calle de un solo punto no se dibuja
+    if (c.np - c.ini[c.nv] >= 2) c.nv++; else c.np = c.ini[c.nv];   // un tramo de un solo punto no se dibuja
   }
   c.ini[c.nv] = c.np;
   if (fin) { Calles *t = callesHay; callesHay = callesCarga; callesCarga = t; mapaSalta = true; }   // cambió el origen: la posición salta
@@ -2041,46 +2044,101 @@ void mapaPos(float x, float y, float rumbo) {
   if (mapaSalta || tAhora - mapaT > 8) { mpx = x; mpy = y; mrumbo = rumbo; mapaSalta = false; }
   mapaT = tAhora;
 }
+void mapaVista(bool completo) { mapaCompleto = completo; }   // en la navegación: el mapa completo en vez de Cubi con las flechas
 bool mapaHay() { return tAhora - mapaT < 8 && callesHay->nv > 0; }
-// el mapa en un círculo, con el rumbo hacia arriba y el carro abajo del centro; las calles se pintan punto a punto (barato)
-static void miniMapa(float cx, float cy, float R, float a) {
-  static float tU = 0;
-  const float k = lim((tAhora - tU) * 2.5f, 0, 1);
-  tU = tAhora;
+static bool soloMapa() { return mapaCompleto && mapaHay() && esMaps(laReac); }
+// Las calles con el rumbo hacia arriba y el carro en (X, Y0), en pixeles de pantalla; s = pixeles por metro. Se pintan
+// punto a punto (barato). RR > 0: solo dentro del círculo de centro (X, Yc); si no, toda la pantalla.
+static void pintarCalles(float X, float Yc, float Y0, float s, float RR, float a, float grosor) {
+  const float k = lim((tAhora - mapaTU) * 2.5f, 0, 1);
+  mapaTU = tAhora;
   mpx += (mtx - mpx) * k; mpy += (mty - mpy) * k;                    // entre un aviso y otro se desliza
   mrumbo += (fmodf(mtr - mrumbo + 540, 360) - 180) * k;
-  figura(cx - R - 3, cy - R - 3, cx + R + 3, cy + R + 3, solido(Col{22, 30, 54}, a), [=](float px, float py) { return dCirculo(px, py, cx, cy, R); });
-  const float z = dib::zoom, X = dib::zx + (cx - dib::zx) * z, Y = dib::zy + (cy - dib::zy) * z, RR = (R - 2) * z, s = 0.42f * z;
-  const float h = mrumbo * PI / 180, ch = cosf(h), sh = sinf(h), Y0 = Y + 16 * z;
+  const float h = mrumbo * PI / 180, ch = cosf(h), sh = sinf(h);
+  const float x0 = RR > 0 ? X - RR : 0, x1 = RR > 0 ? X + RR : W - 1, y0 = RR > 0 ? Yc - RR : 0, y1 = RR > 0 ? Yc + RR : H - 1;
   const Calles &c = *callesHay;
-  for (int pasada = 0; pasada < 2; pasada++) for (int v = 0; v < c.nv; v++) {   // primero las calles, encima las avenidas
+  static const Col COLOR[3] = {{105, 125, 175}, {235, 240, 255}, {70, 165, 255}};   // calle, avenida, la ruta (el azul de Cubi)
+  for (int pasada = 0; pasada < 3; pasada++) for (int v = 0; v < c.nv; v++) {      // calles, encima avenidas, encima la ruta
     if (c.clase[v] != pasada) continue;
-    const Col col = pasada ? Col{235, 240, 255} : Col{110, 130, 180};
-    const int g0 = pasada ? -1 : 0, g1 = 1;
+    const Col col = COLOR[pasada];
+    const int g = (int)(grosor * (pasada == 2 ? 2.2f : pasada == 1 ? 1.5f : 1) + 0.5f), g0 = -(g / 2), g1 = g0 + g - 1;
     float ax = 0, ay = 0;
     for (int i = c.ini[v]; i < c.ini[v + 1]; i++) {
-      const float dx = (c.x[i] - 128) * 2.f - mpx, dy = (c.y[i] - 128) * 2.f - mpy;
+      const float dx = (c.x[i] - 128) * MAPA_M - mpx, dy = (c.y[i] - 128) * MAPA_M - mpy;
       const float bx = X + s * (dx * ch - dy * sh), by = Y0 - s * (dx * sh + dy * ch);
-      if (i > c.ini[v] && !(fminf(ax, bx) > X + RR || fmaxf(ax, bx) < X - RR || fminf(ay, by) > Y + RR || fmaxf(ay, by) < Y - RR)) {
+      if (i > c.ini[v] && !(fminf(ax, bx) > x1 || fmaxf(ax, bx) < x0 || fminf(ay, by) > y1 || fmaxf(ay, by) < y0)) {
         const int n = (int)fmaxf(fabsf(bx - ax), fabsf(by - ay)) + 1;
         for (int j = 0; j <= n; j++) {
           const int qx = (int)(ax + (bx - ax) * j / n), qy = (int)(ay + (by - ay) * j / n);
+          if (qx < x0 - 4 || qx > x1 + 4 || qy < y0 - 4 || qy > y1 + 4) continue;
           for (int oy = g0; oy <= g1; oy++) for (int ox = g0; ox <= g1; ox++) {
             const int ex = qx + ox, ey = qy + oy;
-            const float ddx = ex - X, ddy = ey - Y;
-            if (ddx * ddx + ddy * ddy < RR * RR && ex >= 0 && ex < W && ey >= 0 && ey < H) dib::mezclar(dib::idx(ex, ey), col, a);
+            if (ex < 0 || ex >= W || ey < 0 || ey >= H) continue;
+            if (RR > 0) { const float ddx = ex - X, ddy = ey - Yc; if (ddx * ddx + ddy * ddy >= RR * RR) continue; }
+            dib::mezclar(dib::idx(ex, ey), col, a);
           }
         }
       }
       ax = bx; ay = by;
     }
   }
+}
+// el carro: la puntita azul de Cubi, mirando hacia arriba
+static void carrito(float cx, float cy, float e, float a) {
+  figura(cx - 14 * e, cy - 16 * e, cx + 14 * e, cy + 14 * e, solido(BLANCO, a), [=](float px, float py) { return dTriangulo(px, py, cx, cy - 10 * e, cx - 8 * e, cy + 8 * e, cx + 8 * e, cy + 8 * e) - 3.5f * e; });
+  ConColor cc;
+  figura(cx - 12 * e, cy - 14 * e, cx + 12 * e, cy + 12 * e, degr(AZUL, cy - 10 * e, cy + 8 * e, 0, a), [=](float px, float py) { return dTriangulo(px, py, cx, cy - 10 * e, cx - 8 * e, cy + 8 * e, cx + 8 * e, cy + 8 * e) - 1.5f * e; });
+}
+// el mini mapa en un círculo, dentro de la tarjeta de giro
+static void miniMapa(float cx, float cy, float R, float a) {
+  figura(cx - R - 3, cy - R - 3, cx + R + 3, cy + R + 3, solido(Col{22, 30, 54}, a), [=](float px, float py) { return dCirculo(px, py, cx, cy, R); });
+  const float z = dib::zoom, X = dib::zx + (cx - dib::zx) * z, Y = dib::zy + (cy - dib::zy) * z;
+  pintarCalles(X, Y, Y + 16 * z, 0.42f * z, (R - 2) * z, a, 1.6f);
   figura(cx - R - 3, cy - R - 3, cx + R + 3, cy + R + 3, solido(Col{70, 110, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCirculo(px, py, cx, cy, R)) - 1.4f; });
+  carrito(cx, cy + 16, 0.8f, a);
+}
+// la flecha del giro en un disco azul: lado -1 izquierda, 1 derecha, 0 derecho
+static void discoGiro(float dx, float ty, float R, float lado, float u, float a) {
+  const float e = R / 44, emp = lado * 4 * sinf(u * 5);
   {
-    ConColor cc;                                                      // el carro: la puntita azul de Cubi, mirando hacia arriba
-    const float my = cy + 16;
-    figura(cx - 12, my - 14, cx + 12, my + 12, degr(AZUL, my - 10, my + 8, 6, a), [=](float px, float py) { return dTriangulo(px, py, cx, my - 10, cx - 8, my + 8, cx + 8, my + 8) - 1.5f; });
+    ConColor cc;
+    figura(dx - R - 18, ty - R - 18, dx + R + 18, ty + R + 18, degr(AZUL, ty - R, ty + R, 14, a), [=](float px, float py) { return dCirculo(px, py, dx, ty, R); });
   }
+  if (lado != 0) {
+    const float x0 = dx - lado * 13 * e + emp, x1 = dx + lado * 20 * e + emp, yt = ty - 6 * e;
+    figura(dx - R, ty - R, dx + R, ty + R, solido(BLANCO, a), [=](float px, float py) {
+      float d = fminf(dSegmento(px, py, x0, ty + 24 * e, x0, yt, 4.6f * e), dSegmento(px, py, x0, yt, x1, yt, 4.6f * e));   // sube y dobla
+      d = fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13 * e, yt - 13 * e, 4.6f * e));                                   // la punta
+      return fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13 * e, yt + 13 * e, 4.6f * e));
+    });
+  } else {
+    const float sube = 4 * sinf(u * 5), y0 = ty + 24 * e - sube, y1 = ty - 22 * e - sube;                                  // hacia arriba, empujando
+    figura(dx - R, ty - R, dx + R, ty + R, solido(BLANCO, a), [=](float px, float py) {
+      float d = fminf(dSegmento(px, py, dx, y0, dx, y1, 4.6f * e), dSegmento(px, py, dx, y1, dx - 14 * e, y1 + 14 * e, 4.6f * e));
+      return fminf(d, dSegmento(px, py, dx, y1, dx + 14 * e, y1 + 14 * e, 4.6f * e));
+    });
+  }
+}
+// pantalla de mapa completo, sin el muñequito: el mapa en toda la pantalla, el carro abajo y arriba la barra con el giro
+static void pantallaMapa(float lado, float u, float a) {
+  dib::SinZoom sz;
+  figura(0, 0, W, H, solido(Col{9, 13, 26}, a), [](float, float) { return -1.f; });   // el fondo (y marca toda la pantalla para mandarla)
+  const float cy = 286;
+  pintarCalles(CX, 0, cy, 0.8f, 0, a, 3);
+  carrito(CX, cy, 1.5f, a);
+  // la barra de arriba: disco con la flecha, los metros y la calle
+  const float by = 50, bw = 208, bh = 40;
+  figura(CX - bw - 4, by - bh - 4, CX + bw + 4, by + bh + 4, solido(Col{14, 20, 38}, 0.94f * a), [=](float px, float py) { return dCaja(px, py, CX, by, bw, bh, 24); });
+  figura(CX - bw - 4, by - bh - 4, CX + bw + 4, by + bh + 4, solido(Col{70, 110, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCaja(px, py, CX, by, bw, bh, 24)) - 1.3f; });
+  const bool hayM = tAhora < gradosHasta && gradosM;
+  discoGiro(CX - bw + 44, by, 30 + (hayM && gradosN <= 60 ? 3 * fabsf(sinf(u * 7)) : 0), lado, u, a);
+  const float xt = CX + 36;
+  if (hayM) {
+    char b[16];
+    if (gradosN >= 1000) snprintf(b, sizeof b, "%d,%d km", gradosN / 1000, gradosN % 1000 / 100); else snprintf(b, sizeof b, "%d m", gradosN);
+    texto(b, xt, calleTxt[0] ? by - 12 : by, 38, BLANCO, a);
+  }
+  if (calleTxt[0]) texto(calleTxt, xt, hayM ? by + 20 : by, 20, Col{190, 205, 235}, a);
 }
 
 static void extrasReac(float u, bool delante) {
@@ -2232,32 +2290,21 @@ static void extrasReac(float u, bool delante) {
     case MAPS_IZQ:
     case MAPS_DER:
       if (delante) {
+        if (soloMapa()) {                                // elegido en la app: el mapa completo, sin el muñequito
+          pantallaMapa(laReac == MAPS_IZQ ? -1 : laReac == MAPS_DER ? 1 : 0, u, tramo(u, 0.05f, 0.3f) * (1 - tramo(u, 4.1f, 4.5f)));
+          break;
+        }
         // tarjeta de giro abajo: la flecha en un disco azul (el azul de Cubi), los metros grandes, la calle y cuánto falta
         const float lado = laReac == MAPS_IZQ ? -1 : laReac == MAPS_DER ? 1 : 0, a = tramo(u, 0.15f, 0.45f) * (1 - tramo(u, 4.0f, 4.5f));
         const bool hayM = tAhora < gradosHasta && gradosM, ya = hayM && gradosN <= 60;        // ya toca girar
         const float ty = 286 + 26 * (1 - suave(lim(u / 0.45f, 0, 1))), tw = 196, th = 62;     // entra subiendo
         figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{14, 20, 38}, a), [=](float px, float py) { return dCaja(px, py, CX, ty, tw, th, 30); });
         figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{70, 110, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCaja(px, py, CX, ty, tw, th, 30)) - 1.3f; });
-        const float dx = CX - tw + 66, R = 44 + (ya ? 4 * fabsf(sinf(u * 7)) : 0), emp = lado * 4 * sinf(u * 5);
-        {
-          ConColor cc;
-          figura(dx - R - 18, ty - R - 18, dx + R + 18, ty + R + 18, degr(AZUL, ty - R, ty + R, 14, a), [=](float px, float py) { return dCirculo(px, py, dx, ty, R); });
-        }
+        discoGiro(CX - tw + 66, ty, 44 + (ya ? 4 * fabsf(sinf(u * 7)) : 0), lado, u, a);
         if (lado != 0) {
-          const float x0 = dx - lado * 13 + emp, x1 = dx + lado * 20 + emp, yt = ty - 6;
-          figura(dx - 44, ty - 40, dx + 44, ty + 40, solido(BLANCO, a), [=](float px, float py) {
-            float d = fminf(dSegmento(px, py, x0, ty + 24, x0, yt, 4.6f), dSegmento(px, py, x0, yt, x1, yt, 4.6f));      // sube y dobla
-            d = fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt - 13, 4.6f));                                      // la punta
-            return fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt + 13, 4.6f));
-          });
           // una manito, del lado del giro, señala hacia allá empujando
           manoBlanca(CX + lado * (148 + 8 * fabsf(sinf(u * 5))), 124 + 26 * (1 - a), lado > 0 ? 0 : PI, 0.85f, true, a);
         } else {
-          const float sube = 4 * sinf(u * 5), y0 = ty + 24 - sube, y1 = ty - 22 - sube;                                  // flecha hacia arriba, empujando
-          figura(dx - 44, ty - 40, dx + 44, ty + 40, solido(BLANCO, a), [=](float px, float py) {
-            float d = fminf(dSegmento(px, py, dx, y0, dx, y1, 4.6f), dSegmento(px, py, dx, y1, dx - 14, y1 + 14, 4.6f));
-            return fminf(d, dSegmento(px, py, dx, y1, dx + 14, y1 + 14, 4.6f));
-          });
           // el volante, de línea blanca, con las dos manitos: lo mece como quien maneja derecho
           const float vx = CX, vy = 172 + 26 * (1 - a), VR = 44, rot = 0.16f * sinf(u * 3);
           anillo(vx, vy, VR, 4, a); anillo(vx, vy, 10, 3, a);
@@ -2349,9 +2396,11 @@ void cuadro(float t, float dt, const Entradas &e) {
   ahora.corazon = meta.corazon;
 
   if (laReac != NINGUNA) extrasReac(u, false); else extrasBase(t, e, false);
-  ojo(ahora, ahora.L, -1);
-  ojo(ahora, ahora.R, 1);
-  boca(ahora);
+  if (!soloMapa()) {                                              // con el mapa completo no se dibuja la cara
+    ojo(ahora, ahora.L, -1);
+    ojo(ahora, ahora.R, 1);
+    boca(ahora);
+  }
   if (laReac != NINGUNA) extrasReac(u, true); else extrasBase(t, e, true);
   dib::zoom = 1;                                                  // lo de arriba (los grados) va sin zoom, pegado al borde
   if (t < gradosHasta && !(gradosM && esMaps(laReac))) {   // "24°" arriba, entra y sale suave (con la flecha de Maps los metros van en su pantalla)

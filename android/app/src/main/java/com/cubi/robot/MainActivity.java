@@ -487,6 +487,26 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public boolean navCompleto() {
+            return CubiService.yo != null && CubiService.yo.navCompleto();
+        }
+
+        @JavascriptInterface
+        public void navCompletoCubi(boolean si) {
+            if (CubiService.yo != null) CubiService.yo.navCompletoOn(si);
+        }
+
+        @JavascriptInterface
+        public String destinoTexto() {
+            return CubiService.yo == null ? "" : CubiService.yo.destinoTexto();
+        }
+
+        @JavascriptInterface
+        public void destinoCubi(String txt) {
+            if (CubiService.yo != null) CubiService.yo.destino(txt);
+        }
+
+        @JavascriptInterface
         public String estadoNav() {
             return CubiService.yo == null ? "" : CubiService.yo.estadoNav();
         }
