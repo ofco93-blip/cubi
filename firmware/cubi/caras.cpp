@@ -1921,7 +1921,7 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
     case MAPS_IZQ:
     case MAPS_DER: {                                                 // mira hacia donde hay que girar
       float lado = laReac == MAPS_IZQ ? -1 : 1, k = tramo(u, 0, 0.25f) * (1 - tramo(u, 4.0f, 4.5f));
-      escalar(r, 1 - 0.3f * k, 1 - 0.3f * k); mover(r, 0, -44 * k); mirar(r, 0.9f * lado * k, 0.25f * k);   // suben un poco y miran hacia el giro
+      escalar(r, 1 - 0.36f * k, 1 - 0.3f * k); mover(r, 0, -44 * k); mirar(r, 0.35f * lado * k, 0.2f * k);   // suben un poco y miran hacia el giro
       r.L.incl = r.R.incl = 0.12f * lado * k; r.boca = 0;
       vel = 20;
       break;
@@ -2170,6 +2170,8 @@ static void extrasReac(float u, bool delante) {
           d = fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt - 13, 4.6f));                                        // la punta
           return fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt + 13, 4.6f));
         });
+        for (int s2 = -1; s2 <= 1; s2 += 2)                                                     // las dos manitos señalan hacia el giro, empujando
+          manoBlanca(CX + s2 * 148 + lado * 8 * fabsf(sinf(u * 5 + (s2 > 0 ? 0.6f : 0))), 124 + 26 * (1 - a), lado > 0 ? 0 : PI, 0.85f, true, a);
         const float xt = CX + 62;                                                               // los textos, a la derecha del disco
         if (hayM) {
           char b[16];
@@ -2217,17 +2219,23 @@ static void extrasReac(float u, bool delante) {
 void iniciar(uint32_t s) { semilla = s ? s : 1; ahora = meta = neutro(); }
 void base(Base b) { if (b != laBase) { laBase = b; baseDesde = tAhora; } }
 Base baseActual() { return laBase; }
-void reaccion(Reac r) { laReac = r; reacDesde = tAhora; pumCuenta = -1; }
+// la indicación de Maps se mantiene: si llega otra igual mientras está en pantalla, no vuelve a empezar, solo dura más
+static float reacExtra = 0;
+void reaccion(Reac r) {
+  if (r == laReac && (r == MAPS_IZQ || r == MAPS_DER)) { reacExtra = fmaxf(reacExtra, tAhora - reacDesde - 1.5f); return; }
+  laReac = r; reacDesde = tAhora; pumCuenta = -1; reacExtra = 0;
+}
 Reac reaccionActual() { return laReac; }
 
 void cuadro(float t, float dt, const Entradas &e) {
   tAhora = t; curvaAhora = e.curva;
   dib::blanco = elPaquete == ATARDECER;   // el minimalista va con los colores de Lumi azul
   dib::zoom = elTamano; dib::zx = CX; dib::zy = 250;   // crece hacia arriba y a los lados; abajo casi no se corta
-  if (laReac != NINGUNA && t - reacDesde >= DURA[laReac]) laReac = NINGUNA;
+  if (laReac != NINGUNA && t - reacDesde - reacExtra >= DURA[laReac]) laReac = NINGUNA;
   if (laReac == PUM && pumCuenta >= 0 && t - reacDesde - pumCuenta > 5.6f) laReac = NINGUNA;   // terminó de reírse
   float vel;
   float u = t - reacDesde;
+  if (reacExtra > 0 && u > 1.5f) u = fmaxf(1.5f, u - reacExtra);   // mantenida: se queda quieta en pantalla el tiempo extra
   meta = (laReac != NINGUNA) ? deReac(u, e, vel) : deBase(t, e, vel);
   float k = 1 - expf(-dt * vel);
   float *a = (float *)&ahora, *b = (float *)&meta;

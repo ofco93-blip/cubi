@@ -441,7 +441,17 @@ const Nota *sonidoReac(caras::Reac r) {
     default: return nullptr;
   }
 }
-void reac(caras::Reac r) { caras::reaccion(r); sonar(sonidoReac(r)); }
+// con la indicación de Maps en pantalla, las reacciones del sensor (curva, bache, frenazo...) no la tapan, y una
+// indicación repetida solo la mantiene, sin volver a sonar
+void reac(caras::Reac r) {
+  using namespace caras;
+  const Reac ya = reaccionActual();
+  if (ya == MAPS_IZQ || ya == MAPS_DER) {
+    if (r == BACHE || r == FRENAZO || r == ACELERON || r == ARRANQUE || r == GIRO_IZQ || r == GIRO_DER || r == MAREO) return;
+    if (r == ya) { reaccion(r); return; }
+  }
+  reaccion(r); sonar(sonidoReac(r));
+}
 
 void evento(const String &t) {
   if (t == "whatsapp") { if (modo == NORMAL || modo == WHATSAPP) { setModo(WHATSAPP, 6000); reac(caras::WHATSAPP); } }

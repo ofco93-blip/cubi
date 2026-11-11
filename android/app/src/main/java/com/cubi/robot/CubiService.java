@@ -1018,7 +1018,9 @@ public class CubiService extends Service {
         if (metros > 300) { navDecision = cual + ", todavía lejos"; return; }
         navDecision = cual + ", flecha mostrada";
         // el texto de Maps cambia solo (la hora de llegada): la misma flecha no se repite antes de 25 s
-        if (giro.equals(giroAvisado) || ((dir + etapa).equals(flechaAntes) && ahora - flechaCuando < 25000)) return;
+        // ya cerquita (150 m) se manda cada vez que cambia la distancia: Cubi mantiene la indicación hasta que se gira
+        boolean seguido = metros >= 0 && metros <= 150 && ahora - flechaCuando > 1200;
+        if (!seguido && (giro.equals(giroAvisado) || ((dir + etapa).equals(flechaAntes) && ahora - flechaCuando < 25000))) return;
         giroAvisado = giro; flechaAntes = dir + etapa; flechaCuando = ahora;
         // la calle: el texto sin la distancia ni los tiempos, corto para que quepa
         String calle = DISTANCIA.matcher(t).replaceAll(" ").replaceAll("\\d+\\s*(min|h)\\b", " ").replaceAll("[·•|]", " ").replaceAll("\\s+", " ").trim();
