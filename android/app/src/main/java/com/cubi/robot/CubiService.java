@@ -1020,7 +1020,12 @@ public class CubiService extends Service {
         // el texto de Maps cambia solo (la hora de llegada): la misma flecha no se repite antes de 25 s
         if (giro.equals(giroAvisado) || ((dir + etapa).equals(flechaAntes) && ahora - flechaCuando < 25000)) return;
         giroAvisado = giro; flechaAntes = dir + etapa; flechaCuando = ahora;
-        enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : ""));
+        // la calle: el texto sin la distancia ni los tiempos, corto para que quepa
+        String calle = DISTANCIA.matcher(t).replaceAll(" ").replaceAll("\\d+\\s*(min|h)\\b", " ").replaceAll("[·•|]", " ").replaceAll("\\s+", " ").trim();
+        if (calle.length() > 26) calle = calle.substring(0, 26).trim();
+        String q = "";
+        try { if (!calle.isEmpty()) q = "&t=" + URLEncoder.encode(calle, "UTF-8").replace("+", "%20"); } catch (Exception ignored) { }
+        enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : "") + q);
     }
 
     private static int primero(String s, String a, String b) {

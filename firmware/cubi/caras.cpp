@@ -10,7 +10,7 @@ const char *NOMBRE_REAC[N_REAC] = {"", "saludo", "bache", "frenazo", "aceleron",
                                    "whatsapp", "llamada", "calor", "risa", "sorpresa", "amor", "mareo", "maps_izq", "maps_der",
                                    "llegamos", "sol", "lluvia", "frio", "bateria", "guino", "curiosa", "kamehameha", "confeti"};
 static const float DURA[N_REAC] = {0, 2.6f, 2.4f, 4.0f, 2.8f, 2.8f, 2.4f, 2.4f, 2.6f, 6.0f, 6.0f, 7.5f, 2.0f, 2.0f, 4.0f,
-                                   3.2f, 3.0f, 3.0f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f, 5.0f, 20.0f};
+                                   3.2f, 4.5f, 4.5f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f, 5.0f, 20.0f};
 float duracion(Reac r) { return DURA[r]; }
 const char *NOMBRE_RITMO[N_RITMO] = {"pop", "urbano", "electro", "tropical", "kpop", "corazon", "groove", "guitarra", "disfruta", "rock",
                                      "jazz", "dj", "piano", "barras", "manos", "acordeon", "vela"};
@@ -60,6 +60,8 @@ static float bailaAhora = 0;
 static float emoAhora = 0;    // 0..1: la nota sostenida, suavizada (ojos cerrados y las dos manos en el micrófono)
 static float rockeroAhora = 0;  // 0..1: la eléctrica suena fuerte: ojos apretados y se muerde el labio, como un roquero  // 0..1: la canción es bailable (tempo de baile y suena con fuerza): baila y usa la mano libre   // 0..1: está en una parte fuerte de la canción (sube rápido, baja en ~1 s)
 static int gradosN = 0; static float gradosDesde = -1, gradosHasta = -1; static bool gradosM = false;
+static char calleTxt[32] = "";
+void mostrarCalle(const char *c) { snprintf(calleTxt, sizeof calleTxt, "%s", c ? c : ""); }
 void mostrarGrados(int g, float seg, bool metros) { gradosN = g; gradosM = metros; gradosDesde = tAhora; gradosHasta = tAhora + seg; }
 
 // ---------------------------------------------------------------- azar
@@ -1913,8 +1915,9 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       break;
     case MAPS_IZQ:
     case MAPS_DER: {                                                 // mira hacia donde hay que girar
-      float lado = laReac == MAPS_IZQ ? -1 : 1, k = tramo(u, 0, 0.25f) * (1 - tramo(u, 2.6f, 3.0f));
-      mirar(r, 0.8f * lado * k, 0.15f * k); mover(r, 0, 26 * k);
+      float lado = laReac == MAPS_IZQ ? -1 : 1, k = tramo(u, 0, 0.25f) * (1 - tramo(u, 4.0f, 4.5f));
+      escalar(r, 1 - 0.52f * k, 1 - 0.52f * k); mover(r, 0, -64 * k); mirar(r, 0.8f * lado * k, 0);   // suben y se achican: abajo va el giro
+      r.L.incl = r.R.incl = 0.1f * lado * k; r.boca = 0;
       vel = 20;
       break;
     }
@@ -2145,8 +2148,29 @@ static void extrasReac(float u, bool delante) {
     case MAPS_IZQ:
     case MAPS_DER:
       if (delante) {
-        float lado = laReac == MAPS_IZQ ? -1 : 1, a = tramo(u, 0.1f, 0.35f) * (1 - tramo(u, 2.6f, 3.0f));
-        flecha(CX + lado * (10 + 14 * fabsf(sinf(u * 6))), 56, lado, a);
+        // pantalla de giro, de línea blanca como los instrumentos: la flecha del giro en un aro, los metros y la calle
+        const float lado = laReac == MAPS_IZQ ? -1 : 1, a = tramo(u, 0.15f, 0.45f) * (1 - tramo(u, 4.0f, 4.5f));
+        const bool hayM = tAhora < gradosHasta && gradosM, ya = hayM && gradosN <= 60;        // ya toca girar
+        const float cy = 190, R = 54 + (ya ? 4 * fabsf(sinf(u * 7)) : 0), emp = lado * 5 * sinf(u * 5);   // la flecha empuja hacia el giro
+        anillo(CX, cy, R, 3, a);
+        const float x0 = CX - lado * 18 + emp, x1 = CX + lado * 28 + emp, yt = cy - 8;
+        figura(CX - 60, cy - 50, CX + 60, cy + 50, solido(BL, a), [=](float px, float py) {
+          float d = fminf(dSegmento(px, py, x0, cy + 34, x0, yt, 5.5f), dSegmento(px, py, x0, yt, x1, yt, 5.5f));       // sube y dobla
+          d = fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 17, yt - 17, 5.5f));                                        // la punta
+          return fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 17, yt + 17, 5.5f));
+        });
+        for (int i = 0; i < 3; i++) {                                                           // tres puntas que corren hacia el giro
+          const float q = fmodf(u * 1.6f - i * 0.22f + 3, 1.f), x = CX + lado * (R + 22 + 22 * i);
+          figura(x - 14, cy - 18, x + 14, cy + 18, solido(BL, a * (0.25f + 0.75f * campana(q, 0, 1))), [=](float px, float py) {
+            return fminf(dSegmento(px, py, x - lado * 6, cy - 12, x + lado * 6, cy, 2.6f), dSegmento(px, py, x - lado * 6, cy + 12, x + lado * 6, cy, 2.6f));
+          });
+        }
+        if (hayM) {
+          char b[16];
+          if (gradosN >= 1000) snprintf(b, sizeof b, "%d,%d km", gradosN / 1000, gradosN % 1000 / 100); else snprintf(b, sizeof b, "%d m", gradosN);
+          texto(b, CX, calleTxt[0] ? 278 : 290, 40, BLANCO, a);
+        }
+        if (calleTxt[0]) texto(calleTxt, CX, hayM ? 318 : 290, 22, Col{200, 210, 230}, a);
       }
       break;
     case LLEGAMOS:
@@ -2207,13 +2231,13 @@ void cuadro(float t, float dt, const Entradas &e) {
   boca(ahora);
   if (laReac != NINGUNA) extrasReac(u, true); else extrasBase(t, e, true);
   dib::zoom = 1;                                                  // lo de arriba (los grados) va sin zoom, pegado al borde
-  if (t < gradosHasta) {                                          // "24°" arriba, entra y sale suave
+  if (t < gradosHasta && !(gradosM && (laReac == MAPS_IZQ || laReac == MAPS_DER))) {   // "24°" arriba, entra y sale suave (con la flecha de Maps los metros van en su pantalla)
     float a = fminf(lim((t - gradosDesde) / 0.3f, 0, 1), lim((gradosHasta - t) / 0.4f, 0, 1));
     const Col c = BLANCO;
     char b[16];
     if (gradosM) {                                                 // "2.600 m"
       if (gradosN >= 1000) snprintf(b, sizeof b, "%d.%03d m", gradosN / 1000, gradosN % 1000); else snprintf(b, sizeof b, "%d m", gradosN);
-      texto(b, CX, laReac == MAPS_IZQ || laReac == MAPS_DER ? H - 40 : 46, 48, c, a);   // con la flecha de Maps van abajo: arriba está la flecha
+      texto(b, CX, 46, 48, c, a);
     } else {
     snprintf(b, sizeof b, "%d", gradosN);
     const float tam = 52, x = CX - 8, ancho = anchoTexto(b, tam), gx = x + ancho / 2 + 12, gy = 30;
