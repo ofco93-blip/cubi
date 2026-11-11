@@ -1192,10 +1192,19 @@ public class CubiService extends Service {
         boolean porTexto = i >= 0 || d >= 0;
         boolean rectoTexto = s.contains("recto") || s.contains("derecho") || s.contains("continúa") || s.contains("continua")
                 || s.contains("sigue") || s.contains("straight") || s.contains("continue");
-        String dir = i >= 0 && (d < 0 || i < d) ? "maps_izq" : d >= 0 ? "maps_der" : lado < 0 ? "maps_izq" : lado == 1 ? "maps_der"
-                : lado == 2 || rectoTexto ? "maps_recto" : "";
+        // la forma del giro, para el dibujo de la flecha: 1 curva suave, 2 cerrada, 3 en U, 4 glorieta, 5 salida o mantenerse
+        boolean glorieta = tiene(s, "rotonda", "glorieta", "redondel", "romboy", "roundabout");
+        boolean enU = lado == 3 || tiene(s, "cambio de sentido", "vuelta en u", "giro en u", "media vuelta", "retorno", "u-turn", "u turn");
+        int forma = glorieta ? 4 : enU ? 3
+                : tiene(s, "ligeramente", "levemente", "curva", "incorpór", "incorpor", "slight", "merge") ? 1
+                : tiene(s, "cerrad", "brusc", "pronunciad", "sharp") ? 2
+                : tiene(s, "mantente", "mantén", "mantenga", "salida", "sal por", "rampa", "bifurc", "desvío", "keep ", "exit", "ramp", "fork") ? 5 : 0;
+        // ponytail: una U sin lado se toma a la izquierda (así se retorna manejando por la derecha)
+        String dir = i >= 0 && (d < 0 || i < d) ? "maps_izq" : d >= 0 ? "maps_der" : lado < 0 || enU ? "maps_izq" : lado == 1 ? "maps_der"
+                : lado == 2 || rectoTexto || glorieta ? "maps_recto" : "";
         if (dir.isEmpty()) { navDecision = "no se entiende la indicación"; return; }
         boolean recto = dir.equals("maps_recto"), mapa = navMapa();
+        if (recto && forma != 4) forma = 0;
         if (recto) porTexto = rectoTexto && lado != 2;
         double metros = -1;
         Matcher m = DISTANCIA.matcher(s);
@@ -1204,7 +1213,7 @@ public class CubiService extends Service {
             String u = m.group(2);
             metros = u.equals("km") ? v * 1000 : u.equals("mi") ? v * 1609 : u.equals("m") ? v : v * 0.3048;
         }
-        String cual = (recto ? "derecho" : dir.equals("maps_izq") ? "izquierda" : "derecha") + (metros >= 0 ? (recto ? " por " : " en ") + Math.round(metros) + " m" : "")
+        String cual = new String[]{"", "curva suave a la ", "curva cerrada a la ", "en U por la ", "glorieta, ", "salida a la "}[forma] + (recto ? "derecho" : dir.equals("maps_izq") ? "izquierda" : "derecha") + (metros >= 0 ? (recto ? " por " : " en ") + Math.round(metros) + " m" : "")
                 + (porTexto ? " (por el texto)" : " (por el dibujo)");
         // cada giro se muestra dos veces: cuando falta poco (300 m) y cuando ya toca (60 m)
         String etapa = metros >= 0 && metros <= 60 ? "ya" : "cerca";
@@ -1219,11 +1228,17 @@ public class CubiService extends Service {
         giroAvisado = giro; flechaAntes = dir + etapa; flechaCuando = ahora;
         // la calle: el texto sin la distancia ni los tiempos, corto para que quepa
         String calle = DISTANCIA.matcher(t).replaceAll(" ").replaceAll("\\d+\\s*(min|h)\\b", " ").replaceAll("[·•|]", " ").replaceAll("\\s+", " ").trim();
+        Matcher sm = SALIDA.matcher(s);
+        if (glorieta && sm.find())                      // en la glorieta lo que sirve es cuál salida
+            calle = "Salida " + (sm.group(1) != null ? sm.group(1) : sm.group(3) != null ? sm.group(3) : "" + (1 + Arrays.asList("primera", "segunda", "tercera", "cuarta", "quinta").indexOf(sm.group(2))));
         if (calle.length() > 26) calle = calle.substring(0, 26).trim();
         String q = "";
         try { if (!calle.isEmpty()) q = "&t=" + URLEncoder.encode(calle, "UTF-8").replace("+", "%20"); } catch (Exception ignored) { }
-        enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : "") + q + (mapa ? "&q=1" : ""));
+        enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : "") + "&f=" + forma + q + (mapa ? "&q=1" : ""));
     }
+
+    static final Pattern SALIDA = Pattern.compile("(\\d+)\\s*\\.?\\s*[ªaº°]?\\s*salida|(primera|segunda|tercera|cuarta|quinta)\\s+salida|(\\d)(?:st|nd|rd|th)\\s+exit");
+    private static boolean tiene(String s, String... p) { for (String x : p) if (s.contains(x)) return true; return false; }
 
     private static int primero(String s, String a, String b) {
         int i = s.indexOf(a), j = s.indexOf(b);

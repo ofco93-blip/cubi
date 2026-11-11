@@ -39,7 +39,7 @@ public class Oyente extends NotificationListenerService {
 
     // Google Maps no escribe "gira a la izquierda": manda el giro como un dibujo de flecha (el ícono grande).
     // Se mira hacia dónde cae la punta (la parte de arriba del dibujo) respecto al palo (la parte de abajo).
-    // -1 izquierda, 1 derecha, 2 derecho (la flecha va hacia arriba), 0 no se sabe (sin dibujo).
+    // -1 izquierda, 1 derecha, 2 derecho (la flecha va hacia arriba), 3 en U, 0 no se sabe (sin dibujo).
     // ponytail: heurística a ojo; si falla con algún giro, el Capturador guarda el texto y se afina con ejemplos reales
     private int ladoDelDibujo(Notification n) {
         try {
@@ -60,14 +60,23 @@ public class Oyente extends NotificationListenerService {
     static int lado(Bitmap b) {
         final int T = b.getWidth(), H = b.getHeight(), fondo = b.getPixel(0, 0);
         double sa = 0, na = 0, sb = 0, nb = 0;
-        for (int y = 0; y < H; y++) for (int xx = 0; xx < T; xx++) {
+        int filasAbajo = 0, filasDos = 0;                       // abajo: filas con dibujo y filas con dos trazos separados
+        for (int y = 0; y < H; y++) {
+          int trazos = 0, hueco = T;                             // hueco: columnas vacías desde el último trazo
+          for (int xx = 0; xx < T; xx++) {
             int p = b.getPixel(xx, y);
-            if ((p >>> 24) < 128) continue;                       // transparente
+            if ((p >>> 24) < 128) { hueco++; continue; }          // transparente
             if ((fondo >>> 24) >= 128 && Math.abs(((p >> 16) & 255) - ((fondo >> 16) & 255)) + Math.abs(((p >> 8) & 255) - ((fondo >> 8) & 255))
-                    + Math.abs((p & 255) - (fondo & 255)) < 90) continue;   // del color del fondo
+                    + Math.abs((p & 255) - (fondo & 255)) < 90) { hueco++; continue; }   // del color del fondo
+            if (hueco >= T / 8) trazos++;
+            hueco = 0;
             if (y < H * 0.4) { sa += xx; na++; } else if (y >= H * 0.6) { sb += xx; nb++; }
+          }
+          if (y >= H * 0.6 && trazos > 0) { filasAbajo++; if (trazos >= 2) filasDos++; }
         }
         if (na < 6 || nb < 6) return 0;
+        // ponytail: en U = abajo se ven dos palos (el que sube y el que baja); a ojo, sin ejemplos reales todavía
+        if (filasAbajo >= 4 && filasDos * 10 >= filasAbajo * 6) return 3;
         double dif = (sa / na - sb / nb) / T;
         return dif < -0.1 ? -1 : dif > 0.1 ? 1 : 2;
     }

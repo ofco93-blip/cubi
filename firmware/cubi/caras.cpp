@@ -63,6 +63,8 @@ static float rockeroAhora = 0;  // 0..1: la eléctrica suena fuerte: ojos apreta
 static int gradosN = 0; static float gradosDesde = -1, gradosHasta = -1; static bool gradosM = false;
 static char calleTxt[32] = "";
 void mostrarCalle(const char *c) { snprintf(calleTxt, sizeof calleTxt, "%s", c ? c : ""); }
+static int giroForma = 0;
+void mostrarGiro(int forma) { giroForma = forma; }
 void mostrarGrados(int g, float seg, bool metros) { gradosN = g; gradosM = metros; gradosDesde = tAhora; gradosHasta = tAhora + seg; }
 
 // ---------------------------------------------------------------- azar
@@ -1923,8 +1925,10 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
     case MAPS_IZQ:
     case MAPS_DER: {                                                 // mira hacia donde hay que girar
       float lado = laReac == MAPS_IZQ ? -1 : laReac == MAPS_DER ? 1 : 0, k = tramo(u, 0, 0.25f) * (1 - tramo(u, 4.0f, 4.5f));
-      escalar(r, 1 - 0.36f * k, 1 - 0.3f * k); mover(r, 0, -44 * k); mirar(r, 0.35f * lado * k, 0.2f * k);
-      if (lado == 0) mover(r, 6 * k * sinf(u * 3), -8 * k);   // derecho: más arriba (abajo va el volante) y se mece manejando   // suben un poco y miran hacia el giro
+      // ojos chiquitos y juntos, asomados por encima del letrero (el borde les tapa un poquito por abajo)
+      escalar(r, 1 - 0.52f * k, 1 - 0.5f * k); mover(r, 0, -4 * k); mirar(r, 0.3f * lado * k, 0.1f * k);
+      { const float junta = 26 * k * (r.L.x < r.R.x ? 1 : -1); r.L.x += junta; r.R.x -= junta; }
+      if (lado == 0) mover(r, 6 * k * sinf(u * 3), -58 * k);   // derecho: más arriba (debajo va el volante) y se mece manejando
       r.L.incl = r.R.incl = 0.12f * lado * k; r.boca = 0;
       vel = 20;
       break;
@@ -2094,35 +2098,54 @@ static void carrito(float cx, float cy, float e, float a) {
     return fminf(dTriangulo(px, py, tx, ty, cx - 7 * e, cy + 6.5f * e, cx, my), dTriangulo(px, py, tx, ty, cx, my, cx + 7 * e, cy + 6.5f * e)) - 0.8f * e;
   });
 }
-// el mini mapa en un círculo, dentro de la tarjeta de giro
+// el mini mapa en un círculo, dentro del letrero de giro
 static void miniMapa(float cx, float cy, float R, float a) {
+  const float k = R / 46;
   figura(cx - R - 3, cy - R - 3, cx + R + 3, cy + R + 3, solido(Col{22, 30, 54}, a), [=](float px, float py) { return dCirculo(px, py, cx, cy, R); });
   const float z = dib::zoom, X = dib::zx + (cx - dib::zx) * z, Y = dib::zy + (cy - dib::zy) * z;
-  pintarCalles(X, Y, Y + 16 * z, 0.42f * z, (R - 2) * z, a, 1.6f);
+  pintarCalles(X, Y, Y + 16 * k * z, 0.42f * k * z, (R - 2) * z, a, 1.6f * sqrtf(k));
   figura(cx - R - 3, cy - R - 3, cx + R + 3, cy + R + 3, solido(Col{70, 110, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCirculo(px, py, cx, cy, R)) - 1.4f; });
-  carrito(cx, cy + 16, 0.8f, a);
+  carrito(cx, cy + 16 * k, 0.8f * sqrtf(k), a);
 }
-// la flecha del giro en un disco azul: lado -1 izquierda, 1 derecha, 0 derecho
+// la flecha del giro en un disco azul: lado -1 izquierda, 1 derecha, 0 derecho. La forma (giroForma) la manda el celular:
+// 0 giro normal, 1 curva suave, 2 curva cerrada, 3 en U, 4 glorieta, 5 salida o mantenerse a un lado
 static void discoGiro(float dx, float ty, float R, float lado, float u, float a) {
-  const float e = R / 44, emp = lado * 4 * sinf(tAhora * 5);
+  const float e = R / 44, g = 4.6f * e, vai = 4 * sinf(tAhora * 5), L = lado;
+  const int f = lado == 0 && giroForma != 4 ? 0 : giroForma;            // sin lado solo hay derecho y glorieta
+  const float ox = dx + L * vai, oy = ty - (L == 0 ? vai : 0);          // empuja hacia donde va
   {
     ConColor cc;
     figura(dx - R - 18, ty - R - 18, dx + R + 18, ty + R + 18, degr(AZUL, ty - R, ty + R, 14, a), [=](float px, float py) { return dCirculo(px, py, dx, ty, R); });
   }
-  if (lado != 0) {
-    const float x0 = dx - lado * 13 * e + emp, x1 = dx + lado * 20 * e + emp, yt = ty - 6 * e;
-    figura(dx - R, ty - R, dx + R, ty + R, solido(BLANCO, a), [=](float px, float py) {
-      float d = fminf(dSegmento(px, py, x0, ty + 24 * e, x0, yt, 4.6f * e), dSegmento(px, py, x0, yt, x1, yt, 4.6f * e));   // sube y dobla
-      d = fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13 * e, yt - 13 * e, 4.6f * e));                                   // la punta
-      return fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13 * e, yt + 13 * e, 4.6f * e));
-    });
-  } else {
-    const float sube = 4 * sinf(tAhora * 5), y0 = ty + 24 * e - sube, y1 = ty - 22 * e - sube;                                  // hacia arriba, empujando
-    figura(dx - R, ty - R, dx + R, ty + R, solido(BLANCO, a), [=](float px, float py) {
-      float d = fminf(dSegmento(px, py, dx, y0, dx, y1, 4.6f * e), dSegmento(px, py, dx, y1, dx - 14 * e, y1 + 14 * e, 4.6f * e));
-      return fminf(d, dSegmento(px, py, dx, y1, dx + 14 * e, y1 + 14 * e, 4.6f * e));
-    });
-  }
+  if (f == 5)                                                           // la otra rama de la bifurcación, apagada
+    figura(dx - R, ty - R, dx + R, ty + R, solido(BLANCO, 0.4f * a), [=](float px, float py) { return dSegmento(px, py, ox, oy + 6 * e, ox - L * 15 * e, oy - 16 * e, g); });
+  figura(dx - R, ty - R, dx + R, ty + R, solido(BLANCO, a), [=](float px, float py) {
+    auto S = [=](float x0, float y0, float x1, float y1) { return dSegmento(px, py, ox + x0 * e, oy + y0 * e, ox + x1 * e, oy + y1 * e, g); };
+    auto P = [=](float x, float y, float ux, float uy, float k) {       // la punta en (x, y) mirando hacia (ux, uy)
+      const float tx = ox + x * e, tyy = oy + y * e; k *= e;
+      return fminf(dSegmento(px, py, tx, tyy, tx - k * (ux - uy), tyy - k * (uy + ux), g), dSegmento(px, py, tx, tyy, tx - k * (ux + uy), tyy - k * (uy - ux), g));
+    };
+    switch (f) {
+      case 1: return fminf(fminf(S(-L * 8, 24, -L * 8, 2), S(-L * 8, 2, L * 14, -20)), P(L * 14, -20, L * 0.707f, -0.707f, 13));      // curva suave
+      case 2: return fminf(fminf(S(-L * 10, 24, -L * 10, -14), S(-L * 10, -14, L * 14, 10)), P(L * 14, 10, L * 0.707f, 0.707f, 13));  // curva cerrada
+      case 3: {                                                                                                                      // en U: sube, da la vuelta y baja
+        const float cy = oy - 6 * e;
+        float d = py <= cy ? fabsf(hypotf(px - ox, py - cy) - 14 * e) - g : 1e3f;
+        d = fminf(d, fminf(S(-L * 14, 24, -L * 14, -6), S(L * 14, -6, L * 14, 18)));
+        return fminf(d, P(L * 14, 20, 0, 1, 11));
+      }
+      case 4: {                                                                                                                      // glorieta: entra por abajo y sale
+        const float cx = -L * 7;
+        float d = fabsf(hypotf(px - ox - cx * e, py - oy + 2 * e) - 12 * e) - g * 0.85f;
+        d = fminf(d, S(cx, 26, cx, 10));
+        if (L == 0) return fminf(d, fminf(S(0, -14, 0, -29), P(0, -30, 0, -1, 9)));
+        return fminf(d, fminf(S(cx + L * 12, -2, L * 25, -2), P(L * 26, -2, L, 0, 9)));
+      }
+      case 5: return fminf(fminf(S(0, 24, 0, 6), S(0, 6, L * 15, -16)), P(L * 15, -16, L * 0.707f, -0.707f, 12));                      // salida / mantente a ese lado
+    }
+    if (L == 0) return fminf(S(0, 24, 0, -22), P(0, -22, 0, -1, 14));                                                                // derecho
+    return fminf(fminf(S(-L * 13, 24, -L * 13, -6), S(-L * 13, -6, L * 20, -6)), P(L * 20, -6, L, 0, 13));                            // sube y dobla
+  });
 }
 // pantalla de mapa completo, sin el muñequito: el mapa en toda la pantalla, el carro abajo y arriba la barra con el giro
 static void pantallaMapa(float lado, float u, float a) {
@@ -2299,19 +2322,45 @@ static void extrasReac(float u, bool delante) {
           pantallaMapa(laReac == MAPS_IZQ ? -1 : laReac == MAPS_DER ? 1 : 0, u, tramo(u, 0.05f, 0.3f) * (1 - tramo(u, 4.1f, 4.5f)));
           break;
         }
-        // tarjeta de giro abajo: la flecha en un disco azul (el azul de Cubi), los metros grandes, la calle y cuánto falta
+        // letrero grande abajo, con la flecha en un disco azul, los metros, la calle y el mini mapa; Cubi se asoma por
+        // encima agarrado del borde y con la mano gigante señala hacia donde hay que girar
         const float lado = laReac == MAPS_IZQ ? -1 : laReac == MAPS_DER ? 1 : 0, a = tramo(u, 0.15f, 0.45f) * (1 - tramo(u, 4.0f, 4.5f));
         const bool hayM = tAhora < gradosHasta && gradosM, ya = hayM && gradosN <= 60;        // ya toca girar
-        const float ty = 286 + 26 * (1 - suave(lim(u / 0.45f, 0, 1))), tw = 196, th = 62;     // entra subiendo
-        figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{14, 20, 38}, a), [=](float px, float py) { return dCaja(px, py, CX, ty, tw, th, 30); });
-        figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{70, 110, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCaja(px, py, CX, ty, tw, th, 30)) - 1.3f; });
-        discoGiro(CX - tw + 66, ty, 44 + (ya ? 4 * fabsf(sinf(tAhora * 7)) : 0), lado, u, a);
+        const bool conMapa = mapaHay();                                                         // hay calles del celular: el mini mapa va a la derecha
+        dib::SinZoom sz;                                                                        // en pixeles de pantalla: que quepa justo, con cualquier cara
+        const float tw = 214, th = 95, ty = 267 + 30 * (1 - suave(lim(u / 0.45f, 0, 1))), top = ty - th;   // entra subiendo
+        figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{14, 20, 38}, a), [=](float px, float py) { return dCaja(px, py, CX, ty, tw, th, 34); });
+        figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{70, 110, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCaja(px, py, CX, ty, tw, th, 34)) - 1.5f; });
+        const float late = ya ? 4 * fabsf(sinf(tAhora * 7)) : 0;
+        // con mapa: disco y metros arriba a la izquierda, la calle y la barra debajo; sin mapa: todo más grande y centrado
+        const float dR = conMapa ? 42 : 60, dxx = conMapa ? CX - 160 : CX - 130, dyy = conMapa ? top + 54 : ty;
+        const float xm = conMapa ? CX - 52 : CX + 64, ym = conMapa ? top + 54 : ty - 30;        // los metros
+        const float xc = conMapa ? CX - 100 : CX + 64, yc = conMapa ? top + 118 : ty + 18;      // la calle
+        discoGiro(dxx, dyy, dR + late, lado, u, a);
+        if (hayM) {
+          char b[16];
+          if (gradosN >= 1000) snprintf(b, sizeof b, "%d,%d km", gradosN / 1000, gradosN % 1000 / 100); else snprintf(b, sizeof b, "%d m", gradosN);
+          texto(b, xm, calleTxt[0] || conMapa ? ym : ty, conMapa ? 44 : 60, BLANCO, a);
+          const float bw = conMapa ? 100 : 120, by2 = conMapa ? top + 156 : ty + 58, lleno = 1 - lim(gradosN / 300.f, 0, 1);   // barrita: se llena al acercarse
+          figura(xc - bw - 4, by2 - 6, xc + bw + 4, by2 + 6, solido(Col{50, 62, 92}, a), [=](float px, float py) { return dCaja(px, py, xc, by2, bw, 3.5f, 3.5f); });
+          if (lleno > 0.02f) {
+            ConColor cc;
+            figura(xc - bw - 4, by2 - 8, xc + bw + 4, by2 + 8, degr(AZUL, by2 - 4, by2 + 4, 6, a), [=](float px, float py) { return dCaja(px, py, xc - bw + bw * lleno, by2, bw * lleno, 4, 4); });
+          }
+        }
+        if (calleTxt[0]) {
+          char corta[20]; snprintf(corta, sizeof corta, "%.17s", calleTxt);                         // al lado del mapa cabe menos
+          texto(corta, xc, hayM ? yc : ty, conMapa ? 22 : 25, Col{190, 205, 235}, a);
+        }
+        if (conMapa) miniMapa(CX + 118, ty, 86, a);
         if (lado != 0) {
-          // una manito, del lado del giro, señala hacia allá empujando
-          manoBlanca(CX + lado * (148 + 8 * fabsf(sinf(tAhora * 5))), 124 + 26 * (1 - a), lado > 0 ? 0 : PI, 0.85f, true, a);
+          // una manito agarra el borde del letrero; la otra, gigante y encima del letrero, señala hacia allá empujando
+          manoBlanca(CX - lado * 150, top + 2, PI / 2, 0.9f, false, a);
+          manoBlanca(CX + lado * (128 + 10 * fabsf(sinf(tAhora * 5))), top + (lado > 0 ? 8 : -14), lado > 0 ? 0 : PI, 1.9f, true, a);   // a la izquierda va más arriba: no tapa la flecha
         } else {
-          // el volante, de línea blanca, con las dos manitos: lo mece como quien maneja derecho
-          const float vx = CX, vy = 172 + 26 * (1 - a), VR = 44, rot = 0.16f * sinf(tAhora * 3);
+          // el volante, de línea blanca, encima del borde del letrero, con las dos manitos: lo mece como quien maneja derecho
+          const float vx = CX, vy = top - 14, VR = 40, rot = 0.16f * sinf(tAhora * 3);
+          circulo(vx, vy, VR + 4, Col{14, 20, 38}, a);                                                                   // tapa lo que queda detrás
           anillo(vx, vy, VR, 4, a); anillo(vx, vy, 10, 3, a);
           for (int k2 = 0; k2 < 3; k2++) {
             const float an = rot + PI / 2 + k2 * 2.094f;                                                                 // tres radios: abajo y a los lados
@@ -2322,24 +2371,6 @@ static void extrasReac(float u, bool delante) {
             manoBlanca(vx + cosf(an) * VR, vy + sinf(an) * VR, an + PI / 2 * s2, 0.7f, false, a);
           }
         }
-        const bool conMapa = mapaHay();                                                         // hay calles del celular: el mini mapa va a la derecha
-        const float xt = conMapa ? CX + 2 : CX + 62;                                           // los textos, a la derecha del disco
-        if (hayM) {
-          char b[16];
-          if (gradosN >= 1000) snprintf(b, sizeof b, "%d,%d km", gradosN / 1000, gradosN % 1000 / 100); else snprintf(b, sizeof b, "%d m", gradosN);
-          texto(b, xt, ty - (calleTxt[0] ? 24 : 12), conMapa ? 40 : 46, BLANCO, a);
-          const float bw = conMapa ? 76 : 104, by2 = ty + 40, lleno = 1 - lim(gradosN / 300.f, 0, 1);         // barrita: se llena al acercarse
-          figura(xt - bw - 4, by2 - 6, xt + bw + 4, by2 + 6, solido(Col{50, 62, 92}, a), [=](float px, float py) { return dCaja(px, py, xt, by2, bw, 3, 3); });
-          if (lleno > 0.02f) {
-            ConColor cc;
-            figura(xt - bw - 4, by2 - 8, xt + bw + 4, by2 + 8, degr(AZUL, by2 - 4, by2 + 4, 6, a), [=](float px, float py) { return dCaja(px, py, xt - bw + bw * lleno, by2, bw * lleno, 3.5f, 3.5f); });
-          }
-        }
-        if (calleTxt[0]) {
-          char corta[20]; snprintf(corta, sizeof corta, "%.17s", calleTxt);                         // con el mapa cabe menos
-          texto(conMapa ? corta : calleTxt, xt, hayM ? ty + 12 : ty, conMapa ? 19 : 21, Col{190, 205, 235}, a);
-        }
-        if (conMapa) miniMapa(CX + 124, ty, 46, a);
       }
       break;
     case LLEGAMOS:

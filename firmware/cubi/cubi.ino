@@ -1096,6 +1096,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     for (int i = 1; i < caras::N_REAC; i++) if (n == caras::NOMBRE_REAC[i]) {
       despertar(millis());
       if (p.get("q") == "1") caras::reaccion(caras::Reac(i)); else reac(caras::Reac(i));   // q=1: sin sonido (el modo mapa manda muchas)
+      caras::mostrarGiro(p.get("f").toInt());
       caras::mostrarCalle(p.get("t").c_str());   // la calle del giro, si viene
       if (p.get("m").length()) caras::mostrarGrados(p.get("m").toInt(), fmaxf(caras::duracion(caras::Reac(i)), 4), true);   // la altitud en metros, 4 s para alcanzar a leerla
       return "ok";

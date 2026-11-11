@@ -47,6 +47,9 @@ int main(int argc, char **argv) {
   for (auto pq : {std::make_pair("novas_", NOVA_S), std::make_pair("kiras_", KIRA_S), std::make_pair("colores_", ATARDECER), std::make_pair("ovalo_", OVALO), std::make_pair("neon_", NEON), std::make_pair("simple_", SIMPLE)})   // las caras nuevas, igual que mini_
     if (que.rfind(pq.first, 0) == 0) { paquete(pq.second); que = que.substr(strlen(pq.first)); }   // mini_x = la misma cara en el paquete minimalista
   if (que.rfind("mapa_", 0) == 0) { mapaVista(true); que = "maps_" + que.substr(5); }   // mapa_x = la misma indicación con el mapa completo
+  auto fin = [&](const char *f) { const size_t n = strlen(f); if (que.size() <= n || que.compare(que.size() - n, n, f)) return false; que.resize(que.size() - n); return true; };
+  const bool sinMapa = fin("_solo");   // maps_x_solo = sin el mini mapa
+  { const char *F[] = {"_suave", "_cerrada", "_u", "_glorieta", "_salida"}; for (int i = 0; i < 5; i++) if (fin(F[i])) mostrarGiro(i + 1); }   // maps_izq_u, maps_der_salida...
   bool guion = que.rfind("cancion_", 0) == 0;   // cancion_x = una cancion con partes: verso suave, silencio, coro duro, nota larga, solo, final
   if (guion) que = "canta_" + que.substr(8);
   bool voz = que.rfind("baila_", 0) != 0;   // baila_x = el mismo baile en una parte sin voz
@@ -56,7 +59,7 @@ int main(int argc, char **argv) {
   const float FPS = 25, dt = 1 / FPS;
   if (!esBase) { base(REPOSO); for (int r = 1; r < N_REAC; r++) if (que == NOMBRE_REAC[r]) { cuadro(0, dt, Entradas()); reaccion((Reac)r); } }
   if (que == "maps_izq" || que == "maps_der") { mostrarGrados(que == "maps_izq" ? 120 : 40, 4.5f, true); mostrarCalle(que == "maps_izq" ? "Calle 85" : "Carrera 15 con 100"); }   // la flecha con los metros que faltan
-  bool mapaDemo = que.rfind("maps_", 0) == 0;   // calles de prueba: una cuadrícula con dos avenidas
+  bool mapaDemo = que.rfind("maps_", 0) == 0 && !sinMapa;   // calles de prueba: una cuadrícula con dos avenidas
   if (mapaDemo) {
     std::string w; bool pri = true;
     auto h2 = [](int v) { char b[3]; snprintf(b, 3, "%02x", v); return std::string(b); };
