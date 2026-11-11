@@ -522,9 +522,14 @@ void animar(uint32_t now) {
     // instrumentos, y por eso abría la boca en los solos.
     voz = false; emocion = 0;
     static uint32_t sostDesde = 0; static float anchoS = 0.5f, abreS = 0.8f;
-    if (bocaMic) {   // su propio micrófono dice cuándo hay voz; la boca va como la de Copi (sin lip sync): abre y cierra parejo
+    const bool hayLetra = musicaCel && now < celVozHasta;   // el celular sigue la letra de esta canción: ella dice cuándo canta
+    if (bocaMic && !hayLetra) {   // sin letra: su propio micrófono dice cuándo hay voz; la boca va como la de Copi (sin lip sync): abre y cierra parejo
       static uint32_t vozHasta = 0;
-      if (aCanta) vozHasta = now + 400;   // el detector parpadea entre sílabas: sin esto la boca se cerraba de golpe
+      // el micrófono confunde instrumentos con voz: tiene que oír voz un cuarto de segundo casi seguido para creerle
+      static float seguro = 0; static uint32_t tSeg = 0;
+      const float dS = min(0.1f, (now - tSeg) / 1000.f); tSeg = now;
+      seguro = constrain(seguro + (aCanta ? dS : -0.6f * dS), 0.f, 0.6f);
+      if (aCanta && seguro > 0.25f) vozHasta = now + 400;   // el detector parpadea entre sílabas: sin esto la boca se cerraba de golpe
       voz = now < vozHasta; bIn = 0.3f + 0.4f * fabsf(sinf(now * 0.0053f)); aIn = 0.5f;
       // nota sostenida: la misma vocal con voz fuerte. Desde 0,6 s sube la emoción hasta 1 a los 2,4 s (ojos cerrados,
       // las dos manos en el micrófono, y si sigue, tiembla de emoción); al soltarla, un guiño
@@ -534,7 +539,7 @@ void animar(uint32_t now) {
         anchoS += (aAncho - anchoS) * 0.05f; abreS += (aAbre - abreS) * 0.05f;   // la vocal puede ir cambiando despacito
         emocion = constrain((now - sostDesde - 600) / 1800.f, 0.f, 1.f);
       } else { sostDesde = 0; anchoS = aAncho; abreS = aAbre; }
-    } else if (musicaCel && now < celVozHasta && celVoz && nSil) {
+    } else if (hayLetra && celVoz && nSil) {
       float u = (now - silT0) * (nSil + 1.5f) / silDur;
       if (u < nSil + 1.5f) {
         int k = min((int)u, nSil - 1);

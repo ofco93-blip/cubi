@@ -703,9 +703,10 @@ static void dramaMicro(const Entradas &e, float dt) {
   static bool porSilencio = false, respiro = false, duro = false, pasando = false;
   const bool esMic = e.ritmo == R_KPOP;
   ultCantaT = tAhora;
-  nivR += (e.nivel - nivR) * lim(dt * 6, 0, 1); nivL += (e.nivel - nivL) * lim(dt * 0.5f, 0, 1);
+  nivR += (e.nivel - nivR) * lim(dt * 1.5f, 0, 1); nivL += (e.nivel - nivL) * lim(dt * 0.25f, 0, 1);   // despacio: un golpe fuerte suelto no cambia nada
   bool acabaDeRespirar = false;
-  if (e.canta) { if (respiro) { ladoCanta = -ladoCanta; respiro = false; } cantoSeg += dt; calladoSeg = 0; }
+  static float ladoDesde = 0;
+  if (e.canta) { if (respiro) { if (tAhora - ladoDesde > 6) { ladoCanta = -ladoCanta; ladoDesde = tAhora; } respiro = false; } cantoSeg += dt; calladoSeg = 0; }
   else {
     calladoSeg += dt;
     if (calladoSeg > 0.3f && cantoSeg > 1 && !respiro) { respiro = true; acabaDeRespirar = true; }
@@ -716,9 +717,9 @@ static void dramaMicro(const Entradas &e, float dt) {
   else { mudoSeg += dt; if (mudoSeg > 1.2f) { if (sonoSeg > 15) veniaDesde = tAhora; sonoSeg = 0; } }
   // la caída: se calla de golpe (tenso) y luego entra con todo (explota)
   tensoSeg = nivR < 0.45f * nivL && nivL > 0.25f ? tensoSeg + dt : 0;
-  tensionAhora += ((tensoSeg > 0.15f && mudoSeg < 1.2f ? 1.f : 0.f) - tensionAhora) * lim(dt * 8, 0, 1);
+  tensionAhora += ((tensoSeg > 0.4f && mudoSeg < 1.2f ? 1.f : 0.f) - tensionAhora) * lim(dt * 8, 0, 1);
   bool entra = false;
-  if (nivR - nivL > 0.22f && e.nivel > 0.5f && tAhora > proxExplota) { entra = true; explotaAhora = 1; proxExplota = tAhora + 6; }
+  if (nivR - nivL > 0.3f && e.nivel > 0.55f && tAhora > proxExplota) { entra = true; explotaAhora = 1; proxExplota = tAhora + 20; }
   explotaAhora = fmaxf(0, explotaAhora - dt / 1.2f);
 
   if (esMic && tAhora > proxOfrece && tAhora > ofreceHasta) {
@@ -727,7 +728,7 @@ static void dramaMicro(const Entradas &e, float dt) {
     if (silencio || coro) {
       porSilencio = silencio;
       ofreceDesde = tAhora; ofreceHasta = tAhora + (silencio ? 3.f : 240.f / fmaxf(e.bpm, 60));   // el coro: 4 golpes
-      proxOfrece = ofreceHasta + 8 + 8 * azar(); proxCoro = 12 + 12 * azar(); cantoSeg = 0;
+      proxOfrece = ofreceHasta + 25 + 20 * azar(); proxCoro = 12 + 12 * azar(); cantoSeg = 0;
     }
   }
   // si el artista vuelve a cantar, Cubi recoge el micrófono para seguir
@@ -738,22 +739,27 @@ static void dramaMicro(const Entradas &e, float dt) {
 
   const bool quieto = esMic && !ofrece && fabsf(ladoMic) > 0.95f;   // el micrófono está en una mano, sin nada más pasando
   // canta suave un rato -> dos manos; se suelta cuando sube o se calla
-  if (e.canta && nivR < 0.45f) suaveSeg += dt; else if (nivR > 0.55f || calladoSeg > 0.6f) suaveSeg = 0;
-  const bool dos = quieto && suaveSeg > 1;
+  // cada postura aguanta al menos 6 s antes de cambiar: no salta de una a otra con cada subida del volumen
+  static float posturaDesde = -10, duroSeg = 0; static bool dosOn = false;
+  const bool puedeCambiar = tAhora - posturaDesde > 6;
+  if (e.canta && nivR < 0.4f) suaveSeg += dt; else if (nivR > 0.55f || calladoSeg > 1.5f) suaveSeg = 0;
+  if (puedeCambiar && (suaveSeg > 2.5f) != dosOn) { dosOn = !dosOn; posturaDesde = tAhora; }
+  const bool dos = quieto && dosOn;
   // suena duro -> golpea el aire (con margen para que no entre y salga a cada rato)
-  if (nivR > 0.72f || gritoZona > 0.5f) duro = true; else if (nivR < 0.6f && gritoZona < 0.3f) duro = false;
+  duroSeg = nivR > 0.75f || gritoZona > 0.5f ? duroSeg + dt : nivR < 0.6f && gritoZona < 0.3f ? 0 : duroSeg;
+  if (puedeCambiar && (duroSeg > 1.5f) != duro) { duro = !duro; posturaDesde = tAhora; }
   const bool golpe = quieto && !dos && duro && (e.canta || bailaAhora > 0.05f);
   dosAhora += ((dos ? 1.f : 0.f) - dosAhora) * lim(dt * 6, 0, 1);
   golpeAhora += ((golpe ? 1.f : 0.f) - golpeAhora) * lim(dt * 6, 0, 1);
   // entra la música de golpe -> lo lanza; respiro entre frases -> lo pasa por debajo
   if (quieto && dosAhora < 0.3f) {
-    if (entra && tAhora > proxLanza) { ladoMeta = -ladoMeta; lanzaMic = true; proxLanza = tAhora + 6; proxPase = tAhora + 4; }
-    else if (acabaDeRespirar && tAhora > proxPase && tAhora < proxOfrece) { ladoMeta = -ladoMeta; lanzaMic = false; proxPase = tAhora + 5; pasando = true; }
+    if (entra && tAhora > proxLanza) { ladoMeta = -ladoMeta; lanzaMic = true; proxLanza = tAhora + 20; proxPase = tAhora + 10; }
+    else if (acabaDeRespirar && tAhora > proxPase && tAhora < proxOfrece) { ladoMeta = -ladoMeta; lanzaMic = false; proxPase = tAhora + 14 + 10 * azar(); pasando = true; }
   }
   // la mano libre: según la voz, y aguanta al menos segundo y medio para no temblar entre una y otra
   // sin voz: puño con el golpe; canta: saluda; canta con ganas: te señala; nota alta: apunta al cielo
   const int quiere = !e.canta ? 0 : (e.boca > 0.6f || e.voz > 0.8f) ? 2 : nivR > 0.55f ? 4 : 1;
-  if (quiere != manoPaso && tAhora - manoDesde > 1.5f) { manoPaso = quiere; manoDesde = tAhora; }
+  if (quiere != manoPaso && tAhora - manoDesde > 5) { manoPaso = quiere; manoDesde = tAhora; }
   const float paso = dt * fmaxf(e.bpm, 60) / 60 * (lanzaMic ? 1.2f : 2);   // lanzado tarda más: se ve volar
   ladoMic = ladoMic < ladoMeta ? fminf(ladoMic + paso, ladoMeta) : fmaxf(ladoMic - paso, ladoMeta);
   if (pasando && ladoMic == ladoMeta) { pasando = false; guinoHasta = tAhora + 0.8f; }   // lo recibió: guiño
@@ -796,8 +802,10 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
   dramaMicro(e, dtB);
   {   // cada 8 golpes un pasito distinto, al azar: que no baile siempre igual
     const float f2 = pulsosVistos + e.pulso, A = lento ? 0.5f : 1;
-    const int frase = (int)(f2 / 8);
-    switch ((int)(hash(frase, 21) * 6)) {
+    const int frase = (int)(f2 / 16);                    // cada 16 golpes, no cada 8: que no cambie a cada rato
+    int pasito = (int)(hash(frase, 21) * 6);
+    if (pasito == (int)(hash(frase - 1, 21) * 6)) pasito = (pasito + 1 + (int)(hash(frase, 22) * 4)) % 6;   // nunca el mismo dos veces seguidas
+    switch (pasito) {
       case 1: mover(r, 0, -8 * A * fabsf(sinf(f2 * PI * 2))); break;                          // doble rebote
       case 2: mover(r, 10 * A * cosf(f2 * PI * 0.5f), 7 * A * sinf(f2 * PI * 0.5f)); break;   // la cabeza en círculo
       case 3: {                                                                               // se inclina a un lado y aguanta
@@ -812,8 +820,9 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
   }
   if (e.canta) {                                      // cantando: cada 4 golpes una expresión distinta, en orden al azar
     const float f = pulsosVistos + e.pulso;
-    const int barra = (int)(f / 4);
+    const int barra = (int)(f / 8);                      // cada 8 golpes
     int ex = (int)(hash(barra, 9) * 10);
+    if (ex == (int)(hash(barra - 1, 9) * 10)) ex = (ex + 1 + (int)(hash(barra, 10) * 8)) % 10;   // nunca la misma dos veces seguidas
     if (ex == 7 && hash(barra, 11) > 0.35f) ex = 0;    // los corazones salen solo de vez en cuando
     r.L.incl = r.R.incl = 0.06f * sinf(f * PI * 0.25f);   // ladea la cabeza suave con la música
     switch (ex) {
@@ -1131,10 +1140,6 @@ static void extrasMini(float u, const Entradas &e) {
       // "¡canta tú!": el micrófono viene al centro y crece hacia la pantalla, de frente, latiendo con el golpe
       mx += (ahora.bx - mx) * O; my += (ahora.by + 44 - my) * O; ang += (PI / 2 - ang) * O;
       esc *= 1 + O * (0.85f + 0.07f * g);
-      if (O > 0.05f) for (int i = 0; i < 2; i++) {       // ondas que salen del micrófono: "te toca"
-        const float q = fmodf(f * 0.5f + i * 0.5f, 1.f);
-        anillo(mx, my, 15 * esc + 8 + 24 * q, 2.2f, 0.8f * O * campana(q, 0, 1));
-      }
       microLinea(mx, my, ang, esc, 1);
       if (enVuelo) {                                    // va por el aire: las dos manos abajo, esperándolo
         for (int s2 = -1; s2 <= 1; s2 += 2) manoBlanca(ahora.bx + s2 * 88, ahora.by + 49 - 18 * vuelo, -PI / 2 - s2 * 0.3f, 0.85f, false);
@@ -1916,8 +1921,8 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
     case MAPS_IZQ:
     case MAPS_DER: {                                                 // mira hacia donde hay que girar
       float lado = laReac == MAPS_IZQ ? -1 : 1, k = tramo(u, 0, 0.25f) * (1 - tramo(u, 4.0f, 4.5f));
-      escalar(r, 1 - 0.52f * k, 1 - 0.52f * k); mover(r, 0, -64 * k); mirar(r, 0.8f * lado * k, 0);   // suben y se achican: abajo va el giro
-      r.L.incl = r.R.incl = 0.1f * lado * k; r.boca = 0;
+      escalar(r, 1 - 0.3f * k, 1 - 0.3f * k); mover(r, 0, -44 * k); mirar(r, 0.9f * lado * k, 0.25f * k);   // suben un poco y miran hacia el giro
+      r.L.incl = r.R.incl = 0.12f * lado * k; r.boca = 0;
       vel = 20;
       break;
     }
@@ -2148,29 +2153,36 @@ static void extrasReac(float u, bool delante) {
     case MAPS_IZQ:
     case MAPS_DER:
       if (delante) {
-        // pantalla de giro, de línea blanca como los instrumentos: la flecha del giro en un aro, los metros y la calle
+        // tarjeta de giro abajo: la flecha en un disco azul (el azul de Cubi), los metros grandes, la calle y cuánto falta
         const float lado = laReac == MAPS_IZQ ? -1 : 1, a = tramo(u, 0.15f, 0.45f) * (1 - tramo(u, 4.0f, 4.5f));
         const bool hayM = tAhora < gradosHasta && gradosM, ya = hayM && gradosN <= 60;        // ya toca girar
-        const float cy = 190, R = 54 + (ya ? 4 * fabsf(sinf(u * 7)) : 0), emp = lado * 5 * sinf(u * 5);   // la flecha empuja hacia el giro
-        anillo(CX, cy, R, 3, a);
-        const float x0 = CX - lado * 18 + emp, x1 = CX + lado * 28 + emp, yt = cy - 8;
-        figura(CX - 60, cy - 50, CX + 60, cy + 50, solido(BL, a), [=](float px, float py) {
-          float d = fminf(dSegmento(px, py, x0, cy + 34, x0, yt, 5.5f), dSegmento(px, py, x0, yt, x1, yt, 5.5f));       // sube y dobla
-          d = fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 17, yt - 17, 5.5f));                                        // la punta
-          return fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 17, yt + 17, 5.5f));
-        });
-        for (int i = 0; i < 3; i++) {                                                           // tres puntas que corren hacia el giro
-          const float q = fmodf(u * 1.6f - i * 0.22f + 3, 1.f), x = CX + lado * (R + 22 + 22 * i);
-          figura(x - 14, cy - 18, x + 14, cy + 18, solido(BL, a * (0.25f + 0.75f * campana(q, 0, 1))), [=](float px, float py) {
-            return fminf(dSegmento(px, py, x - lado * 6, cy - 12, x + lado * 6, cy, 2.6f), dSegmento(px, py, x - lado * 6, cy + 12, x + lado * 6, cy, 2.6f));
-          });
+        const float ty = 286 + 26 * (1 - suave(lim(u / 0.45f, 0, 1))), tw = 196, th = 62;     // entra subiendo
+        figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{14, 20, 38}, a), [=](float px, float py) { return dCaja(px, py, CX, ty, tw, th, 30); });
+        figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{70, 110, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCaja(px, py, CX, ty, tw, th, 30)) - 1.3f; });
+        const float dx = CX - tw + 66, R = 44 + (ya ? 4 * fabsf(sinf(u * 7)) : 0), emp = lado * 4 * sinf(u * 5);
+        {
+          ConColor cc;
+          figura(dx - R - 18, ty - R - 18, dx + R + 18, ty + R + 18, degr(AZUL, ty - R, ty + R, 14, a), [=](float px, float py) { return dCirculo(px, py, dx, ty, R); });
         }
+        const float x0 = dx - lado * 13 + emp, x1 = dx + lado * 20 + emp, yt = ty - 6;
+        figura(dx - 44, ty - 40, dx + 44, ty + 40, solido(BLANCO, a), [=](float px, float py) {
+          float d = fminf(dSegmento(px, py, x0, ty + 24, x0, yt, 4.6f), dSegmento(px, py, x0, yt, x1, yt, 4.6f));        // sube y dobla
+          d = fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt - 13, 4.6f));                                        // la punta
+          return fminf(d, dSegmento(px, py, x1, yt, x1 - lado * 13, yt + 13, 4.6f));
+        });
+        const float xt = CX + 62;                                                               // los textos, a la derecha del disco
         if (hayM) {
           char b[16];
           if (gradosN >= 1000) snprintf(b, sizeof b, "%d,%d km", gradosN / 1000, gradosN % 1000 / 100); else snprintf(b, sizeof b, "%d m", gradosN);
-          texto(b, CX, calleTxt[0] ? 278 : 290, 40, BLANCO, a);
+          texto(b, xt, ty - (calleTxt[0] ? 24 : 12), 46, BLANCO, a);
+          const float bw = 104, by2 = ty + 40, lleno = 1 - lim(gradosN / 300.f, 0, 1);         // barrita: se llena al acercarse
+          figura(xt - bw - 4, by2 - 6, xt + bw + 4, by2 + 6, solido(Col{50, 62, 92}, a), [=](float px, float py) { return dCaja(px, py, xt, by2, bw, 3, 3); });
+          if (lleno > 0.02f) {
+            ConColor cc;
+            figura(xt - bw - 4, by2 - 8, xt + bw + 4, by2 + 8, degr(AZUL, by2 - 4, by2 + 4, 6, a), [=](float px, float py) { return dCaja(px, py, xt - bw + bw * lleno, by2, bw * lleno, 3.5f, 3.5f); });
+          }
         }
-        if (calleTxt[0]) texto(calleTxt, CX, hayM ? 318 : 290, 22, Col{200, 210, 230}, a);
+        if (calleTxt[0]) texto(calleTxt, xt, hayM ? ty + 12 : ty, 21, Col{190, 205, 235}, a);
       }
       break;
     case LLEGAMOS:
