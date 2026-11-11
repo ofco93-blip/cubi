@@ -446,7 +446,7 @@ public class CubiService extends Service {
         if (!gpsActivo() || checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
         oyeGps = this::posicion;
         // cada 5 s y sin distancia mínima: parado también tiene que avisar, si no nunca sabría que ya llegamos
-        try { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, navMapa() ? 1000 : 5000, 0, oyeGps, Looper.getMainLooper());   // con el mini mapa, cada segundo }
+        try { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, navMapa() ? 1000 : 5000, 0, oyeGps, Looper.getMainLooper()); }
         catch (Exception e) { oyeGps = null; }
     }
 
