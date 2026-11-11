@@ -1141,14 +1141,12 @@ static void extrasMini(float u, const Entradas &e) {
       break;
     }
     case R_MANOS: {                                     // canta con las manos: se turnan con el golpe y las abre en lo fuerte
-      zi.soltar();
       const float drama = fmaxf(emoAhora, gritoZona);   // nota larga o parte fuerte: las dos arriba y abiertas
-      for (int s2 = -1; s2 <= 1; s2 += 2) {
-        const Ojo &o = s2 < 0 ? ahora.L : ahora.R;
+      for (int s2 = -1; s2 <= 1; s2 += 2) {             // abajo, a los lados de la boquita: no tapan los ojos ni se salen
         const float toca = (n % 2 == (s2 > 0)) ? gv : 0.3f * gv;
-        const float x = CX + s2 * (186 + 5 * sinf(f * PI * 0.5f) + 4 * drama);   // pegadas al borde: que no tapen los ojos ni se salgan
-        const float y = o.y + o.h / 2 + 40 - (24 + 40 * lim(nivR * 1.3f, 0, 1)) * toca - 60 * drama + 6 * drama * sinf(u * 30);
-        manoBlanca(x, y, -PI / 2 + s2 * (0.45f - 0.5f * toca + 0.4f * drama), 1.05f, false);
+        const float x = CX + s2 * (128 + 8 * sinf(f * PI * 0.5f) + 22 * drama);
+        const float y = H - 62 - (22 + 30 * lim(nivR * 1.3f, 0, 1)) * toca - 30 * drama + 5 * drama * sinf(u * 30);
+        manoBlanca(x, y, -PI / 2 + s2 * (0.45f - 0.5f * toca + 0.4f * drama), 1.1f, false);
       }
       break;
     }
