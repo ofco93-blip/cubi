@@ -268,6 +268,7 @@ public class CubiService extends Service {
             public void onConnectionStateChange(BluetoothGatt g, int st, int nuevo) {
                 if (nuevo == BluetoothProfile.STATE_CONNECTED) g.requestMtu(247);
                 else if (nuevo == BluetoothProfile.STATE_DISCONNECTED) {
+                    if (listo && !otaActiva && !otaTerminando) guardarParqueo();   // estaba conectado y se fue: se apagó el carro
                     g.close();
                     synchronized (cola) {
                         gatt = null;
@@ -408,6 +409,27 @@ public class CubiService extends Service {
         if (mejor != null) getSharedPreferences("cubi", 0).edit()
             .putString("lugar", String.format(Locale.US, "%.2f,%.2f", mejor.getLatitude(), mejor.getLongitude())).apply();
     }
+
+    // "¿Dónde parqueé?": cuando Cubi se desconecta (se apagó el carro) se guarda la última ubicación del celular, con su
+    // hora. No avisa: se ve en la app, con un botón que la abre en Maps. Se guarda completa (6 decimales) solo en el celular.
+    @SuppressLint("MissingPermission")
+    void guardarParqueo() {
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
+        Location mejor = antesGps;   // con el GPS de la app prendido, la del camino es la más fresca
+        try {
+            LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE);
+            for (String p : lm.getProviders(true)) {
+                Location l = lm.getLastKnownLocation(p);
+                if (l != null && (mejor == null || l.getTime() > mejor.getTime())) mejor = l;
+            }
+        } catch (Exception e) { return; }
+        if (mejor != null) getSharedPreferences("cubi", 0).edit().putString("parqueo",
+                String.format(Locale.US, "%.6f,%.6f,%d", mejor.getLatitude(), mejor.getLongitude(), mejor.getTime())).apply();
+    }
+
+    // "lat,lon,hora" de donde quedó el carro, o vacío
+    String parqueo() { return getSharedPreferences("cubi", 0).getString("parqueo", ""); }
 
     private final Runnable climaCada = this::clima;
     private long climaCuando;

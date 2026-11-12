@@ -220,6 +220,9 @@ section[hidden] { display: none; }
     <button class="btn" id="trazar">Trazar ruta en el mapa</button>
     <button class="btn" id="quitarRuta">Quitar ruta</button>
     <p class="note">La ruta la calcula un servicio libre (OSRM), no Google: puede no ser la misma que te da Maps. Para buscar el destino y trazarla, el celular manda el destino y tu posición a nominatim.openstreetmap.org y router.project-osrm.org.</p>
+    <div class="row"><span>¿Dónde parqueé?</span></div>
+    <button class="btn" id="parqueoIr">Abrir en Maps</button>
+    <p class="note" id="parqueoNota">Cuando Cubi se desconecta (se apagó el carro), la app guarda aquí dónde quedó. No manda notificación y la ubicación no sale del celular.</p>
     <div class="row"><span>Reaccionar al clima</span><label class="sw"><input type="checkbox" id="clima"><i></i></label></div>
     <p class="note" id="climaNota">Solito: cuando empieza a llover, sale el sol o la temperatura sube o baja 3 grados, hace su animación y muestra los grados. Con lluvia saca la sombrilla, con sol se alegra, con calor suda y con frío tirita. Usa tu ubicación aproximada (~1 km) y se actualiza cada 20 minutos.</p>
   </div>
@@ -443,6 +446,20 @@ if (window.Android && Android.navMapa) setTimeout(() => { $('navMapa').checked =
 if (window.Android) setTimeout(() => gpsEstado(Android.gpsActivo()), 500);
 function climaEstado(si) { $('clima').checked = si; }
 function climaTexto(s) { if (s) $('climaNota').textContent = s; }
+// "¿Dónde parqueé?": muestra cuándo se guardó y abre el punto en Maps
+function parqueoVer() {
+  if (!window.Android) return;
+  const p = Android.parqueo().split(','), hay = p.length >= 3;
+  $('parqueoIr').hidden = !hay;
+  if (hay) {
+    const d = new Date(+p[2]), hoy = new Date().toDateString() === d.toDateString();
+    $('parqueoNota').textContent = 'Última ubicación guardada: ' + (hoy ? 'hoy' : d.toLocaleDateString('es-CO', {weekday: 'long', day: 'numeric', month: 'short'}))
+      + ' a las ' + d.toLocaleTimeString('es-CO', {hour: 'numeric', minute: '2-digit'}) + '. Se guarda sola cuando Cubi se desconecta (se apagó el carro); no manda notificación y no sale del celular.';
+  }
+}
+$('parqueoIr').onclick = () => Android.abrirParqueo();
+setTimeout(parqueoVer, 600);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) parqueoVer(); });
 if (window.Android) setTimeout(() => { climaEstado(Android.climaActivo()); climaTexto(Android.climaTexto()); }, 500);
 document.querySelectorAll('.paq').forEach(b => b.onclick = () => {
   if (!vivo) return toast('Primero conecta a Cubi por Bluetooth');

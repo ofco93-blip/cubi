@@ -382,6 +382,21 @@ public class MainActivity extends Activity {
             return CubiService.yo == null || CubiService.yo.puedeTocarMusica();
         }
 
+        // "¿Dónde parqueé?": la última ubicación guardada ("lat,lon,hora" o vacío) y abrirla en Maps
+        @JavascriptInterface
+        public String parqueo() { return CubiService.yo == null ? getSharedPreferences("cubi", 0).getString("parqueo", "") : CubiService.yo.parqueo(); }
+
+        @JavascriptInterface
+        public void abrirParqueo() {
+            String[] p = parqueo().split(",");
+            if (p.length < 2) return;
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("geo:" + p[0] + "," + p[1] + "?q=" + p[0] + "," + p[1] + "(Mi carro)")));
+            } catch (Exception e) {
+                startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com/maps/search/?api=1&query=" + p[0] + "," + p[1])));
+            }
+        }
+
         @JavascriptInterface
         public void pedirTocarMusica() {
             startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
