@@ -1130,6 +1130,8 @@ String atender(const String &ruta, const Params &p, int &cod) {
   if (ruta == "/mapa") {   // mini mapa: el celular manda las calles de alrededor (por partes) y, cada segundo, dónde va el carro
     if (p.has("w")) caras::mapaVias(p.get("w").c_str(), p.get("n") == "1", p.get("f") == "1");
     if (p.has("v")) caras::mapaVista(p.get("v") == "1");
+    if (p.has("k")) caras::mapaVel(p.get("k").toInt());
+    if (p.has("d")) caras::mapaDia(p.get("d") == "1");
     if (p.has("x")) caras::mapaPos(p.get("x").toFloat(), p.get("y").toFloat(), p.get("r").toFloat());
     return "ok";
   }

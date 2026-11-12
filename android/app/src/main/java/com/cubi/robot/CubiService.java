@@ -136,6 +136,18 @@ public class CubiService extends Service {
     public void onCreate() {
         super.onCreate();
         yo = this;
+        final Thread.UncaughtExceptionHandler antes = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((hilo, e) -> {   // se cerró sola: se anota la causa para verla al volver a abrir
+            try {
+                java.io.StringWriter w = new java.io.StringWriter();
+                e.printStackTrace(new java.io.PrintWriter(w));
+                String t = w.toString();
+                getSharedPreferences("cubi", 0).edit().putString("caida", new java.text.SimpleDateFormat("dd/MM HH:mm", Locale.US).format(new java.util.Date())
+                        + " " + (t.length() > 900 ? t.substring(0, 900) : t)).commit();
+            } catch (Throwable ignorado) {
+            }
+            if (antes != null) antes.uncaughtException(hilo, e);
+        });
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (Build.VERSION.SDK_INT >= 26)
             nm.createNotificationChannel(new NotificationChannel("cubi", "Cubi conectado", NotificationManager.IMPORTANCE_LOW));
@@ -561,7 +573,9 @@ public class CubiService extends Service {
         }
         // la posición solo se manda con una ruta andando en Maps o Waze: mientras llegue, Cubi deja el mapa fijo
         if (mapaListo && lejos < 375 && ahora - navCuando < 120000)
-            enviar(String.format(Locale.US, "asis|/mapa?x=%d&y=%d&r=%d&v=%d", Math.round(dx), Math.round(dy), Math.round(mapaRumbo), navCompleto() ? 1 : 0));
+            int horaDia = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
+            enviar(String.format(Locale.US, "asis|/mapa?x=%d&y=%d&r=%d&v=%d&k=%d&d=%d", Math.round(dx), Math.round(dy), Math.round(mapaRumbo), navCompleto() ? 1 : 0,
+                    kmh < 0 ? -1 : Math.round(kmh), horaDia >= 6 && horaDia < 18 ? 1 : 0));
     }
 
     // corta una línea en los tramos que caen dentro del cuadro de 375 m y los escribe como los entiende Cubi (de a 3 m)
@@ -678,7 +692,7 @@ public class CubiService extends Service {
     // ---------- Cubi conversa: "Cubi" + lo que digas -> Claude Haiku -> lo dice en voz alta y hace un truco ----------
     static final String MODELO_CLAUDE = "claude-haiku-5-5";
     static final List<String> REACCIONES = Arrays.asList("kamehameha", "confeti", "risa", "sorpresa", "amor", "saludo", "guino",
-            "curiosa", "mareo", "llegamos");
+            "curiosa", "mareo", "llegamos", "ppt_piedra", "ppt_papel", "ppt_tijera");
     static final List<String> BAILES = Arrays.asList("rock", "pop", "tropical", "urbano", "electro", "jazz", "dj", "guitarra", "kpop", "piano", "manos", "acordeon", "vela");
     // Personalidades: el nombre y las reglas de carácter se eligen y editan en la app. Las reglas técnicas (SISTEMA:
     // trucos, acciones, cómo hablar por la voz del celular) son fijas y van siempre después.
@@ -728,7 +742,7 @@ public class CubiService extends Service {
             + "Puedes hacer cosas de verdad: si está en tu lista, hazla; nunca le pidas a la persona que lo haga ella.\n"
             + "Campos de tu respuesta:\n"
             + "- dice: lo que dices.\n"
-            + "- truco: una animación en tu pantalla, exactamente una de: ninguno, kamehameha, confeti, risa, sorpresa, amor, "
+            + "- truco: una animación en tu pantalla, exactamente una de: ninguno, kamehameha, confeti, piedra_papel_tijera, risa, sorpresa, amor, "
             + "saludo, guino, curiosa, mareo, llegamos, baile_rock, baile_pop, baile_tropical, baile_urbano, baile_electro, "
             + "baile_jazz, baile_dj, baile_guitarra, baile_kpop, baile_piano, baile_manos, baile_acordeon, baile_vela.\n"
             + "  kamehameha: cargas una bola de energía y la lanzas hacia adelante. Solo di algo cortico antes, como "
@@ -738,6 +752,9 @@ public class CubiService extends Service {
             + "'¡Prepárate, esposo!' o '¿Unas últimas palabras, esposo?', con la misma palabra que usaron para nombrar a la "
             + "persona. No cuentes ni digas '¡Pum!': la cuenta 3, 2, 1 y el disparo los hago yo justo después. "
             + "Nunca hables de hacer daño de verdad.\n"
+            + "  piedra_papel_tijera: cuando quieran jugar. Di solo 'Piedra, papel o tijera'; tu jugada sale al azar en la pantalla y yo "
+            + "agrego en voz alta qué sacaste. Pon sigue en true: la persona te dice qué sacó y tú dices quién ganó (tu jugada "
+            + "viene entre corchetes en el siguiente mensaje).\n"
             + "  baile_*: bailas unos segundos después de hablar.\n"
             + "- accion: algo que haces en el celular, exactamente una de: ninguna, clima, altura, musica_play, musica_pausa, "
             + "musica_siguiente, musica_anterior, musica_buscar, volumen_subir, volumen_bajar.\n"
@@ -899,7 +916,7 @@ public class CubiService extends Service {
                     }
                 }
                 if (texto.isEmpty()) texto = new JSONObject(rec.getFinalResult()).optString("text");
-            } catch (Exception ignored) {
+            } catch (Throwable ignored) {
             } finally {
                 if (r != null) r.release();
             }
@@ -924,6 +941,7 @@ public class CubiService extends Service {
         if (dice.test("hora")) return new String[]{"Son las " + (h == 0 ? 12 : h) + (m == 0 ? " en punto" : " y " + m) + ".", "ninguno", ""};
         if (dice.test("kamehameha|kame|ame ame")) return new String[]{"¡Mira esto!", "kamehameha", ""};
         if (dice.test("mata|matalo|matala|disparale|acaba con")) return new String[]{"¿Unas últimas palabras?", "confeti", ""};
+        if (dice.test("piedra|tijera|tijeras")) return new String[]{"Piedra, papel o tijera.", "piedra_papel_tijera", ""};
         if (dice.test("chiste|chistes")) return new String[]{CHISTES[(int) (Math.random() * CHISTES.length)], "risa", ""};
         if (dice.test("pausa|para la musica|quita la musica|detente|para")) return new String[]{"Listo.", "ninguno", "musica_pausa"};
         if (dice.test("siguiente|otra cancion|cambia|cambiala|pasala")) return new String[]{"¡Va otra!", "ninguno", "musica_siguiente"};
@@ -948,7 +966,10 @@ public class CubiService extends Service {
             if (r == null || r.isEmpty()) terminarCharla();
             else preguntar(r.get(0));
         }
-        @Override public void onError(int e) { terminarCharla(); }  // no dijo nada o no se entendió
+        @Override public void onError(int e) {   // 6 y 7 = no dijo nada o no se entendió; otro número es un fallo del reconocedor
+            if (e != 6 && e != 7) js("toast('El oído de Google falló (error " + e + ")')");
+            terminarCharla();
+        }
         @Override public void onReadyForSpeech(Bundle b) {}
         @Override public void onBeginningOfSpeech() {}
         @Override public void onRmsChanged(float db) {}
@@ -964,7 +985,8 @@ public class CubiService extends Service {
                 + (climaTexto.isEmpty() ? "" : ". Clima: " + climaTexto)
                 + (kmh < 0 ? "" : kmh < 3 ? ". El carro está quieto" : ". Vamos a " + Math.round(kmh) + " km/h")
                 + (altura == Integer.MIN_VALUE ? "" : ". Altura: " + altura + " m sobre el mar")
-                + (musicaPlay ? ". Está sonando " + (cancionTexto.isEmpty() ? "música" : cancionTexto) : "") + "]\n";
+                + (musicaPlay ? ". Está sonando " + (cancionTexto.isEmpty() ? "música" : cancionTexto) : "")
+                + (System.currentTimeMillis() - pptCuando < 60000 ? ". En piedra, papel o tijera tú acabas de sacar " + pptJugada : "") + "]\n";
     }
 
     // "Cubi, cállate": se cierra el micrófono de una, sin contestar ni despedirse
@@ -1015,7 +1037,7 @@ public class CubiService extends Service {
                 js("toast(" + JSONObject.quote("Claude: " + e.getMessage()) + ")");
             } catch (AnthropicIoException e) {
                 dice = "No tengo internet ahorita.";
-            } catch (Exception e) {
+            } catch (Throwable e) {   // también los errores de las librerías: antes cerraban la app
                 dice = "Algo me falló.";
                 js("toast(" + JSONObject.quote("Cubi: " + e) + ")");
             }
@@ -1026,7 +1048,13 @@ public class CubiService extends Service {
         }).start();
     }
 
+    private String pptJugada = ""; private long pptCuando;   // lo que sacó Cubi en piedra, papel o tijera
+
     private void decir(String texto, String truco, String accion, String busqueda, boolean sigue) {
+        if ("piedra_papel_tijera".equals(truco)) {   // la jugada sale al azar aquí, no la escoge Claude
+            pptJugada = new String[]{"piedra", "papel", "tijera"}[(int) (Math.random() * 3)]; pptCuando = System.currentTimeMillis();
+            truco = "ppt_" + pptJugada; texto = texto + " ¡Saqué " + pptJugada + "!";
+        }
         charlaHasta = System.currentTimeMillis() + 30000;
         trucoPend = truco; accionPend = accion; busquedaPend = busqueda;
         sigueCharla = sigue; confetiPend = "confeti".equals(truco); kamePend = "kamehameha".equals(truco);
@@ -1401,7 +1429,7 @@ public class CubiService extends Service {
                 ritmoCancion = elegido;
                 introPiano = Boolean.TRUE.equals(r.empiezaPiano);
                 return;
-            } catch (Exception e) {  // sin internet o la respuesta no llegó: otra vez en un rato
+            } catch (Throwable e) {  // sin internet o la respuesta no llegó: otra vez en un rato
                 if (intento == 3) { if (id.equals(cancionId)) ritmoCancion = "kpop"; return; }
                 SystemClock.sleep(3000L * intento);
             }
@@ -1823,6 +1851,11 @@ public class CubiService extends Service {
 
     // para la app: por qué "Hola Cubi" escucha o no
     String estadoHola() {
+        String caida = getSharedPreferences("cubi", 0).getString("caida", "");
+        return estadoHola0() + (caida.isEmpty() ? "" : " — La última vez que la app se cerró sola: " + caida);
+    }
+
+    private String estadoHola0() {
         if (!oidoQuiere) return "Apagado.";
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return "Falta el permiso del micrófono: apágalo y préndelo.";
         if (modelo == null) return bajando ? "Preparando el oído (la primera vez baja 40 MB)…" : "El oído no está listo: necesita internet una sola vez para bajarse.";

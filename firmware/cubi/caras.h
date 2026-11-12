@@ -7,7 +7,7 @@ namespace caras {
 enum Base : uint8_t { REPOSO, ESCUCHA, HABLA, CANTA, PIENSA, DUERME, TELEFONO, N_BASE };   // TELEFONO = en llamada
 enum Reac : uint8_t {
   NINGUNA, SALUDO, BACHE, FRENAZO, ACELERON, ARRANQUE, GIRO_IZQ, GIRO_DER, CARICIA, WHATSAPP, LLAMADA,
-  CALOR, RISA, SORPRESA, AMOR, MAREO, MAPS_IZQ, MAPS_DER, LLEGAMOS, SOL, LLUVIA, FRIO, BATERIA, GUINO, CURIOSA, KAME, PUM, MAPS_RECTO, CINTURON, SONROJO, ENOJO, PAPAS, BEBIDA, CONSOLA, LEEMAPA, CONO, CRISPETAS, FELIZ, TRISTE, SUENO, N_REAC
+  CALOR, RISA, SORPRESA, AMOR, MAREO, MAPS_IZQ, MAPS_DER, LLEGAMOS, SOL, LLUVIA, FRIO, BATERIA, GUINO, CURIOSA, KAME, PUM, MAPS_RECTO, CINTURON, SONROJO, ENOJO, PAPAS, BEBIDA, CONSOLA, LEEMAPA, CONO, CRISPETAS, FELIZ, TRISTE, SUENO, PPT_PIEDRA, PPT_PAPEL, PPT_TIJERA, N_REAC
 };
 extern const char *NOMBRE_BASE[N_BASE];
 extern const char *NOMBRE_REAC[N_REAC];
@@ -16,7 +16,8 @@ void mostrarGrados(int g, float seg, bool metros = false);
 void mapaVias(const char *w, bool primero, bool fin);
 void mapaPos(float x, float y, float rumbo);
 void mapaVista(bool completo);      // true: en la navegación, el mapa completo en vez de Cubi con las flechas
-void disenoMapaPoner(int d);   // 0 = el letrero de siempre; 1..3 = las opciones con el mapa de fondo
+void mapaDia(bool dia);   // el tablero de Maps: claro de día, oscuro de noche
+void mapaVel(int kmh);    // la velocidad que muestra el tablero (-1 = no mostrar)
 void mostrarGiro(int forma);        // la forma del giro: 0 normal, 1 curva suave, 2 cerrada, 3 en U, 4 glorieta, 5 salida
 void estiloManos(int e);            // 0 guante gordito, 1 de línea, 2 manopla lisa
 void mostrarCalle(const char *c);   // la calle del próximo giro (con la flecha de Maps); "" la quita
