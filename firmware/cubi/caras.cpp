@@ -983,35 +983,6 @@ static void extrasMini(float u, const Entradas &e0) {
       if (bailaAhora > 0.05f) manoLibre(e, n, gv, 0, bailaAhora);   // la otra mano: puño arriba con el golpe
       break;
     }
-    case R_PIANO: case R_CORAZON: {                     // teclas que tocan una melodía: la que suena se ilumina
-      // teclado de línea con teclas negras, sin manos: a la derecha se ilumina la melodía (a veces dos teclas), a la
-      // izquierda acordes de dos teclas cada dos toques, y suben notitas
-      static const uint8_t MEL[8] = {0, 2, 3, 1, 2, 3, 1, 0};
-      const float kx = 30, x0 = CX - 5 * kx, yT = H - 72, yB = H - 14, yc = (yT + yB) / 2;
-      const int der = (1 << MEL[nv % 8]) | (veces > 1 && nv % 4 == 0 ? 1 << ((MEL[nv % 8] + 2) % 4) : 0);
-      const int izqT = (nv / 4) % 2 ? 0b1010 : 0b0101;
-      const float gI = nv % 2 == 0 ? gv : 0;
-      figura(x0 - 6, yT - 16, x0 + 10 * kx + 6, yT + 4, solido(Col{196, 44, 64}, 1), [=](float px, float py) { return dCaja(px, py, CX, yT - 6, 5 * kx + 4, 9, 6); });   // la tapa
-      figura(x0 - 4, yT - 4, x0 + 10 * kx + 4, yB + 4, solido(Col{246, 246, 252}, 1), [=](float px, float py) { return dCaja(px, py, CX, yc, 5 * kx, (yB - yT) / 2, 6); });   // las blancas
-      for (int i = 0; i < 4; i++) for (int m = 0; m < 2; m++) {                                 // la que suena se pinta de color
-        if (!(((m ? der : izqT) >> i) & 1)) continue;
-        const float tx = x0 + ((m ? 6 : 0) + i + 0.5f) * kx, a = (m ? gv : gI);
-        if (a < 0.02f) continue;
-        figura(tx - kx / 2, yT, tx + kx / 2, yB, solido(COLORES[(i + (m ? 2 : 0)) % 5], 0.35f + 0.65f * a),
-               [=](float px, float py) { return dCaja(px, py, tx, yc + 2, kx / 2 - 1, (yB - yT) / 2 - 2, 3); });
-      }
-      for (int k = 1; k < 10; k++) linea(x0 + k * kx, yT + 2, x0 + k * kx, yB - 2, 1, Col{120, 124, 140}, 1);
-      for (int k = 0; k < 9; k++) {
-        if (k % 7 == 2 || k % 7 == 6) continue;           // entre mi-fa y si-do no hay tecla negra
-        const float bx = x0 + (k + 1) * kx;
-        figura(bx - 9, yT, bx + 9, yT + 34, solido(Col{30, 30, 40}, 1), [=](float px, float py) { return dCaja(px, py, bx, yT + 15, 7.5f, 18, 2.5f); });
-      }
-      for (int i = 0; i < 2; i++) {                      // notitas de color que suben desde la melodía
-        const float q = fmodf(u * 0.4f + i * 0.5f, 1.f);
-        notaColor((i ? x0 - 8 : x0 + 10 * kx + 2) + 8 * sinf(q * 6), yT - 6 - 60 * q, 14, COLORES[i ? 2 : 0], 0.9f * campana(q, 0, 1));   // a los lados: no tapan los ojos
-      }
-      break;
-    }
     case R_KPOP: {                                      // micrófono de línea frente a la boquita, con la manito
       // lado: en qué mano está (en el pase va por debajo de la boquita). O: cuánto se lo acerca a quien mira.
       const float lado = ladoMic, O = suave(ofreceAhora), pase = 1 - fabsf(lado);
@@ -1275,7 +1246,6 @@ static void ambienteCanta(float u, const Entradas &e) {
     case R_DJ: case R_ELECTRO: case R_BARRAS: pal = 4; modo = 2; break;
     case R_TROPICAL: pal = 5; break;
     case R_URBANO: pal = 6; break;
-    case R_PIANO: case R_CORAZON: pal = 7; break;
     case R_KPOP: pal = 8; break;
     case R_ACORDEON: pal = 9; break;
     default: break;
@@ -2676,7 +2646,9 @@ void reaccion(Reac r) {
 }
 Reac reaccionActual() { return laReac; }
 
-void cuadro(float t, float dt, const Entradas &e) {
+void cuadro(float t, float dt, const Entradas &e0) {
+  Entradas e = e0;
+  if (e.ritmo == R_PIANO || e.ritmo == R_CORAZON) e.ritmo = R_KPOP;   // ya no hay teclado (parecía una dentadura): esas canciones van con el micrófono
   tAhora = t; curvaAhora = e.curva;
   dib::blanco = elPaquete == TRAZO || elPaquete == BOLITA;   // Lino y Mochi: todo en un solo color, el de "Color de los ojos" (blanco de fábrica)
   // las caras nuevas van más contenidas: con el tamaño de fábrica nada se sale de la pantalla
