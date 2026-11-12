@@ -423,18 +423,21 @@ public class CubiService extends Service {
         new Thread(() -> {
             try {
                 HttpURLConnection c = (HttpURLConnection) new URL("https://api.open-meteo.com/v1/forecast?latitude=" + ll[0] + "&longitude=" + ll[1]
-                    + "&current=temperature_2m,weather_code,is_day").openConnection();
+                    + "&current=temperature_2m,weather_code,is_day&hourly=precipitation_probability&forecast_hours=6&timezone=auto").openConnection();
                 c.setConnectTimeout(10000); c.setReadTimeout(10000);
                 ByteArrayOutputStream b = new ByteArrayOutputStream();
                 try (InputStream in = c.getInputStream()) { byte[] buf = new byte[4096]; int n; while ((n = in.read(buf)) > 0) b.write(buf, 0, n); }
-                JSONObject cur = new JSONObject(b.toString("UTF-8")).getJSONObject("current");
+                JSONObject todo = new JSONObject(b.toString("UTF-8")), cur = todo.getJSONObject("current");
+                int llueve = -1;   // la probabilidad de lluvia más alta de las próximas 6 horas
+                org.json.JSONArray pp = todo.optJSONObject("hourly") == null ? null : todo.optJSONObject("hourly").optJSONArray("precipitation_probability");
+                if (pp != null) for (int i = 0; i < pp.length(); i++) llueve = Math.max(llueve, pp.optInt(i, 0));
                 int t = (int) Math.round(cur.getDouble("temperature_2m")), cod = cur.getInt("weather_code"), dia = cur.getInt("is_day");
                 // códigos de la OMM: 0-1 despejado, 2-3 nubes, 45-48 niebla, 51-67 y 80-82 lluvia, 71-77 y 85-86 nieve, 95-99 tormenta
                 String e = cod <= 1 ? "despejado" : cod <= 3 ? "nubes" : cod <= 48 ? "niebla" : cod <= 67 ? "lluvia"
                     : cod <= 77 ? "nieve" : cod <= 82 ? "lluvia" : cod <= 86 ? "nieve" : "tormenta";
                 climaOrden = "/clima?t=" + t + "&e=" + e + "&d=" + dia;
                 enviar("clima|" + climaOrden);
-                climaTexto = "Ahora: " + e + ", " + t + " grados";
+                climaTexto = "Ahora: " + e + ", " + t + " grados" + (llueve < 0 ? "" : ". Probabilidad de lluvia en las próximas 6 horas: " + llueve + " por ciento");
                 js("climaTexto(" + JSONObject.quote(climaTexto) + ")");
             } catch (Exception ignored) {}
         }).start();
@@ -934,16 +937,36 @@ public class CubiService extends Service {
             "Había un carro tan viejo, tan viejo, que en vez de airbag tenía una almohada.",
             "¿Cuál es el colmo de un robot? Tener un corazón de lata y que se lo oxiden."};
 
+    static String sinTildes(String t) { return java.text.Normalizer.normalize(t.toLowerCase(Locale.ROOT), java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", ""); }
+
+    // Órdenes que Cubi entiende de una, con internet o sin él, sin preguntarle a Claude (más rápido y no falla):
+    // "dispárale a mi esposo" -> "¡Prepárate, esposo!" y dispara · "dispara" -> "¡Prepárate!" y dispara ·
+    // "ataca" / "lanza" / "kamehameha" -> el kamehameha · "piedra, papel o tijera" -> juega
+    static final Pattern DISPARA = Pattern.compile("\\b(disparale|dispara|disparen|dispare|mata|matalo|matala|acaba con|fusila)\\b(?:\\s+a)?(?:\\s+(?:mi|mis|la|el|los|las|ese|esa|este|esta))?(?:\\s+(\\w+))?");
+    static final Pattern ATACA = Pattern.compile("\\b(ataca|ataque|atacalo|atacala|lanza|lanzalo|kamehameha|kame|ame ame|came came)\\b");
+    static final Pattern JUEGA = Pattern.compile("\\b(piedra|tijera|tijeras)\\b");
+    static String[] directo(String dicho) {
+        String s = sinTildes(dicho);
+        Matcher m = DISPARA.matcher(s);
+        if (m.find()) {
+            String q = m.group(2);
+            boolean nombre = q != null && q.length() > 2 && !q.matches("ahora|pues|porfa|por|favor|cubi|robot|que|con|una|uno|todos|todo|alguien");
+            return new String[]{nombre ? "¡Prepárate, " + q + "!" : "¡Prepárate!", "confeti", ""};
+        }
+        if (ATACA.matcher(s).find()) return new String[]{"¡Mira esto!", "kamehameha", ""};
+        if (JUEGA.matcher(s).find()) return new String[]{"Piedra, papel o tijera.", "piedra_papel_tijera", ""};
+        return null;
+    }
+
     // lo que Cubi sabe hacer sin internet: {lo que dice, truco, acción}; null si no lo entendió
     String[] sinInternet(String dicho) {
-        String s = java.text.Normalizer.normalize(dicho.toLowerCase(Locale.ROOT), java.text.Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+        String s = sinTildes(dicho);
         java.util.function.Predicate<String> dice = p -> Pattern.compile("\\b(" + p + ")\\b").matcher(s).find();
         Calendar c = Calendar.getInstance();
         int h = c.get(Calendar.HOUR), m = c.get(Calendar.MINUTE);
         if (dice.test("hora")) return new String[]{"Son las " + (h == 0 ? 12 : h) + (m == 0 ? " en punto" : " y " + m) + ".", "ninguno", ""};
-        if (dice.test("kamehameha|kame|ame ame")) return new String[]{"¡Mira esto!", "kamehameha", ""};
-        if (dice.test("mata|matalo|matala|disparale|acaba con")) return new String[]{"¿Unas últimas palabras?", "confeti", ""};
-        if (dice.test("piedra|tijera|tijeras")) return new String[]{"Piedra, papel o tijera.", "piedra_papel_tijera", ""};
+        String[] orden = directo(dicho);
+        if (orden != null) return orden;
         if (dice.test("chiste|chistes")) return new String[]{CHISTES[(int) (Math.random() * CHISTES.length)], "risa", ""};
         if (dice.test("pausa|para la musica|quita la musica|detente|para")) return new String[]{"Listo.", "ninguno", "musica_pausa"};
         if (dice.test("siguiente|otra cancion|cambia|cambiala|pasala")) return new String[]{"¡Va otra!", "ninguno", "musica_siguiente"};
@@ -1003,6 +1026,11 @@ public class CubiService extends Service {
         }
         charlaHasta = System.currentTimeMillis() + 30000;
         js("toast(" + JSONObject.quote("Le dijiste: " + texto) + ")");
+        String[] orden = directo(texto);
+        if (orden != null) {   // dispara, ataca, piedra papel o tijera: de una; en el juego deja el micrófono abierto para saber quién ganó
+            decir(orden[0], orden[1], orden[2], "", orden[1].startsWith("piedra") && !claveClaude().isEmpty() && hayInternet());
+            return;
+        }
         if (claveClaude().isEmpty() || !hayInternet()) {   // sin internet (o sin Claude): lo que sabe hacer solo
             String[] r = sinInternet(texto);
             if (r == null) decir("Sin internet solo sé bailar, la música, la hora, chistes y el kamehameha.", "ninguno", "", "", false);
