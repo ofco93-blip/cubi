@@ -276,9 +276,17 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void abrirAsistente() {
-            if (CubiService.yo != null) CubiService.yo.abrirAsistente();
+        public void abrirAsistente() {   // la ventanita del asistente (como dejar apretado el botón de inicio), no la app de Gemini
+            runOnUiThread(() -> {
+                boolean abrio = false;
+                try { abrio = showAssist(new Bundle()); } catch (Throwable ignorado) {}
+                if (CubiService.yo == null) return;
+                if (abrio) CubiService.yo.asistenteAbierto(); else CubiService.yo.abrirAsistente();
+            });
         }
+
+        @JavascriptInterface
+        public String caida() { return CubiService.yo == null ? "" : CubiService.yo.caida(); }
 
         @JavascriptInterface
         public boolean claudeListo() {

@@ -131,6 +131,7 @@ section[hidden] { display: none; }
     <button class="btn" id="spotify">Conectar Spotify</button>
     <button class="btn" id="permisoMusica" hidden>Permitir que Cubi controle la música y cante con la letra</button>
     <p class="note">Abre los ajustes de voz del celular: elige “Servicios de voz de Google”, toca el engranaje → Instalar datos de voz → Español. Al volver, las voces nuevas aparecen aquí.</p>
+    <p class="note" id="caidaNota" hidden style="user-select:text;word-break:break-word"></p>
     <button class="btn main" id="hablarCubi">Hablarle a Cubi</button>
     <p class="note">Di “Hola Cubi” o toca dos veces su pantalla (o “Hablarle a Cubi”), espera su carita de escuchar y pide lo que quieras: “haz un kamehameha”, “cuéntame un chiste”. Mientras escucha y habla, la música se baja sola. Sin clave, el doble toque abre Gemini como antes.</p>
   </div>
@@ -530,6 +531,8 @@ $('guardarClaude').onclick = () => {
   Android.claudeClave(k); $('claveClaude').value = ''; claudeEstado(); toast('Clave guardada');
 };
 $('hablarCubi').onclick = () => { if (window.Android) Android.hablarCubi(); };
+// si la app se cerró sola, aquí queda el motivo (para mandárselo a quien la arregla)
+setTimeout(() => { const c = window.Android && Android.caida ? Android.caida() : ''; if (c) { $('caidaNota').hidden = false; $('caidaNota').textContent = 'La última vez que la app se cerró sola: ' + c; } }, 1500);
 // ---------- capturador ----------
 function capturaEstado() {
   if (!window.Android) return;

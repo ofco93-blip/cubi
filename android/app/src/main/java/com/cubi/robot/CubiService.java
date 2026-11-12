@@ -898,6 +898,11 @@ public class CubiService extends Service {
     }
 
     private void escuchar() {
+        try { escuchar0(); }
+        catch (Throwable e) { js("toast(" + JSONObject.quote("Cubi no pudo escuchar: " + e) + ")"); charlaHasta = 0; try { revisarAsistente(); } catch (Throwable ignorado) {} }
+    }
+
+    private void escuchar0() {
         long ahora = System.currentTimeMillis();
         asisDesde = ahora;
         charlaHasta = ahora + 15000;
@@ -947,11 +952,15 @@ public class CubiService extends Service {
     }
 
     // sin internet el reconocedor de Google no sirve: oye con Vosk (el mismo modelo de "Hola Cubi", en el celular)
+    private volatile boolean oyendoSolo;
     private void escucharSinInternet() {
+        if (oyendoSolo) return;   // el aviso de "tardó" y el de "falló" pueden llegar los dos
+        oyendoSolo = true;
         new Thread(() -> {
             String texto = "";
             AudioRecord r = null;
-            SystemClock.sleep(300);  // que "Hola Cubi" suelte el micrófono primero
+            try { Thread h = hiloOido; if (h != null) h.join(1500); } catch (Throwable ignorado) {}   // que "Hola Cubi" suelte el micrófono primero
+            SystemClock.sleep(200);
             try (org.vosk.Recognizer rec = new org.vosk.Recognizer(modelo, 16000)) {
                 int tam = Math.max(AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), 8192);
                 r = new AudioRecord(MediaRecorder.AudioSource.MIC, 16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, tam);
@@ -971,8 +980,12 @@ public class CubiService extends Service {
             } finally {
                 if (r != null) r.release();
             }
+            oyendoSolo = false;
             String t = texto;
-            ui.post(() -> { if (t.isEmpty()) terminarCharla(); else preguntar(t); });
+            ui.post(() -> {
+                try { if (t.isEmpty()) terminarCharla(); else preguntar(t); }
+                catch (Throwable e) { js("toast(" + JSONObject.quote("Cubi: " + e) + ")"); charlaHasta = 0; }
+            });
         }).start();
     }
 
@@ -1047,7 +1060,7 @@ public class CubiService extends Service {
             ui.removeCallbacks(orejaTarda);
             ArrayList<String> r = b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
             if (r == null || r.isEmpty()) terminarCharla();
-            else preguntar(r.get(0));
+            else try { preguntar(r.get(0)); } catch (Throwable e) { js("toast(" + JSONObject.quote("Cubi: " + e) + ")"); charlaHasta = 0; }
         }
         @Override public void onError(int e) {   // 6 y 7 = no dijo nada o no se entendió; otro número es un fallo del reconocedor
             ui.removeCallbacks(orejaTarda);
@@ -1689,19 +1702,12 @@ public class CubiService extends Service {
 
     // Abre el asistente del celular (Gemini), como "Hey Google". Con la pantalla apagada necesita el permiso
     // "Mostrar sobre otras apps". En Samsung el comando de voz genérico abre Bixby: primero se le pide a Google.
-    // El atajo de voz a veces no abre nada (y no avisa). Si a los 4 s nadie está usando el micrófono ni hablando, se abre
-    // la app de Gemini directamente, que es lo que sí funciona a mano.
-    private void geminiDirecto() {
-        try {
-            AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
-            for (AudioRecordingConfiguration c : am.getActiveRecordingConfigurations()) if (c.getClientAudioSessionId() != miSesion) return;   // sí abrió
-            if (asisEstado.equals("habla")) return;
-            Intent g = getPackageManager().getLaunchIntentForPackage("com.google.android.apps.bard");
-            if (g == null) { js("toast('Gemini no abrió con el atajo de voz y no encuentro la app de Gemini')"); return; }
-            startActivity(g.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-            js("toast('El atajo de voz no abrió nada: abrí la app de Gemini')");
-        } catch (Throwable ignorado) {
-        }
+    // la app ya abrió la ventanita del asistente (showAssist): Cubi pone cara de escuchar
+    void asistenteAbierto() {
+        asisDesde = System.currentTimeMillis();
+        asisEstado = "escucha";
+        enviar("asis|/asistente?estado=escucha");
+        revisarAsistente();
     }
 
     void abrirAsistente() {
@@ -1722,7 +1728,6 @@ public class CubiService extends Service {
                 asisDesde = System.currentTimeMillis();
                 asisEstado = "escucha";  // Cubi ya puso la cara de escuchar al recibir el doble toque
                 revisarAsistente();
-                if (!enCarro) ui.postDelayed(this::geminiDirecto, 4000);   // en el carro graba el micrófono del carro: no se puede saber
                 return;
             } catch (Exception ignored) {
             }
@@ -1957,9 +1962,42 @@ public class CubiService extends Service {
         else charla();
     }
 
+    // Por qué se cerró sola la app la última vez. Los errores de Java los anota la app; los nativos (librerías) y los
+    // "no responde" los guarda Android (11 o más nuevo): de ahí se sacan el motivo y las librerías que aparecen.
+    String caida() {
+        String java = getSharedPreferences("cubi", 0).getString("caida", "");
+        if (Build.VERSION.SDK_INT < 30) return java;
+        try {
+            for (android.app.ApplicationExitInfo x : getSystemService(android.app.ActivityManager.class).getHistoricalProcessExitReasons(null, 0, 5)) {
+                int r = x.getReason();
+                boolean nativo = r == android.app.ApplicationExitInfo.REASON_CRASH_NATIVE, anr = r == android.app.ApplicationExitInfo.REASON_ANR;
+                if (r == android.app.ApplicationExitInfo.REASON_CRASH) break;   // de Java: ya está anotado arriba
+                if (!nativo && !anr && r != android.app.ApplicationExitInfo.REASON_LOW_MEMORY) continue;
+                StringBuilder t = new StringBuilder(new java.text.SimpleDateFormat("dd/MM HH:mm", Locale.US).format(new java.util.Date(x.getTimestamp())))
+                        .append(nativo ? " cierre nativo" : anr ? " no respondía" : " sin memoria").append(" (").append(x.getStatus()).append(") ")
+                        .append(x.getDescription() == null ? "" : x.getDescription());
+                try (InputStream in = x.getTraceInputStream()) {   // de la traza solo los nombres de librería y función
+                    if (in != null) {
+                        java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+                        byte[] b = new byte[65536]; int n;
+                        while ((n = in.read(b)) > 0 && o.size() < 400000) o.write(b, 0, n);
+                        Matcher m = Pattern.compile(anr ? "at [\\w.$]+\\([\\w.:]+\\)" : "lib[\\w.+-]+\\.so|_Z\\w{6,60}|vosk\\w+|Java_\\w+").matcher(o.toString("ISO-8859-1"));
+                        java.util.LinkedHashSet<String> v = new java.util.LinkedHashSet<>();
+                        while (m.find() && v.size() < 14) v.add(m.group());
+                        t.append(" ").append(String.join(" ", v));
+                    }
+                } catch (Throwable ignorado) {
+                }
+                return t + (java.isEmpty() ? "" : " | " + java);
+            }
+        } catch (Throwable ignorado) {
+        }
+        return java;
+    }
+
     // para la app: por qué "Hola Cubi" escucha o no
     String estadoHola() {
-        String caida = getSharedPreferences("cubi", 0).getString("caida", "");
+        String caida = caida();
         return estadoHola0() + (caida.isEmpty() ? "" : " — La última vez que la app se cerró sola: " + caida);
     }
 
