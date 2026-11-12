@@ -1944,23 +1944,25 @@ static void pistolaConfeti(float u) {
   const Col cuerpo{90, 220, 210}, metal{235, 240, 250}, punta{255, 80, 120}, rayo{255, 120, 170};
   const float k = pumK(u), entra = tramo(u, 0.2f, 0.7f), fin = k < 0 ? 1 : 1 - tramo(k, 4.6f, 5.4f);
   const float tiro = k - 3.0f, retro = tiro > 0 ? expf(-tiro * 8) : 0, baja = k < 0 ? 0 : tramo(k, 3.8f, 4.4f);
-  const float x = CX - 96 - 16 * retro, y = H - 92 + 240 * (1 - entra) + 3 * sinf(u * 2.1f) * (1 - baja) + 30 * baja;   // entra subiendo desde abajo
-  const float ang = -0.1f - 0.35f * retro + 0.45f * baja;
+  const float x = CX - 104 - 16 * retro, y = H - 66 + 240 * (1 - entra) + 3 * sinf(u * 2.1f) * (1 - baja) + 30 * baja;   // entra subiendo desde abajo
+  const float ang = -0.52f - 0.3f * retro + 0.75f * baja;             // apunta en diagonal, hacia arriba y hacia el copiloto
   Marco m = marco(x, y, ang, 1.4f);
   const float carga = k >= 0 && k < 3 ? fmodf(k, 1.f) : 0;           // la punta se prende con cada número
   pieza(m, -12, 4, 26, 52, solido(metal, fin, 4), [](float a, float b) {                       // mango
     return dCapsula2(a, b, 6, 10, 9, -2, 42, 8);
   });
   pieza(m, -18, -24, 104, 24, solido(cuerpo, fin, 6), [](float a, float b) {                   // cuerpo y cañón
-    return fminf(dCapsula2(a, b, 0, 0, 17, 52, 0, 15), dCapsula2(a, b, 52, 0, 8, 92, 0, 6));
+    return fminf(dCapsula2(a, b, 0, 0, 13, 52, 0, 17), dCapsula2(a, b, 52, 0, 9, 94, 0, 12));   // en perspectiva: más gruesa hacia la punta, que viene hacia uno
   });
   for (int i = 0; i < 3; i++) {                                       // aros del cañón
     const float ax = 18 + i * 14;
-    pieza(m, ax - 6, -26, ax + 6, 26, solido(metal, fin), [=](float a, float b) { return dCaja(a, b, ax, 0, 3, 21 - i * 2, 3); });
+    pieza(m, ax - 6, -26, ax + 6, 26, solido(metal, fin), [=](float a, float b) { return dCaja(a, b, ax, 0, 3, 16 + i * 2.2f, 3); });
   }
   float px, py;
   aPantalla(m, 98, 0, px, py);                                        // la punta que brilla
-  circulo(px, py, 11 + 4 * carga, punta, fin, 10 + 14 * carga);
+  pieza(m, 88, -16, 108, 16, solido(metal, fin), [](float a, float b) { return dElipse(a, b, 98, 0, 7.5f, 13.5f); });      // la boca del cañón, de frente
+  pieza(m, 90, -12, 106, 12, solido(Col{24, 30, 44}, fin), [](float a, float b) { return dElipse(a, b, 98.5f, 0, 4.6f, 9.5f); });
+  circulo(px, py, 4 + 4 * carga, punta, fin, 8 + 16 * carga);                                                          // adentro se va prendiendo
   float hx, hy;
   aPantalla(m, 2, 30, hx, hy);
   manoBlanca(hx, hy, ang + 0.35f, 1.2f, false, fin);                  // una sola mano en el mango
@@ -2005,31 +2007,41 @@ static void kame(float u) {
   const float carga = tramo(u, 0.4f, 2.6f), sale = u - 2.6f;
   const float by = H - 104;
   const float R = (10 + 38 * carga) * (1 + 0.08f * sinf(u * 37));
-  if (sale < 0) {                                                     // carga: la bola crece entre las manos, tiembla, chupa rayitas de energía y le saltan chispas
-    const float sb = subeDe(u, 9, 0.05f), bx = CX + 3 * carga * sinf(u * 80), by2 = by + sb;
+  if (sale < 0) {
+    // carga: junta las manos atrás, a un costado, una encima de la otra con la bola en medio; mientras carga se las lleva
+    // más atrás (se ven más chicas, más lejos) y al final las trae de golpe al frente, grandes, para lanzar
+    const float lanza = tramo(u, 2.3f, 2.6f), atras = carga * (1 - lanza), sb = subeDe(u, 9, 0.05f);
+    const float e = 0.95f - 0.22f * atras + 0.65f * lanza, Rr = R * e;
+    const float bx = CX + (100 + 30 * atras) * (1 - lanza) + 3 * carga * sinf(u * 80), by2 = by - 26 * (1 - lanza) + sb;
     for (int i = 0; i < 8; i++) {                                     // la energía llega de todos lados
-      const float q = fmodf(u * 1.6f + i / 8.f, 1.f), g = i * 0.785f + u * 2.2f, d0 = R + 18 + 90 * (1 - q), d1 = d0 + 16;
+      const float q = fmodf(u * 1.6f + i / 8.f, 1.f), g = i * 0.785f + u * 2.2f, d0 = Rr + 16 + 80 * (1 - q), d1 = d0 + 14;
       linea(bx + cosf(g) * d0, by2 + sinf(g) * d0 * 0.8f, bx + cosf(g) * d1, by2 + sinf(g) * d1 * 0.8f, 1.8f, azul, entra * carga * campana(q, 0, 1));
     }
-    if (R > 1) { circulo(bx, by2, R + 14, azul, 0.6f * entra, 24); circulo(bx, by2, R, BLANCO, entra, 10); circulo(bx - R * 0.3f, by2 - R * 0.3f, R * 0.22f, Col{210, 236, 255}, 0.9f * entra); }
+    if (Rr > 1) { circulo(bx, by2, Rr + 12, azul, 0.6f * entra, 22); circulo(bx, by2, Rr, BLANCO, entra, 10); circulo(bx - Rr * 0.3f, by2 - Rr * 0.3f, Rr * 0.22f, Col{210, 236, 255}, 0.9f * entra); }
     if (carga > 0.3f) for (int i = 0; i < 3; i++) {                   // chispas eléctricas que saltan de la bola
       const int sem = (int)(u * 18) * 7 + i; const float g = hash(sem, 21) * 6.283f;
-      float x0 = bx + cosf(g) * R, y0 = by2 + sinf(g) * R;
+      float x0 = bx + cosf(g) * Rr, y0 = by2 + sinf(g) * Rr;
       for (int k2 = 0; k2 < 3; k2++) {
-        const float x1 = x0 + cosf(g) * 13 + (hash(sem, 22 + k2) - 0.5f) * 16, y1 = y0 + sinf(g) * 13 + (hash(sem, 25 + k2) - 0.5f) * 16;
+        const float x1 = x0 + cosf(g) * 12 + (hash(sem, 22 + k2) - 0.5f) * 15, y1 = y0 + sinf(g) * 12 + (hash(sem, 25 + k2) - 0.5f) * 15;
         linea(x0, y0, x1, y1, 1.6f, Col{220, 240, 255}, entra * carga);
         x0 = x1; y0 = y1;
       }
     }
-    const float sep = R + 30;
-    manoBlanca(bx - sep, by2 + 8, 0.15f, 1.25f, false, entra);
-    manoBlanca(bx + sep, by2 + 8, PI - 0.15f, 1.25f, false, entra);
+    const float a0 = entra * (1 - lanza), a1 = entra * lanza;
+    if (a0 > 0.02f) {                                                 // atrás: una mano encima y otra debajo de la bola, con los dedos hacia el frente
+      manoBlanca(bx + 10 * e, by2 - Rr - 12 * e, PI + 0.4f, 1.25f * e, false, a0);
+      manoBlanca(bx + 10 * e, by2 + Rr + 12 * e, PI - 0.4f, 1.25f * e, false, a0);
+    }
+    if (a1 > 0.02f) {                                                 // al frente: las dos palmas empujando
+      manoBlanca(bx - Rr - 30, by2 + 8, 0.15f, 1.25f, false, a1);
+      manoBlanca(bx + Rr + 30, by2 + 8, PI - 0.15f, 1.25f, false, a1);
+    }
     return;
   }
   // ¡HA!: la bola sale hacia uno, crece hasta llenar la pantalla y deja anillos y rayas de velocidad
   const float fl = campana(sale, 0, 0.5f);
   if (fl > 0.01f) figura(0, 0, W, H, solido(azul, 0.35f * fl), [](float, float) { return -1.f; });
-  const float g = tramo(sale, 0, 0.45f), cy = by + (EY - by) * g, Rg = R + 480 * g * g, a = 1 - tramo(sale, 0.5f, 1.6f);
+  const float g = tramo(sale, 0, 0.45f), cy = by + (EY - by) * g, Rg = R * 1.6f + 480 * g * g, a = 1 - tramo(sale, 0.5f, 1.6f);
   if (a > 0.01f) { circulo(CX, cy, Rg + 30, azul, 0.8f * a, 40); circulo(CX, cy, Rg * 0.7f, BLANCO, a, 20); }
   for (int i = 0; i < 2; i++) {
     const float q = tramo(sale, 0.1f + i * 0.25f, 1.1f + i * 0.25f), Ra = 40 + 420 * q;
@@ -2366,7 +2378,7 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       float conc = tramo(u, 0, 0.3f), carga = tramo(u, 0.4f, 2.6f), rayo = tramo(u, 2.6f, 2.75f) * (1 - tramo(u, 3.9f, 4.4f));
       float orgullo = tramo(u, 4.2f, 4.5f) * (1 - tramo(u, 4.7f, 5.0f));
       tapas(r, (0.3f * conc + 0.35f * rayo) * (1 - orgullo)); r.L.incl = r.R.incl = 0.2f * conc * (1 - orgullo);
-      mirar(r, 0, 0.4f * conc * (1 - rayo));                          // mira la bola; al soltarla, al frente
+      { const float lz = tramo(u, 2.3f, 2.6f); mirar(r, 0.5f * conc * (1 - lz), 0.4f * conc * (1 - rayo)); mover(r, -24 * conc * (1 - lz), 0); }   // mira la bola, atrás a un costado; al soltarla, al frente
       escalar(r, (1 - 0.1f * conc) * (1 - 0.12f * rayo), (1 - 0.22f * conc) * (1 - 0.12f * rayo));
       mover(r, 4 * carga * (1 - rayo) * sinf(u * 90), -46 * conc - 12 * rayo);
       feliz(r, orgullo);
