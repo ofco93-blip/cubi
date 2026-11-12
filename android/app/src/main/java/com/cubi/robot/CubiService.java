@@ -694,7 +694,8 @@ public class CubiService extends Service {
     // ---------- Cubi conversa: "Cubi" + lo que digas -> Claude Haiku -> lo dice en voz alta y hace un truco ----------
     static final String MODELO_CLAUDE = "claude-haiku-5-5";
     static final List<String> REACCIONES = Arrays.asList("kamehameha", "confeti", "risa", "sorpresa", "amor", "saludo", "guino",
-            "curiosa", "mareo", "llegamos", "ppt_piedra", "ppt_papel", "ppt_tijera");
+            "curiosa", "mareo", "llegamos", "ppt_piedra", "ppt_papel", "ppt_tijera",
+            "cinturon", "sonrojo", "enojo", "papas", "bebida", "consola", "leemapa", "cono", "crispetas", "feliz", "triste", "sueno", "calor", "frio");
     static final List<String> BAILES = Arrays.asList("rock", "pop", "tropical", "urbano", "electro", "jazz", "dj", "guitarra", "kpop", "piano", "manos", "acordeon", "vela");
     // Personalidades: el nombre y las reglas de carácter se eligen y editan en la app. Las reglas técnicas (SISTEMA:
     // trucos, acciones, cómo hablar por la voz del celular) son fijas y van siempre después.
@@ -745,7 +746,7 @@ public class CubiService extends Service {
             + "Campos de tu respuesta:\n"
             + "- dice: lo que dices.\n"
             + "- truco: una animación en tu pantalla, exactamente una de: ninguno, kamehameha, confeti, piedra_papel_tijera, risa, sorpresa, amor, "
-            + "saludo, guino, curiosa, mareo, llegamos, baile_rock, baile_pop, baile_tropical, baile_urbano, baile_electro, "
+            + "saludo, guino, curiosa, mareo, llegamos, feliz, triste, enojo, sonrojo, sueno, calor, frio, cinturon, papas, crispetas, cono, bebida, consola, leemapa, baile_rock, baile_pop, baile_tropical, baile_urbano, baile_electro, "
             + "baile_jazz, baile_dj, baile_guitarra, baile_kpop, baile_piano, baile_manos, baile_acordeon, baile_vela.\n"
             + "  kamehameha: cargas una bola de energía y la lanzas hacia adelante. Solo di algo cortico antes, como "
             + "'¡Mira esto!'; el canto 'Ka-me-ha-me-ha' lo hago yo justo después.\n"
@@ -757,6 +758,9 @@ public class CubiService extends Service {
             + "  piedra_papel_tijera: cuando quieran jugar. Di solo 'Piedra, papel o tijera'; tu jugada sale al azar en la pantalla y yo "
             + "agrego en voz alta qué sacaste. Pon sigue en true: la persona te dice qué sacó y tú dices quién ganó (tu jugada "
             + "viene entre corchetes en el siguiente mensaje).\n"
+            + "  Las emociones (feliz, triste, enojo, sonrojo, sueno, calor, frio) úsalas cuando vengan al caso con lo que dices. "
+            + "cinturon: te pones el cinturón (cuando arrancan o te lo piden). papas, crispetas, cono, bebida: comes o tomas eso "
+            + "(si hablan de comida o te lo piden). consola: juegas videojuegos. leemapa: miras un mapa de papel.\n"
             + "  baile_*: bailas unos segundos después de hablar.\n"
             + "- accion: algo que haces en el celular, exactamente una de: ninguna, clima, altura, musica_play, musica_pausa, "
             + "musica_siguiente, musica_anterior, musica_buscar, volumen_subir, volumen_bajar.\n"
