@@ -906,6 +906,7 @@ public class CubiService extends Service {
         bajarMusica(true);
         if (voz != null) voz.stop();
         if (!hayInternet() && modelo != null) { escucharSinInternet(); revisarAsistente(); return; }
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) { oidoPropio("Este celular no tiene el reconocedor de voz de Google"); revisarAsistente(); return; }
         if (oreja == null) {
             oreja = SpeechRecognizer.createSpeechRecognizer(this);
             oreja.setRecognitionListener(oye);
@@ -913,8 +914,27 @@ public class CubiService extends Service {
         Intent i = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 .putExtra(RecognizerIntent.EXTRA_LANGUAGE, "es-CO");
-        ui.postDelayed(() -> oreja.startListening(i), 300);  // que "Cubi" (Vosk) suelte el micrófono primero
+        orejaLista = false;
+        ui.removeCallbacks(orejaTarda);
+        ui.postDelayed(() -> {   // que "Cubi" (Vosk) suelte el micrófono primero
+            try { oreja.startListening(i); } catch (Throwable e) { ui.removeCallbacks(orejaTarda); oidoPropio("El oído de Google no arrancó"); }
+        }, 300);
+        ui.postDelayed(orejaTarda, 4300);   // si en 4 s Google ni siquiera abre el micrófono, no se queda esperando
         revisarAsistente();
+    }
+
+    // El reconocedor de Google a veces no arranca o no contesta (sin permiso de micrófono en la app de Google, servicio
+    // apagado...). Antes Cubi se quedaba con cara de escuchar sin hacer nada: ahora escucha con su propio oído (Vosk).
+    private boolean orejaLista;
+    private final Runnable orejaTarda = () -> {
+        if (orejaLista) return;
+        try { if (oreja != null) oreja.cancel(); } catch (Throwable ignorado) {}
+        oidoPropio("El oído de Google no respondió");
+    };
+
+    private void oidoPropio(String porque) {
+        if (modelo != null) { js("toast(" + JSONObject.quote(porque + ": te escucho con mi propio oído") + ")"); escucharSinInternet(); }
+        else { js("toast(" + JSONObject.quote(porque + ". Prende “Hola Cubi” una vez para bajar mi propio oído.") + ")"); terminarCharla(); }
     }
 
     // el tablero de Maps va claro de 6 a 18 h
@@ -1024,15 +1044,17 @@ public class CubiService extends Service {
 
     private final RecognitionListener oye = new RecognitionListener() {
         @Override public void onResults(Bundle b) {
+            ui.removeCallbacks(orejaTarda);
             ArrayList<String> r = b.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
             if (r == null || r.isEmpty()) terminarCharla();
             else preguntar(r.get(0));
         }
         @Override public void onError(int e) {   // 6 y 7 = no dijo nada o no se entendió; otro número es un fallo del reconocedor
-            if (e != 6 && e != 7) js("toast('El oído de Google falló (error " + e + ")')");
-            terminarCharla();
+            ui.removeCallbacks(orejaTarda);
+            if (e == 6 || e == 7) { terminarCharla(); return; }
+            oidoPropio("El oído de Google falló (error " + e + (e == 9 ? ": la app de Google no tiene permiso de micrófono" : "") + ")");
         }
-        @Override public void onReadyForSpeech(Bundle b) {}
+        @Override public void onReadyForSpeech(Bundle b) { orejaLista = true; ui.removeCallbacks(orejaTarda); }
         @Override public void onBeginningOfSpeech() {}
         @Override public void onRmsChanged(float db) {}
         @Override public void onBufferReceived(byte[] b) {}
@@ -1667,6 +1689,21 @@ public class CubiService extends Service {
 
     // Abre el asistente del celular (Gemini), como "Hey Google". Con la pantalla apagada necesita el permiso
     // "Mostrar sobre otras apps". En Samsung el comando de voz genérico abre Bixby: primero se le pide a Google.
+    // El atajo de voz a veces no abre nada (y no avisa). Si a los 4 s nadie está usando el micrófono ni hablando, se abre
+    // la app de Gemini directamente, que es lo que sí funciona a mano.
+    private void geminiDirecto() {
+        try {
+            AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+            for (AudioRecordingConfiguration c : am.getActiveRecordingConfigurations()) if (c.getClientAudioSessionId() != miSesion) return;   // sí abrió
+            if (asisEstado.equals("habla")) return;
+            Intent g = getPackageManager().getLaunchIntentForPackage("com.google.android.apps.bard");
+            if (g == null) { js("toast('Gemini no abrió con el atajo de voz y no encuentro la app de Gemini')"); return; }
+            startActivity(g.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            js("toast('El atajo de voz no abrió nada: abrí la app de Gemini')");
+        } catch (Throwable ignorado) {
+        }
+    }
+
     void abrirAsistente() {
         String google = "com.google.android.googlequicksearchbox";
         boolean enCarro = ((UiModeManager) getSystemService(UI_MODE_SERVICE)).getCurrentModeType() == Configuration.UI_MODE_TYPE_CAR;
@@ -1685,6 +1722,7 @@ public class CubiService extends Service {
                 asisDesde = System.currentTimeMillis();
                 asisEstado = "escucha";  // Cubi ya puso la cara de escuchar al recibir el doble toque
                 revisarAsistente();
+                if (!enCarro) ui.postDelayed(this::geminiDirecto, 4000);   // en el carro graba el micrófono del carro: no se puede saber
                 return;
             } catch (Exception ignored) {
             }
