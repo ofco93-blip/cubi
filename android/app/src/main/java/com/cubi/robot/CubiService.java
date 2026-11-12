@@ -573,9 +573,8 @@ public class CubiService extends Service {
         }
         // la posición solo se manda con una ruta andando en Maps o Waze: mientras llegue, Cubi deja el mapa fijo
         if (mapaListo && lejos < 375 && ahora - navCuando < 120000)
-            int horaDia = Calendar.getInstance().get(Calendar.HOUR_OF_DAY);
             enviar(String.format(Locale.US, "asis|/mapa?x=%d&y=%d&r=%d&v=%d&k=%d&d=%d", Math.round(dx), Math.round(dy), Math.round(mapaRumbo), navCompleto() ? 1 : 0,
-                    kmh < 0 ? -1 : Math.round(kmh), horaDia >= 6 && horaDia < 18 ? 1 : 0));
+                    kmh < 0 ? -1 : Math.round(kmh), esDeDia() ? 1 : 0));
     }
 
     // corta una línea en los tramos que caen dentro del cuadro de 375 m y los escribe como los entiende Cubi (de a 3 m)
@@ -888,6 +887,9 @@ public class CubiService extends Service {
         ui.postDelayed(() -> oreja.startListening(i), 300);  // que "Cubi" (Vosk) suelte el micrófono primero
         revisarAsistente();
     }
+
+    // el tablero de Maps va claro de 6 a 18 h
+    static boolean esDeDia() { int h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY); return h >= 6 && h < 18; }
 
     boolean hayInternet() {
         android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
