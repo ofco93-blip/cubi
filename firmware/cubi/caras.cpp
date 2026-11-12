@@ -1938,14 +1938,57 @@ static float pumK(float u) {   // segundos desde que empezó la cuenta (negativo
   if (pumCuenta < 0 && u > 7) pumCuenta = 7;
   return pumCuenta < 0 ? -1 : u - pumCuenta;
 }
+// La pistola apuntando de frente, a los de atrás (Cubi va arriba de la pantalla, mirando hacia la cabina): se ve la boca del
+// cañón grande al centro, el cuerpo detrás y la mano abajo. El disparo viene hacia uno: destello, aro y confeti que se abre.
+static void pistolaFrente(float u) {
+  ConColor cc;
+  const Col cuerpo{90, 220, 210}, cuerpoO{52, 160, 156}, metal{235, 240, 250}, punta{255, 80, 120}, rayo{255, 120, 170};
+  const float k = pumK(u), entra = tramo(u, 0.2f, 0.7f), fin = k < 0 ? 1 : 1 - tramo(k, 4.6f, 5.4f);
+  const float tiro = k - 3.0f, retro = tiro > 0 ? expf(-tiro * 8) : 0, baja = k < 0 ? 0 : tramo(k, 3.8f, 4.4f);
+  const float carga = k >= 0 && k < 3 ? fmodf(k, 1.f) : 0;           // la luz de adentro se prende con cada número
+  const float x = CX + 3 * sinf(u * 1.7f), y = H - 108 + 240 * (1 - entra) + 3 * sinf(u * 2.1f) - 26 * retro + 220 * baja, e = 1 - 0.12f * retro;
+  circulo(x + 2, y + 36 * e, 40 * e, cuerpoO, fin);                                                             // la parte de atrás del cuerpo
+  figura(x - 16, y + 30, x + 30, y + 116, solido(metal, fin), [=](float px, float py) { return dCapsula2(px, py, x + 4, y + 52 * e, 15 * e, x + 10, y + 98 * e, 13 * e); });   // el mango
+  circulo(x, y + 16 * e, 44 * e, cuerpo, fin, 6);
+  circulo(x, y + 5 * e, 37 * e, metal, fin); circulo(x, y + 5 * e, 32 * e, cuerpo, fin);                        // un aro del cañón
+  figura(x - 10, y - 58 * e, x + 10, y - 24 * e, solido(metal, fin), [=](float px, float py) { return dTriangulo(px, py, x - 7 * e, y - 26 * e, x + 7 * e, y - 26 * e, x, y - 46 * e); });   // la mira
+  circulo(x, y, 27 * e, metal, fin); circulo(x, y, 20 * e, Col{24, 30, 44}, fin);                               // la boca del cañón
+  circulo(x, y, (6 + 7 * carga) * e, punta, fin, 10 + 18 * carga);
+  manoBlanca(x + 8, y + 86 * e, -PI / 2 + 0.1f, 1.3f, false, fin);
+  if (k >= 0 && k < 3) {                                              // 3 · 2 · 1 arriba
+    const float f = k - floorf(k);
+    const char c[2] = {char('3' - (int)k), 0};
+    SinZoom sz;
+    dib::texto(c, CX, 52, 70 + 30 * (1 - tramo(f, 0, 0.25f)), BLANCO, 1 - tramo(f, 0.8f, 1));
+  }
+  if (tiro > 0 && tiro < 0.5f) {                                      // ¡pum!: el destello llena la pantalla y un aro rosado crece hacia uno
+    const float t = tiro / 0.5f, Ra = 30 + 430 * t;
+    figura(0, 0, W, H, solido(Col{255, 230, 240}, 0.8f * (1 - t)), [](float, float) { return -1.f; });
+    figura(x - Ra - 16, y - Ra - 16, x + Ra + 16, y + Ra + 16, solido(rayo, 1 - t), [=](float px, float py) { return fabsf(dCirculo(px, py, x, y, Ra)) - 3 - 9 * (1 - t); });
+  }
+  if (tiro > 0.05f && tiro < 1.8f) {                                  // el confeti sale hacia uno: se abre desde la boca y crece
+    const float t2 = tiro - 0.05f, al = 1 - tramo(t2, 1.1f, 1.7f);
+    for (int i = 0; i < 30; i++) {
+      const float an = 6.283f * hash(i, 1), d = (90 + 260 * hash(i, 2)) * t2 * (1 + t2);
+      Marco p2 = marco(x + cosf(an) * d, y + sinf(an) * d * 0.85f + 120 * t2 * t2, t2 * 10 * (hash(i, 3) - 0.5f) + i, 1 + 2.2f * t2);
+      pieza(p2, -7, -5, 7, 5, solido(COLORES[i % 5], al), [](float a, float b) { return dCaja(a, b, 0, 0, 6, 3.5f, 1); });
+    }
+  }
+  if (tiro > 0.3f && tiro < 1.8f) for (int i = 0; i < 3; i++) {       // el cañón queda echando humito
+    const float p = (tiro - 0.3f) / 1.5f + i * 0.15f;
+    if (p < 1) circulo(x + 6 * sinf(p * 7 + i), y - 10 - 50 * p, 6 + 10 * p, Col{220, 224, 236}, 0.6f * fin * (1 - p));
+  }
+  if (tiro > 0.4f) confeti(tiro - 0.4f, tramo(tiro, 0.4f, 0.7f) * (1 - tramo(k, 4.8f, 5.5f)));
+}
 // pistola láser de juguete de lado, en una mano, apuntando al copiloto (a la derecha): rayo y ¡confeti!
 static void pistolaConfeti(float u) {
+  if (giroForma == 1) { pistolaFrente(u); return; }   // "mata al de atrás": apunta de frente (el celular lo manda con f=1)
   ConColor cc;
   const Col cuerpo{90, 220, 210}, metal{235, 240, 250}, punta{255, 80, 120}, rayo{255, 120, 170};
   const float k = pumK(u), entra = tramo(u, 0.2f, 0.7f), fin = k < 0 ? 1 : 1 - tramo(k, 4.6f, 5.4f);
   const float tiro = k - 3.0f, retro = tiro > 0 ? expf(-tiro * 8) : 0, baja = k < 0 ? 0 : tramo(k, 3.8f, 4.4f);
-  const float x = CX - 104 - 16 * retro, y = H - 66 + 240 * (1 - entra) + 3 * sinf(u * 2.1f) * (1 - baja) + 30 * baja;   // entra subiendo desde abajo
-  const float ang = -0.52f - 0.3f * retro + 0.75f * baja;             // apunta en diagonal, hacia arriba y hacia el copiloto
+  const float x = CX - 104 - 16 * retro, y = H - 98 + 240 * (1 - entra) + 3 * sinf(u * 2.1f) * (1 - baja) + 30 * baja;   // entra subiendo desde abajo
+  const float ang = -0.06f - 0.3f * retro + 0.6f * baja;              // nivelada: Cubi va a la altura de la cara del copiloto
   Marco m = marco(x, y, ang, 1.4f);
   const float carga = k >= 0 && k < 3 ? fmodf(k, 1.f) : 0;           // la punta se prende con cada número
   pieza(m, -12, 4, 26, 52, solido(metal, fin, 4), [](float a, float b) {                       // mango
@@ -2390,8 +2433,8 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       float k = pumK(u), malo = tramo(u, 0, 0.4f) * (k < 3 ? 1 : 1 - tramo(k, 3.0f, 3.2f));   // ¡pum! y se muere de la risa
       float risa = k < 0 ? 0 : tramo(k, 3.05f, 3.3f) * (1 - tramo(k, 5.2f, 5.6f));
       tapas(r, 0.4f * malo); r.L.incl = r.R.incl = 0.22f * malo;
-      mirar(r, 0.75f * malo, 0.1f * malo);                            // mira al copiloto, a quien le apunta
-      mover(r, 3 * sinf(u * 2.3f) * malo, -14 * malo);
+      mirar(r, (giroForma == 1 ? 0 : 0.75f) * malo, 0.1f * malo);     // mira al copiloto, a quien le apunta (o derecho, a los de atrás)
+      mover(r, 3 * sinf(u * 2.3f) * malo, (giroForma == 1 ? -46 : -14) * malo);
       if (k > 3.0f && k < 3.15f) escalar(r, 1.08f, 0.9f);           // el culatazo
       feliz(r, risa); mover(r, 0, 7 * sinf(u * 40) * risa);
       r.boca = risa * (0.6f + 0.3f * fabsf(sinf(u * 14))); r.bAncho = 1.7f;

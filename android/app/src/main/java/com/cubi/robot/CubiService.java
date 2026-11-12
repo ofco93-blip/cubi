@@ -943,11 +943,22 @@ public class CubiService extends Service {
     // "dispárale a mi esposo" -> "¡Prepárate, esposo!" y dispara · "dispara" -> "¡Prepárate!" y dispara ·
     // "ataca" / "lanza" / "kamehameha" -> el kamehameha · "piedra, papel o tijera" -> juega
     static final Pattern DISPARA = Pattern.compile("\\b(disparale|dispara|disparen|dispare|mata|matalo|matala|acaba con|fusila)\\b(?:\\s+a)?(?:\\s+(?:mi|mis|la|el|los|las|ese|esa|este|esta))?(?:\\s+(\\w+))?");
+    static final Pattern ATRAS = Pattern.compile("\\b(al|a la|a el|a los|a las)\\s+(?:(\\w+)\\s+)?de atras\\b");
     static final Pattern ATACA = Pattern.compile("\\b(ataca|ataque|atacalo|atacala|lanza|lanzalo|kamehameha|kame|ame ame|came came)\\b");
     static final Pattern JUEGA = Pattern.compile("\\b(piedra|tijera|tijeras)\\b");
     static String[] directo(String dicho) {
         String s = sinTildes(dicho);
         Matcher m = DISPARA.matcher(s);
+        if (m.find() && s.contains("atras")) {   // "mata al de atrás", "a la de atrás", "a la tonta de atrás": apunta de frente
+            Matcher t = ATRAS.matcher(s);
+            String quien = "atrás";
+            if (t.find()) {
+                String art = t.group(1), adj = t.group(2);
+                quien = adj != null ? adj + " de atrás" : (art.equals("a la") ? "la" : art.equals("a las") ? "las" : art.equals("a los") ? "los" : "el") + " de atrás";
+            }
+            return new String[]{"¡Prepárate, " + quien + "!", "confeti_atras", ""};
+        }
+        m.reset();
         if (m.find()) {
             String q = m.group(2);
             boolean nombre = q != null && q.length() > 2 && !q.matches("ahora|pues|porfa|por|favor|cubi|robot|que|con|una|uno|todos|todo|alguien");
@@ -1078,9 +1089,12 @@ public class CubiService extends Service {
         }).start();
     }
 
+    private boolean confetiFrente;   // la pistola apunta de frente, a los de atrás
     private String pptJugada = ""; private long pptCuando;   // lo que sacó Cubi en piedra, papel o tijera
 
     private void decir(String texto, String truco, String accion, String busqueda, boolean sigue) {
+        confetiFrente = "confeti_atras".equals(truco);
+        if (confetiFrente) truco = "confeti";
         if ("piedra_papel_tijera".equals(truco)) {   // la jugada sale al azar aquí, no la escoge Claude
             pptJugada = new String[]{"piedra", "papel", "tijera"}[(int) (Math.random() * 3)]; pptCuando = System.currentTimeMillis();
             truco = "ppt_" + pptJugada; texto = texto + " ¡Saqué " + pptJugada + "!";
@@ -1143,7 +1157,7 @@ public class CubiService extends Service {
     // y la música, después de hablar (para no taparse)
     private void hacerTruco(boolean empieza) {
         String t = trucoPend, ac = accionPend;
-        if (empieza && REACCIONES.contains(t) && !t.equals("kamehameha")) { trucoPend = ""; enviar("asis|/r?n=" + t); }
+        if (empieza && REACCIONES.contains(t) && !t.equals("kamehameha")) { trucoPend = ""; enviar("asis|/r?n=" + t + (confetiFrente && t.equals("confeti") ? "&f=1" : "")); }
         if (empieza && ac.equals("clima")) {
             accionPend = "";
             if (!climaOrden.isEmpty()) enviar("asis|" + climaOrden + "&ver=1");
