@@ -71,6 +71,8 @@ static int gradosN = 0; static float gradosDesde = -1, gradosHasta = -1; static 
 static char calleTxt[32] = "";
 void mostrarCalle(const char *c) { snprintf(calleTxt, sizeof calleTxt, "%s", c ? c : ""); }
 static int giroForma = 0;
+static int disenoMapa = 0;   // 0 = el letrero de siempre; 1..3 = las opciones con el mapa de fondo
+void disenoMapaPoner(int d) { disenoMapa = d; }
 void mostrarGiro(int forma) { giroForma = forma; }
 void mostrarGrados(int g, float seg, bool metros) { gradosN = g; gradosM = metros; gradosDesde = tAhora; gradosHasta = tAhora + seg; }
 
@@ -1545,15 +1547,15 @@ static void ambienteCanta(float u, const Entradas &e) {
       {{255, 130, 200}, {120, 220, 255}, {255, 240, 130}},   // 8 kpop: pastel
       {{255, 210, 40}, {60, 100, 255}, {240, 50, 60}},       // 9 acordeón: amarillo, azul, rojo
   };
-  int pal = 0, modo = 0;                               // modo: 0 luces que se pasean, 1 focos finos del techo, 2 rayos, 3 un tinte que sube o baja
+  int pal = 0, modo = 0;                               // modo: 0 luces que se pasean, 1 focos finos del techo, 2 rayos (nada de tintes de borde: en el robot frenaban el baile)
   switch (e.ritmo) {
     case R_ROCK: case R_GROOVE: pal = 1; modo = 1; break;
-    case R_GUITARRA: case R_DISFRUTA: pal = 2; modo = 3; break;
+    case R_GUITARRA: case R_DISFRUTA: pal = 2; break;
     case R_JAZZ: pal = 3; break;
     case R_DJ: case R_ELECTRO: case R_BARRAS: pal = 4; modo = 2; break;
-    case R_TROPICAL: pal = 5; modo = 3; break;
+    case R_TROPICAL: pal = 5; break;
     case R_URBANO: pal = 6; break;
-    case R_PIANO: case R_CORAZON: pal = 7; modo = 3; break;
+    case R_PIANO: case R_CORAZON: pal = 7; break;
     case R_KPOP: pal = 8; break;
     case R_ACORDEON: pal = 9; break;
     default: break;
@@ -1577,9 +1579,6 @@ static void ambienteCanta(float u, const Entradas &e) {
   } else if (modo == 2) {                              // dos rayos que barren y cambian de color
     for (int i = 0; i < 2; i++)
       linea(CX + (i ? 60 : -60), -6, CX + 240 * sinf(u * 1.1f + i * 2.3f), H + 6, 1.8f, i ? c1 : c0, (0.4f + 0.3f * g) * entra);
-  } else {                                             // un tinte bajito en el borde que va cambiando de color y respira
-    const bool abajo = e.ritmo != R_PIANO && e.ritmo != R_CORAZON;
-    luzBorde(abajo ? ABAJO : ARRIBA, c0, (0.4f + 0.1f * sinf(u * 1.7f) + 0.1f * g) * entra, 96);
   }
   {                                                    // una notita de vez en cuando (una sola a la vez, cada 4 s, alternando lado)
     const float ciclo = u / 4.f; const int k = (int)ciclo; const float q = (ciclo - k) / 0.55f;
@@ -2258,6 +2257,15 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       { const float junta = 26 * k * (r.L.x < r.R.x ? 1 : -1); r.L.x += junta; r.R.x -= junta; }
       if (lado == 0) mover(r, 6 * k * sinf(u * 3), -58 * k);   // derecho: más arriba (debajo va el volante) y se mece manejando
       r.L.incl = r.R.incl = 0.12f * lado * k; r.boca = 0;
+      if (disenoMapa) {                                              // las opciones nuevas: Cubi más grande, sin letrero que lo tape
+        r = neutro(AZUL);
+        const float L = lado == 0 ? 1 : lado, junta = (disenoMapa == 1 ? 30 : 20) * k;
+        r.L.x += junta; r.R.x -= junta;
+        if (disenoMapa == 1) { escalar(r, 1 - 0.58f * k, 1 - 0.58f * k); mover(r, 0, -78 * k); mirar(r, 0.25f * lado * k, 0.3f * k); }
+        else if (disenoMapa == 2) { escalar(r, 1 - 0.3f * k, 1 - 0.3f * k); mover(r, -L * 92 * k, -24 * k); mirar(r, 0.5f * L * k, -0.05f * k); }
+        else { escalar(r, 1 - 0.32f * k, 1 - 0.32f * k); mover(r, 0, -48 * k); mirar(r, 0.45f * lado * k, 0.2f * k); }
+        r.L.incl = r.R.incl = 0.1f * lado * k;
+      }
       vel = 20;
       break;
     }
@@ -2477,6 +2485,46 @@ static void discoGiro(float dx, float ty, float R, float lado, float u, float a)
     if (L == 0) return fminf(S(0, 24, 0, -22), P(0, -22, 0, -1, 14));                                                                // derecho
     return fminf(fminf(S(-L * 13, 24, -L * 13, -6), S(-L * 13, -6, L * 20, -6)), P(L * 20, -6, L, 0, 13));                            // sube y dobla
   });
+}
+// Opciones de diseño de la indicación (para escoger): el mapa de fondo en toda la pantalla y la señal de giro grande.
+// 1 = señal gigante al centro y Cubi asomado arriba · 2 = señal a un lado y Cubi al otro, encima del carrito ·
+// 3 = tarjeta abajo con la señal y los metros, Cubi arriba
+static void mapaFondo(float lado, float a) {             // por detrás de los ojos
+  dib::SinZoom sz; ConColor cc;
+  const float L = lado == 0 ? 1 : lado;
+  const float carX = disenoMapa == 2 ? CX - L * 112 : CX, carY = disenoMapa == 1 ? 190 : disenoMapa == 2 ? 268 : 216;
+  figura(0, 0, W, H, solido(Col{9, 13, 26}, a), [](float, float) { return -1.f; });
+  if (mapaHay()) pintarCalles(carX, 0, carY, 0.8f, 0, 0.5f * a, 2.4f);
+  if (disenoMapa != 1) carrito(carX, carY, 1.2f, a);
+}
+static void mapaSenal(float lado, float u, float a) {    // por delante
+  dib::SinZoom sz; ConColor cc;
+  const float L = lado == 0 ? 1 : lado, sube = 230 * (1 - tramo(u, 0.05f, 0.55f));    // la señal entra subiendo
+  const bool hayM = tAhora < gradosHasta && gradosM, ya = hayM && gradosN <= 60;
+  const float late = ya ? 5 * fabsf(sinf(tAhora * 7)) : 0;
+  char m[16] = "";
+  if (hayM) { if (gradosN >= 1000) snprintf(m, sizeof m, "%d,%d km", gradosN / 1000, gradosN % 1000 / 100); else snprintf(m, sizeof m, "%d m", gradosN); }
+  const Col placa{14, 20, 38}, borde{70, 110, 190}, gris{190, 205, 235};
+  auto tarjeta = [&](float x, float y, float hw, float hh, float r) {
+    figura(x - hw - 3, y - hh - 3, x + hw + 3, y + hh + 3, solido(placa, 0.92f * a), [=](float px, float py) { return dCaja(px, py, x, y, hw, hh, r); });
+    figura(x - hw - 3, y - hh - 3, x + hw + 3, y + hh + 3, solido(borde, 0.9f * a), [=](float px, float py) { return fabsf(dCaja(px, py, x, y, hw, hh, r)) - 1.3f; });
+  };
+  if (disenoMapa == 1) {
+    discoGiro(CX, 178 + sube, 88 + late, lado, u, a);
+    if (m[0] || calleTxt[0]) tarjeta(CX, 320 + sube, 168, calleTxt[0] && m[0] ? 40 : 28, 22);
+    if (m[0]) texto(m, CX, (calleTxt[0] ? 306 : 320) + sube, 48, BLANCO, a);
+    if (calleTxt[0]) texto(calleTxt, CX, (m[0] ? 342 : 320) + sube, 21, gris, a);
+  } else if (disenoMapa == 2) {
+    const float x = CX + L * 116;
+    discoGiro(x, 142 + sube, 78 + late, lado, u, a);
+    if (m[0]) { tarjeta(x, 262 + sube, 96, 28, 20); texto(m, x, 262 + sube, 44, BLANCO, a); }
+    if (calleTxt[0]) { tarjeta(CX, 338 + sube, 206, 22, 18); texto(calleTxt, CX, 338 + sube, 22, gris, a); }
+  } else {
+    tarjeta(CX, 310 + sube, 210, 50, 28);
+    discoGiro(CX - 150, 310 + sube, 44 + late, lado, u, a);
+    if (m[0]) texto(m, CX + 30, (calleTxt[0] ? 296 : 310) + sube, 54, BLANCO, a);
+    if (calleTxt[0]) texto(calleTxt, CX + 30, (m[0] ? 338 : 310) + sube, 21, gris, a);
+  }
 }
 // pantalla de mapa completo, sin el muñequito: el mapa en toda la pantalla, el carro abajo y arriba la barra con el giro
 static void pantallaMapa(float lado, float u, float a) {
@@ -2964,6 +3012,11 @@ static void extrasReac(float u, bool delante) {
     case MAPS_RECTO:
     case MAPS_IZQ:
     case MAPS_DER:
+      if (disenoMapa && !soloMapa()) {
+        const float lado = laReac == MAPS_IZQ ? -1 : laReac == MAPS_DER ? 1 : 0, a = tramo(u, 0.05f, 0.4f) * (1 - tramo(u, 4.0f, 4.5f));
+        if (delante) mapaSenal(lado, u, a); else mapaFondo(lado, a);
+        break;
+      }
       if (delante) {
         if (soloMapa()) {                                // elegido en la app: el mapa completo, sin el muñequito
           pantallaMapa(laReac == MAPS_IZQ ? -1 : laReac == MAPS_DER ? 1 : 0, u, tramo(u, 0.05f, 0.3f) * (1 - tramo(u, 4.1f, 4.5f)));

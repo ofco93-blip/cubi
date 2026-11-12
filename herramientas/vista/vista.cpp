@@ -49,6 +49,7 @@ int main(int argc, char **argv) {
   if (que.rfind("mapa_", 0) == 0) { mapaVista(true); que = "maps_" + que.substr(5); }   // mapa_x = la misma indicación con el mapa completo
   auto fin = [&](const char *f) { const size_t n = strlen(f); if (que.size() <= n || que.compare(que.size() - n, n, f)) return false; que.resize(que.size() - n); return true; };
   for (int i = 0; i < 3; i++) if (fin(("_m" + std::to_string(i)).c_str())) estiloManos(i);   // x_m1 = la misma escena con otro estilo de manos
+  for (int i = 1; i <= 3; i++) if (fin(("_d" + std::to_string(i)).c_str())) disenoMapaPoner(i);   // maps_x_d2 = la indicación con el diseño 2
   const bool sinMapa = fin("_solo");   // maps_x_solo = sin el mini mapa
   { const char *F[] = {"_suave", "_cerrada", "_u", "_glorieta", "_salida"}; for (int i = 0; i < 5; i++) if (fin(F[i])) mostrarGiro(i + 1); }   // maps_izq_u, maps_der_salida...
   bool guion = que.rfind("cancion_", 0) == 0;   // cancion_x = una cancion con partes: verso suave, silencio, coro duro, nota larga, solo, final

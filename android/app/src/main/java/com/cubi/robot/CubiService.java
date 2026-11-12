@@ -1362,7 +1362,7 @@ public class CubiService extends Service {
     private volatile boolean introPiano;         // la canción empieza solo con piano
     private String ritmoMandado = "";
 
-    static final String[][] INSTRUMENTOS = {{"pop", "kpop"}, {"electronica", "dj"}, {"urbano", "dj"}, {"rock", "rock"},
+    static final String[][] INSTRUMENTOS = {{"pop", "kpop"}, {"electronica", "dj"}, {"urbano", "urbano"}, {"rock", "rock"},
             {"acustica", "guitarra"}, {"tropical", "tropical"}, {"jazz", "jazz"}, {"piano", "piano"}, {"percusion", "pop"}, {"acordeon", "acordeon"}, {"ranchera", "manos"}, {"balada", "vela"}};
 
     private void pedirInstrumento(String titulo, String artista, String id) {
@@ -1387,8 +1387,8 @@ public class CubiService extends Service {
                 String g = r.instrumento.trim().toLowerCase(Locale.ROOT), elegido = "kpop";   // si no reconoce nada: micrófono
                 for (String[] par : INSTRUMENTOS) if (par[0].equals(g)) elegido = par[1];
                 if (g.contains("rock") || g.contains("metal") || g.contains("punk")) elegido = "rock";
-                else if (g.contains("electr") || g.contains("house") || g.contains("dance") || g.contains("edm")
-                        || g.contains("reggaet") || g.contains("urban") || g.contains("trap") || g.contains("hip")) elegido = "dj";
+                else if (g.contains("reggaet") || g.contains("urban") || g.contains("trap") || g.contains("hip") || g.contains("rap")) elegido = "urbano";
+                else if (g.contains("electr") || g.contains("house") || g.contains("dance") || g.contains("edm")) elegido = "dj";
                 else if (g.contains("vallenato") || g.contains("acorde") || g.contains("norte")) elegido = "acordeon";
                 else if (g.contains("mariachi") || g.contains("ranch") || g.contains("banda") || g.contains("corrido")) elegido = "manos";
                 else if (g.contains("balada") || g.contains("bolero") || g.contains("despecho")) elegido = "vela";

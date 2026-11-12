@@ -16,6 +16,7 @@ void mostrarGrados(int g, float seg, bool metros = false);
 void mapaVias(const char *w, bool primero, bool fin);
 void mapaPos(float x, float y, float rumbo);
 void mapaVista(bool completo);      // true: en la navegación, el mapa completo en vez de Cubi con las flechas
+void disenoMapaPoner(int d);   // 0 = el letrero de siempre; 1..3 = las opciones con el mapa de fondo
 void mostrarGiro(int forma);        // la forma del giro: 0 normal, 1 curva suave, 2 cerrada, 3 en U, 4 glorieta, 5 salida
 void estiloManos(int e);            // 0 guante gordito, 1 de línea, 2 manopla lisa
 void mostrarCalle(const char *c);   // la calle del próximo giro (con la flecha de Maps); "" la quita

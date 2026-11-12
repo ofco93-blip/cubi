@@ -210,6 +210,8 @@ void resplandor(float bx0, float by0, float bx1, float by1, const Col &c0, float
   if (x0 >= x1 || y0 >= y1) return;
   marcar(x0, y0, x1, y1);
   const int ny = (y1 - y0 + P - 1) / P + 1;
+  const int cr = (int)lim(c.r, 0, 255) >> 3, cg = (int)lim(c.g, 0, 255) >> 2, cz = (int)lim(c.b, 0, 255) >> 3;   // el color, ya en 5-6-5
+  const float a64 = alfa * 64;
   float ca[H / P + 2], cb[H / P + 2], *izq = ca, *der = cb;                       // las distancias de dos columnas vecinas
   auto columna = [&](float *v, int x) { for (int j = 0; j < ny; j++) v[j] = d(ox + x * iz, oy + (y0 + j * P) * iz) * z; };
   columna(izq, x0);
@@ -224,9 +226,18 @@ void resplandor(float bx0, float by0, float bx1, float by1, const Col &c0, float
           const int y = y0 + j * P + py;
           if (y >= y1) break;
           const float k = 1 - fmaxf(0, da + (db - da) * (py * (1.f / P))) * ih;
-          // tramado fino (4x4): la pantalla tiene pocos tonos por color y sin esto el degradado se ve en anillos
+          if (k <= 0.04f) continue;
+          // tramado fino (4x4): la pantalla tiene pocos tonos por color y sin esto el degradado se ve en anillos.
+          // La mezcla va en enteros sobre el 5-6-5 (64 niveles): en el ESP32 pesa mucho menos que con decimales.
           static const float TRAMA[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
-          if (k > 0.04f) mezclar(idx(tx + px, y), c, k * k * alfa + (TRAMA[(px & 3) | ((y & 3) << 2)] - 7.5f) * (1.f / 300));
+          int a = (int)(k * k * a64 + (TRAMA[(px & 3) | ((y & 3) << 2)] - 7.5f) * 0.21f);
+          if (a <= 0) continue;
+          if (a > 64) a = 64;
+          const uint32_t i = idx(tx + px, y);
+          const uint16_t q = fb[i];
+          int r = (q >> 11) & 31, g = (q >> 5) & 63, b = q & 31;
+          r += ((cr - r) * a) >> 6; g += ((cg - g) * a) >> 6; b += ((cz - b) * a) >> 6;
+          fb[i] = (uint16_t)((r << 11) | (g << 5) | b);
         }
       }
     }
