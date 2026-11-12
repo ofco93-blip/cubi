@@ -110,3 +110,5 @@ void texto(const char *s, float cx, float cy, float tam, const Col &c0, float al
 }
 
 }  // namespace dib
+
+namespace dib { float sube = 0; }

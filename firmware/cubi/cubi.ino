@@ -1202,7 +1202,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
       ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"mc\":" + musicaCel + ",\"tam\":" + tamCara + ",\"carro\":" + apagarConCarro + ",\"lab\":" + labios + ",\"bm\":" + bocaMic + ",\"ojos\":" + colorOjos +
       ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
       ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"curvas\":" + int(pesoIzq) + ",\"fw\":" + VERSION_FW +
-      ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + ",\"paq\":" + prefs.getUChar("paq", 0) + "}";  // cuadros por segundo del último cuadro
+      ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + ",\"paq\":" + String(caras::paqueteAhora()) + "}";  // cuadros por segundo del último cuadro
   }
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
     char b[420];
@@ -1361,7 +1361,7 @@ void setup() {
   tamCara = prefs.getUChar("tam", 120); caras::tamano(tamCara / 100.f);
   apagarConCarro = prefs.getBool("carro", true);
   labios = prefs.getBool("lab", true); bocaMic = prefs.getBool("bmic", true); ponerColor(prefs.getUInt("ojos", 0xFFFFFF));
-  caras::paquete(prefs.getUChar("paq", caras::CUBI_AZUL));
+  caras::paquete(prefs.getUChar("paq", caras::MINIMALISTA));
   umbralVoz = prefs.getFloat("uv", UMBRAL_VOZ); ganBoca = prefs.getFloat("gb", GANANCIA_BOCA);
   sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = UMBRAL_FRENO;
   izqAcum = { prefs.getFloat("izx", 0), prefs.getFloat("izy", 0), prefs.getFloat("izz", 0) }; pesoGuardado = pesoIzq = prefs.getFloat("izp", 0);

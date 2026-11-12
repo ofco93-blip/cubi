@@ -7,7 +7,7 @@ namespace caras {
 enum Base : uint8_t { REPOSO, ESCUCHA, HABLA, CANTA, PIENSA, DUERME, TELEFONO, N_BASE };   // TELEFONO = en llamada
 enum Reac : uint8_t {
   NINGUNA, SALUDO, BACHE, FRENAZO, ACELERON, ARRANQUE, GIRO_IZQ, GIRO_DER, CARICIA, WHATSAPP, LLAMADA,
-  CALOR, RISA, SORPRESA, AMOR, MAREO, MAPS_IZQ, MAPS_DER, LLEGAMOS, SOL, LLUVIA, FRIO, BATERIA, GUINO, CURIOSA, KAME, PUM, MAPS_RECTO, N_REAC
+  CALOR, RISA, SORPRESA, AMOR, MAREO, MAPS_IZQ, MAPS_DER, LLEGAMOS, SOL, LLUVIA, FRIO, BATERIA, GUINO, CURIOSA, KAME, PUM, MAPS_RECTO, CINTURON, SONROJO, ENOJO, PAPAS, BEBIDA, CONSOLA, LEEMAPA, CONO, CRISPETAS, FELIZ, TRISTE, SUENO, N_REAC
 };
 extern const char *NOMBRE_BASE[N_BASE];
 extern const char *NOMBRE_REAC[N_REAC];
@@ -17,6 +17,7 @@ void mapaVias(const char *w, bool primero, bool fin);
 void mapaPos(float x, float y, float rumbo);
 void mapaVista(bool completo);      // true: en la navegación, el mapa completo en vez de Cubi con las flechas
 void mostrarGiro(int forma);        // la forma del giro: 0 normal, 1 curva suave, 2 cerrada, 3 en U, 4 glorieta, 5 salida
+void estiloManos(int e);            // 0 guante gordito, 1 de línea, 2 manopla lisa
 void mostrarCalle(const char *c);   // la calle del próximo giro (con la flecha de Maps); "" la quita
 void cuentaPum();                       // la pistola de confeti empieza la cuenta 3 2 1 (cuando el celular termina de hablar)   // los grados del clima arriba en la pantalla, por unos segundos
 
@@ -41,9 +42,10 @@ struct Entradas {
 
 // paquetes de caras (se escogen desde la app)
 // NOVA_S y KIRA_S (antes anime y peluche) son Nova y Kira sólidas, sin rayitas; las de solo ojos no tienen boca
-enum Paquete : uint8_t { CUBI_AZUL, MINIMALISTA, NOVA_S, KIRA_S, ATARDECER, OVALO, NEON, SIMPLE, N_PAQ };
+enum Paquete : uint8_t { CUBI_AZUL, MINIMALISTA, NOVA_S, KIRA_S, ATARDECER, OVALO, NEON, SIMPLE, CARICATURA, TRAZO, BOLITA, N_PAQ };   // se usan MINIMALISTA y las tres últimas
 extern const char *NOMBRE_PAQ[N_PAQ];
 void paquete(uint8_t p);
+uint8_t paqueteAhora();             // la cara que quedó puesta (una vieja cae en la minimalista)
 void tamano(float z);                   // qué tan grande se dibuja la cara (1 = como antes, hasta 1,5)
 
 void iniciar(uint32_t semilla);

@@ -44,10 +44,11 @@ int main(int argc, char **argv) {
   iniciar(7);
   bool esBase = false; int ritmo = 0;
   if (que.rfind("mini_", 0) == 0) { paquete(MINIMALISTA); que = que.substr(5); }
-  for (auto pq : {std::make_pair("novas_", NOVA_S), std::make_pair("kiras_", KIRA_S), std::make_pair("colores_", ATARDECER), std::make_pair("ovalo_", OVALO), std::make_pair("neon_", NEON), std::make_pair("simple_", SIMPLE)})   // las caras nuevas, igual que mini_
+  for (auto pq : {std::make_pair("novas_", NOVA_S), std::make_pair("kiras_", KIRA_S), std::make_pair("colores_", ATARDECER), std::make_pair("ovalo_", OVALO), std::make_pair("neon_", NEON), std::make_pair("simple_", SIMPLE), std::make_pair("pancho_", CARICATURA), std::make_pair("lino_", TRAZO), std::make_pair("mochi_", BOLITA)})   // las caras nuevas, igual que mini_
     if (que.rfind(pq.first, 0) == 0) { paquete(pq.second); que = que.substr(strlen(pq.first)); }   // mini_x = la misma cara en el paquete minimalista
   if (que.rfind("mapa_", 0) == 0) { mapaVista(true); que = "maps_" + que.substr(5); }   // mapa_x = la misma indicación con el mapa completo
   auto fin = [&](const char *f) { const size_t n = strlen(f); if (que.size() <= n || que.compare(que.size() - n, n, f)) return false; que.resize(que.size() - n); return true; };
+  for (int i = 0; i < 3; i++) if (fin(("_m" + std::to_string(i)).c_str())) estiloManos(i);   // x_m1 = la misma escena con otro estilo de manos
   const bool sinMapa = fin("_solo");   // maps_x_solo = sin el mini mapa
   { const char *F[] = {"_suave", "_cerrada", "_u", "_glorieta", "_salida"}; for (int i = 0; i < 5; i++) if (fin(F[i])) mostrarGiro(i + 1); }   // maps_izq_u, maps_der_salida...
   bool guion = que.rfind("cancion_", 0) == 0;   // cancion_x = una cancion con partes: verso suave, silencio, coro duro, nota larga, solo, final

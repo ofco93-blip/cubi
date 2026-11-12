@@ -1215,15 +1215,16 @@ public class CubiService extends Service {
         }
         String cual = new String[]{"", "curva suave a la ", "curva cerrada a la ", "en U por la ", "glorieta, ", "salida a la "}[forma] + (recto ? "derecho" : dir.equals("maps_izq") ? "izquierda" : "derecha") + (metros >= 0 ? (recto ? " por " : " en ") + Math.round(metros) + " m" : "")
                 + (porTexto ? " (por el texto)" : " (por el dibujo)");
-        // cada giro se muestra dos veces: cuando falta poco (300 m) y cuando ya toca (60 m)
-        String etapa = metros >= 0 && metros <= 60 ? "ya" : "cerca";
+        // como la voz de Maps: cada giro se avisa tres veces y entre aviso y aviso Cubi sigue en lo suyo:
+        // con tiempo (800 m), cuando falta poco (300 m) y cuando ya toca (80 m). Derecho, una sola vez.
+        String etapa = recto ? "recto" : metros < 0 ? "cerca" : metros <= 80 ? "ya" : metros <= 300 ? "cerca" : "lejos";
         String giro = dir + etapa + DISTANCIA.matcher(s).replaceAll("").replaceAll("\\s+", " ").trim();  // el giro sin la distancia
         // derecho se muestra una vez por indicación, a cualquier distancia; en modo mapa todo se muestra siempre
-        if (metros > 300 && !recto && !mapa) { navDecision = cual + ", todavía lejos"; return; }
+        if (metros > 800 && !recto && !mapa) { navDecision = cual + ", todavía lejos"; return; }
         navDecision = cual + (mapa ? ", en pantalla (modo mapa)" : ", flecha mostrada");
         // el texto de Maps cambia solo (la hora de llegada): la misma flecha no se repite antes de 25 s
-        // ya cerquita (150 m) se manda cada vez que cambia la distancia: Cubi mantiene la indicación hasta que se gira
-        boolean seguido = (mapa || (!recto && metros >= 0 && metros <= 150)) && ahora - flechaCuando > 1200;
+        // solo en modo mapa se manda seguido (la pantalla de navegación se queda fija)
+        boolean seguido = mapa && ahora - flechaCuando > 1200;
         if (!seguido && (giro.equals(giroAvisado) || ((dir + etapa).equals(flechaAntes) && ahora - flechaCuando < 25000))) return;
         giroAvisado = giro; flechaAntes = dir + etapa; flechaCuando = ahora;
         // la calle: el texto sin la distancia ni los tiempos, corto para que quepa

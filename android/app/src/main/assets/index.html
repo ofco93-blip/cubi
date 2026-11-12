@@ -60,11 +60,9 @@ input[type=text], input[type=password] { width: 100%; background: var(--panel2);
 .paq .eyes { display: flex; gap: 10px; height: 34px; align-items: center; }
 .paq .eyes i { width: 15px; height: 28px; border-radius: 8px; background: var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 50%, transparent); }
 .paq[data-paq="1"] .eyes i { width: 11px; height: 20px; border-radius: 6px; }
-.paq[data-paq="2"] .eyes i { width: 30px; height: 18px; border-radius: 50%; }
-.paq[data-paq="3"] .eyes i { width: 24px; height: 24px; border-radius: 50%; }
-.paq[data-paq="5"] .eyes i { width: 30px; height: 18px; border-radius: 50%; background: repeating-linear-gradient(var(--c) 0 3px, transparent 3px 5px); }
-.paq[data-paq="6"] .eyes i { width: 24px; height: 24px; border-radius: 50%; background: repeating-linear-gradient(var(--c) 0 3px, transparent 3px 4px); }
-.paq[data-paq="7"] .eyes i { width: 7px; height: 20px; border-radius: 4px; }
+.paq[data-paq="8"] .eyes i { width: 20px; height: 20px; border-radius: 10px 10px 5px 5px; }
+.paq[data-paq="9"] .eyes i { width: 11px; height: 20px; border-radius: 6px; background: none; border: 2px solid var(--c); box-sizing: border-box; }
+.paq[data-paq="10"] .eyes i { width: 11px; height: 15px; border-radius: 50%; }
 .paq small { color: var(--muted); font-size: 12px; }
 .paq.sel { outline: 2px solid var(--accent); }
 
@@ -211,7 +209,7 @@ section[hidden] { display: none; }
     <div class="row"><span>Usar el GPS</span><label class="sw"><input type="checkbox" id="gps"><i></i></label></div>
     <p class="note">Cuando paran 3 minutos después de un viaje, Cubi celebra que llegaron (sin Google Maps). En el camino revisa el clima cada 8 km y reacciona si cambia (lluvia, sol, frío, calor). Si le hablas, sabe a qué velocidad van.</p>
     <div class="row"><span>Flechas de Google Maps y Waze</span><label class="sw"><input type="checkbox" id="nav"><i></i></label></div>
-    <p class="note">Con una ruta puesta en el celular, Cubi muestra la flecha del próximo giro y los metros que faltan: una vez cuando falta poco (300 m) y otra cuando ya toca (60 m). Y celebra al llegar.</p>
+    <p class="note">Con una ruta puesta en el celular, Cubi muestra la flecha del próximo giro y los metros que faltan: avisa como la voz de Maps, unos segundos cada vez: con tiempo (800 m), cuando falta poco (300 m) y cuando ya toca (80 m). Entre aviso y aviso sigue cantando y bailando. Y celebra al llegar.</p>
     <p class="note" id="navAhora"></p>
     <div class="row"><span>Modo mapa (pantalla de navegación fija)</span><label class="sw"><input type="checkbox" id="navMapa"><i></i></label></div>
     <p class="note">Para probar cómo sería un segundo Cubi solo de navegación: mientras haya una ruta, Cubi se queda en la pantalla de giro (flecha, metros y calle) en vez de bailar, sin sonar, y la música no lo quita. Con “Usar el GPS” prendido, además sale un mini mapa con las calles de alrededor: para eso el celular le manda tu posición a OpenStreetMap (overpass-api.de) mientras haya una ruta. La línea azul de Maps no se puede sacar; para ver una ruta, escribe el destino aquí abajo.</p>
@@ -228,14 +226,10 @@ section[hidden] { display: none; }
   <h2>Paquete de caras</h2>
   <div class="card">
     <div class="paqs">
-      <button class="paq" data-paq="0"><span class="eyes" style="--c:#3c9bff"><i></i><i></i></span><b>Cubi azul</b><small>Ojos grandes de colores</small></button>
-      <button class="paq" data-paq="1"><span class="eyes" style="--c:#3c9bff"><i></i><i></i></span><b>Robot minimalista</b><small>Ojitos de píldora, colores de Lumi</small></button>
-      <button class="paq" data-paq="2"><span class="eyes" style="--c:#4a9cf0"><i></i><i></i></span><b>Nova sólida</b><small>Óvalos azules lisos</small></button>
-      <button class="paq" data-paq="3"><span class="eyes" style="--c:#f07ad8"><i></i><i></i></span><b>Kira sólida</b><small>Neón rosado liso</small></button>
-      <button class="paq" data-paq="4" style="background:linear-gradient(#ff965a,#d64096);color:#fff"><span class="eyes" style="--c:#fff"><i></i><i></i></span><b>Colores</b><small style="color:#fff">Cubi en blanco sobre un atardecer</small></button>
-      <button class="paq" data-paq="5"><span class="eyes" style="--c:#4a9cf0"><i></i><i></i></span><b>Nova</b><small>Óvalos azules con rayitas de pantalla</small></button>
-      <button class="paq" data-paq="6"><span class="eyes" style="--c:#f07ad8"><i></i><i></i></span><b>Kira</b><small>Neón rosado con rayitas de pantalla</small></button>
-      <button class="paq" data-paq="7"><span class="eyes" style="--c:#3c9bff"><i></i><i></i></span><b>Pixel</b><small>Rayitas que cambian con el ánimo</small></button>
+      <button class="paq" data-paq="1"><span class="eyes" style="--c:#ffffff"><i></i><i></i></span><b>Cubi</b><small>El de siempre: ojitos de píldora</small></button>
+      <button class="paq" data-paq="8"><span class="eyes" style="--c:#fff"><i></i><i></i></span><b>Pancho</b><small>Ojos de pan blancos, guantes y efectos a color</small></button>
+      <button class="paq" data-paq="9"><span class="eyes" style="--c:#fff"><i></i><i></i></span><b>Lino</b><small>Todo en línea blanca; tú le escoges el color</small></button>
+      <button class="paq" data-paq="10"><span class="eyes" style="--c:#fff"><i></i><i></i></span><b>Mochi</b><small>Ojitos alargados blancos; tú le escoges el color</small></button>
     </div>
   </div>
   <h2>Pantalla y sonido</h2>
@@ -246,7 +240,7 @@ section[hidden] { display: none; }
     <label class="sl"><div class="row"><span>Volumen</span><span id="vVol"></span></div><input type="range" id="vol" min="0" max="100"></label>
     <div class="row"><span>Sonidos del robot</span><label class="sw"><input type="checkbox" id="son"><i></i></label></div>
     <div class="row"><span>Color de los ojos</span><input type="color" id="ojos" value="#ffffff"></div>
-    <p class="note">En el robot minimalista lo toma todo: ojos, boca, manitos e instrumentos. Blanco = como siempre.</p>
+    <p class="note">Para Lino y Mochi: lo toma todo, ojos, boca, manitos e instrumentos. Blanco = como siempre.</p>
     <div class="row"><span>Mover la boca con la letra (lip sync)</span><label class="sw"><input type="checkbox" id="lab"><i></i></label></div>
     <p class="note">Apagado: con la música solo baila y toca su instrumento, sin cantar.</p>
     <div class="row"><span>Apagarse cuando se apaga el carro</span><label class="sw"><input type="checkbox" id="carro"><i></i></label></div>
@@ -296,6 +290,9 @@ const CARAS = [  // reacciones de caricatura (las de Isa): [nombre en Cubi, text
   ['guino', 'Guiño', '#7CF7FF'], ['curiosa', 'Curioso', '#9CC9FF'], ['caricia', 'Caricia', '#FFB86B'], ['mareo', 'Mareado', '#C6FF6B'],
   ['frenazo', 'Frenazo', '#FF6A3D'], ['aceleron', 'Acelerón', '#FFD23F'], ['arranque', 'Arranque', '#7CF7FF'], ['bache', 'Hueco', '#C3B5FF'],
   ['izq', 'Curva izq.', '#9CC9FF'], ['der', 'Curva der.', '#9CC9FF'], ['maps_izq', 'Maps izq.', '#6FE3F0'], ['maps_der', 'Maps der.', '#6FE3F0'], ['maps_recto', 'Maps derecho', '#6FE3F0'],
+  ['cinturon', 'Cinturón', '#FFD27A'], ['sonrojo', 'Sonrojado', '#FF9CC0'], ['enojo', 'Enojado', '#FF7A7A'],
+  ['papas', 'Papas', '#FFD27A'], ['bebida', 'Bebida', '#FF9CC0'], ['consola', 'Consola', '#9CC9FF'], ['leemapa', 'Lee el mapa', '#6FE3F0'],
+  ['cono', 'Helado', '#FF9CC0'], ['crispetas', 'Crispetas', '#FFD27A'], ['feliz', 'Feliz', '#FFE66B'], ['triste', 'Triste', '#9CC9FF'], ['sueno', 'Con sueño', '#C6B0FF'],
   ['llegamos', 'Llegamos', '#FFE66B'], ['sol', 'Sol', '#FFD23F'], ['lluvia', 'Lluvia', '#9CC9FF'], ['frio', 'Frío', '#EDEBFF'],
   ['calor', 'Calor', '#FF6A3D'], ['bateria', 'Batería', '#C6FF6B'],
 ];

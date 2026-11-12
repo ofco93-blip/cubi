@@ -8,9 +8,9 @@ using namespace dib;
 const char *NOMBRE_BASE[N_BASE] = {"reposo", "escucha", "habla", "canta", "piensa", "duerme", "telefono"};
 const char *NOMBRE_REAC[N_REAC] = {"", "saludo", "bache", "frenazo", "aceleron", "arranque", "izq", "der", "caricia",
                                    "whatsapp", "llamada", "calor", "risa", "sorpresa", "amor", "mareo", "maps_izq", "maps_der",
-                                   "llegamos", "sol", "lluvia", "frio", "bateria", "guino", "curiosa", "kamehameha", "confeti", "maps_recto"};
-static const float DURA[N_REAC] = {0, 2.6f, 2.4f, 4.0f, 2.8f, 2.8f, 2.4f, 2.4f, 2.6f, 6.0f, 6.0f, 7.5f, 2.0f, 2.0f, 4.0f,
-                                   3.2f, 4.5f, 4.5f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.2f, 2.4f, 5.0f, 20.0f, 4.5f};
+                                   "llegamos", "sol", "lluvia", "frio", "bateria", "guino", "curiosa", "kamehameha", "confeti", "maps_recto", "cinturon", "sonrojo", "enojo", "papas", "bebida", "consola", "leemapa", "cono", "crispetas", "feliz", "triste", "sueno"};
+static const float DURA[N_REAC] = {0, 2.6f, 2.4f, 4.0f, 2.8f, 2.8f, 2.4f, 2.4f, 2.6f, 6.0f, 6.0f, 7.5f, 3.0f, 2.0f, 4.0f,
+                                   3.2f, 4.5f, 4.5f, 4.0f, 7.0f, 7.0f, 5.0f, 4.0f, 1.9f, 2.4f, 5.0f, 20.0f, 4.5f, 5.6f, 4.6f, 4.4f, 5.0f, 5.0f, 5.0f, 4.5f, 5.6f, 5.6f, 3.6f, 5.0f, 5.5f};
 static bool esMaps(Reac r) { return r == MAPS_IZQ || r == MAPS_DER || r == MAPS_RECTO; }   // las indicaciones de Maps / Waze
 float duracion(Reac r) { return DURA[r]; }
 const char *NOMBRE_RITMO[N_RITMO] = {"pop", "urbano", "electro", "tropical", "kpop", "corazon", "groove", "guitarra", "disfruta", "rock",
@@ -20,11 +20,12 @@ const char *NOMBRE_RITMO[N_RITMO] = {"pop", "urbano", "electro", "tropical", "kp
 constexpr float CX = W / 2.f, EY = 166, EX = 88, EW = 104, EH = 164, MY = 296, MIRA = 50;
 
 struct Tono { Col a, b; };
-enum { AZUL, ROJO, ROSA, ORO, NARANJA, MORADO, HIELO, VERDE };
+enum { AZUL, ROJO, ROSA, ORO, NARANJA, MORADO, HIELO, VERDE, T_PANCHO, T_LINO, T_MOCHI };   // los tres últimos: el color propio de cada cara nueva
 static const Tono TONOS[] = {
     {{185, 245, 255}, {40, 125, 255}},  {{255, 190, 140}, {235, 35, 45}},   {{255, 205, 230}, {255, 70, 150}},
     {{255, 245, 170}, {245, 150, 15}},  {{255, 230, 130}, {255, 95, 35}},   {{225, 200, 255}, {130, 70, 255}},
     {{235, 250, 255}, {120, 200, 255}}, {{200, 255, 210}, {40, 200, 120}},
+    {{255, 255, 255}, {226, 232, 248}}, {{255, 255, 255}, {226, 232, 248}}, {{255, 255, 255}, {226, 232, 248}},   // las caras nuevas: ojos blancos
 };
 
 struct Ojo { float x, y, w, h, tapa, incl, feliz, alfa; };
@@ -39,17 +40,23 @@ struct Rostro {
 static_assert(sizeof(Rostro) % sizeof(float) == 0, "Rostro debe ser solo floats");
 
 static Rostro ahora, meta;
-const char *NOMBRE_PAQ[N_PAQ] = {"Cubi azul", "Robot minimalista", "Nova sólida", "Kira sólida", "Colores", "Nova", "Kira", "Pixel"};
+const char *NOMBRE_PAQ[N_PAQ] = {"Cubi azul", "Cubi", "Nova sólida", "Kira sólida", "Colores", "Nova", "Kira", "Pixel", "Pancho", "Lino", "Mochi"};
 static uint8_t elPaquete = CUBI_AZUL;
+static int manoEstilo = 3, tonoBase = AZUL;   // las manos y el color de base de la cara puesta
+// Quedan cuatro caras: la minimalista y las tres nuevas. Las viejas ya no se ofrecen: si quedó guardada una, cae en la minimalista.
+// ponytail: el código de las viejas sigue ahí sin usarse; se puede borrar cuando las cuatro estén asentadas
 void paquete(uint8_t p) {
-  elPaquete = p < N_PAQ ? p : CUBI_AZUL;
-  // "Colores" es el Cubi de siempre en blanco sobre un atardecer
-  if (elPaquete == ATARDECER) dib::ponerFondo({255, 150, 90}, {214, 64, 150});
-  else dib::sinFondo();
+  elPaquete = p >= CARICATURA && p < N_PAQ ? p : MINIMALISTA;
+  manoEstilo = elPaquete == CARICATURA ? 0 : elPaquete == TRAZO ? 1 : elPaquete == BOLITA ? 2 : 3;
+  tonoBase = elPaquete == TRAZO ? T_LINO : elPaquete == BOLITA ? T_MOCHI : T_PANCHO;
+  dib::sinFondo();
 }
-static inline bool soloOjos() { return elPaquete >= OVALO || elPaquete == NOVA_S || elPaquete == KIRA_S; }
+uint8_t paqueteAhora() { return elPaquete; }
+static inline bool soloOjos() { return (elPaquete >= OVALO && elPaquete <= SIMPLE) || elPaquete == NOVA_S || elPaquete == KIRA_S; }
+// las caras nuevas son la minimalista con otro dibujo: heredan sus estados, reacciones, bailes e instrumentos
+static inline bool esMini() { return elPaquete == MINIMALISTA || elPaquete >= CARICATURA; }
 // las de solo ojos bailan y tocan los instrumentos como el minimalista (los del Cubi azul van pegados a la boca)
-static inline bool comoMini() { return elPaquete == MINIMALISTA || soloOjos(); }
+static inline bool comoMini() { return esMini() || soloOjos(); }
 static float elTamano = 1.2f;  // la cara más grande (con el acrílico encima se ve aún más): 1 = como antes
 void tamano(float z) { elTamano = lim(z, 1.f, 1.5f); }
 static Base laBase = REPOSO;
@@ -76,15 +83,30 @@ static inline float suave(float x) { x = lim(x, 0, 1); return x * x * (3 - 2 * x
 static inline float tramo(float u, float a, float b) { return suave((u - a) / (b - a)); }
 static inline float campana(float u, float a, float b) { return (u <= a || u >= b) ? 0 : sinf((u - a) / (b - a) * PI); }
 
+// El cinturón, por tiempos: 0 mira la correa en el hombro · 0,5 sube la mano y la agarra · 1,0 la cruza (con comba) ·
+// 2,2 toma impulso · 2,45 ¡clic! (destello, chispas, la correa se tensa y vibra) · 3,4 suelta, pulgar arriba y guiño.
+// cuánto falta para que un brazo (y lo que carga) termine de subir desde abajo de la pantalla; al final de la reacción vuelve a bajar
+static float subeDe(float u, float dura, float t0 = 0.1f) { return 200 * (1 - tramo(u, t0, t0 + 0.7f)) + 200 * tramo(u, dura - 0.6f, dura); }
+static float cinturonQ(float u) {            // por dónde va la lengüeta: 0 en el hombro, 1 dentro de la hebilla
+  if (u < 1.0f) return 0;
+  if (u < 2.2f) return 0.9f * suave((u - 1.0f) / 1.2f);
+  if (u < 2.33f) return 0.9f - 0.07f * suave((u - 2.2f) / 0.13f);     // se devuelve un poquito: toma impulso
+  if (u < 2.45f) return 0.83f + 0.17f * suave((u - 2.33f) / 0.12f);   // y la mete de un golpe
+  return 1;
+}
 static Rostro neutro(int tono = AZUL) {
   Rostro r;
+  // Pancho: los ojos siempre blancos (el color va en los efectos y las cositas). Lino y Mochi: todo blanco, o del color que se escoja en la app.
+  if (((elPaquete == CARICATURA || elPaquete == MINIMALISTA) && tono != ROJO) || tono == AZUL) tono = tonoBase;
   r.L = {CX - EX, EY, EW, EH, 0, 0, 0, 1};
   r.R = {CX + EX, EY, EW, EH, 0, 0, 0, 1};
   r.a = TONOS[tono].a; r.b = TONOS[tono].b;
   r.boca = 0; r.bx = CX; r.by = MY; r.bAncho = 1; r.mejillas = 0; r.corazon = 0;
-  if (elPaquete == MINIMALISTA) {  // ojitos de píldora parada, más chicos (como el robot del tablero)
+  if (esMini()) {  // ojitos de píldora parada, más chicos (como el robot del tablero)
     r.L.x = CX - EX * 0.8f; r.R.x = CX + EX * 0.8f; r.L.w = r.R.w = EW * 0.6f; r.L.h = r.R.h = EH * 0.72f;
     r.by = MY - 34;
+    if (elPaquete == CARICATURA) { r.L.x = CX - EX * 0.86f; r.R.x = CX + EX * 0.86f; r.L.w = r.R.w = EW * 0.8f; r.L.h = r.R.h = EH * 0.56f; }   // anchos y bajitos
+    if (elPaquete == BOLITA) { r.L.w = r.R.w = EW * 0.5f; r.L.h = r.R.h = EH * 0.46f; }                                                      // chiquitos
   }
   return r;
 }
@@ -198,7 +220,7 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
   if (o.alfa < 0.02f || o.w < 2 || o.h < 2) return;
   float top = fminf(o.tapa, 0.98f);
   if (top >= 0.97f) return;
-  const bool mini = elPaquete == MINIMALISTA;
+  const bool mini = esMini();
   const float x = o.x, y = o.y, hw = o.w / 2, hh = o.h / 2, rad = fminf(o.w, o.h) * 0.46f;
   const float y0 = y - hh + top * o.h, tn = tanf(o.incl) * lado, co = cosf(o.incl);
   const float fz = o.feliz, cy = y + o.h * (0.95f - 0.55f * fz), crx = o.w * 0.78f, cry = o.h * 0.62f;
@@ -213,9 +235,26 @@ static void ojo(const Rostro &r, const Ojo &o, float lado) {
     const float hh2 = fmaxf(hh * (1 - top), 4.f), y2 = y + hh - hh2, cy2 = y2 + 2 * hh2 * (0.95f - 0.55f * fz), cry2 = 2 * hh2 * 0.62f;
     const float yl = y2 - hh2 + fabsf(tn) * hw;
     if (fz > 0.5f) {   // feliz: un arco de trazo grueso, como el robot del tablero (no una píldora recortada)
-      const float R = hw * 1.1f, cyA = y + hh * 0.35f;
-      figura(x - R - 8, cyA - R - 8, x + R + 8, cyA + 8, tonoP(r, cyA - R, cyA, 10, o.alfa),
-             [=](float px, float py) { return dArco(px, py, x, cyA, R, -PI * 0.86f, -PI * 0.14f) - 6.5f; });
+      const float R = hw * 1.1f, cyA = y + hh * 0.35f, gr = elPaquete == TRAZO ? 4.2f : elPaquete == CARICATURA ? 8 : 6.5f;
+      figura(x - R - 9, cyA - R - 9, x + R + 9, cyA + 9, tonoP(r, cyA - R, cyA, 10, o.alfa),
+             [=](float px, float py) { return dArco(px, py, x, cyA, R, -PI * 0.86f, -PI * 0.14f) - gr; });
+      return;
+    }
+    if (elPaquete >= CARICATURA) {   // las caras nuevas: la misma mecánica (se aplasta al cerrar, cejas, media luna) con otra forma
+      const int pq = elPaquete; const float gi = 0.16f * lado;
+      figura(x - hw - 5, y2 - hh2 - 5, x + hw + 5, y2 + hh2 + 5, tonoP(r, y2 - hh2, y2 + hh2, 12, o.alfa), [=](float px, float py) {
+        float d;
+        if (pq == CARICATURA)        // pan de molde: arriba bien redondo, abajo casi cuadrado
+          d = fminf(dCaja(px, py, x, y2 - hh2 * 0.12f, hw, hh2 * 0.88f, fminf(hw, hh2 * 0.88f) * 0.84f), dCaja(px, py, x, y2 + hh2 * 0.3f, hw, hh2 * 0.7f, fminf(hw, hh2 * 0.7f) * 0.36f));
+        else if (pq == BOLITA) {     // huevito inclinado hacia adentro
+          const float c = cosf(gi), s2 = sinf(gi), u2 = (px - x) * c + (py - y2) * s2, v2 = -(px - x) * s2 + (py - y2) * c;
+          d = dElipse(u2, v2, 0, 0, hw, hh2);
+        } else d = dPildora(px, py, x, y2, hw, hh2);
+        if (o.incl != 0) d = smax(d, (yl + tn * (px - x) - py) * co, 10);
+        if (fz > 0.01f) d = smax(d, -dElipse(px, py, x, cy2, crx, cry2), 8);
+        if (pq == TRAZO && hh2 > 8) d = fabsf(d + 3.4f) - 3.4f;   // de línea: solo el contorno (cerrado queda una rayita)
+        return d;
+      });
       return;
     }
     // con los colores de Lumi azul (como Copi), no en blanco
@@ -248,6 +287,15 @@ static void boca(const Rostro &r) {
   float x = r.bx, y = r.by;
   if (op < 0.05f) return;
   float w = (26 + 14 * op) * r.bAncho, h = 16 + 62 * op;
+  if (elPaquete >= CARICATURA) {   // las caras nuevas: sonrisa abierta, óvalo de línea o bolita
+    const int pq = elPaquete;
+    figura(x - w * 0.85f - 3, y - h / 2 - 3, x + w * 0.85f + 3, y + h / 2 + 3, tonoP(r, y - h / 2, y + h / 2, 10), [=](float px, float py) {
+      if (pq == CARICATURA) return smax(dElipse(px, py, x, y - h / 2, w * 0.82f, h), (y - h / 2) - py, 5);   // media luna hacia abajo
+      if (pq == TRAZO) return fabsf(dCaja(px, py, x, y, w / 2, h / 2, fminf(w, h) / 2) + 2.6f) - 2.6f;
+      return dElipse(px, py, x, y, w * 0.46f, h * 0.44f);
+    });
+    return;
+  }
   // minimalista: la misma boca de Lumi azul (como Copi), que se ve mejor que la boquita blanca
   figura(x - w / 2, y - h / 2, x + w / 2, y + h / 2, tonoP(r, y - h / 2, y + h / 2, 12),
          [=](float px, float py) { return dCaja(px, py, x, y, w / 2, h / 2, fminf(w, h) / 2); });
@@ -415,8 +463,8 @@ static void micro(float x, float y, float ang, float e) {
   pieza(m, -14, -38, 0, -24, solido(BLANCO, 0.9f), [](float a, float b) { return dElipse(a, b, -7, -31, 5, 4); });
 }
 // gorra roja de lado (urbano)
-static void gorra(float x, float y, float ang) {
-  Marco m = marco(x, y, ang);
+static void gorra(float x, float y, float ang, float e = 1) {
+  Marco m = marco(x, y, ang, e);
   Col roja{230, 60, 70}, osc{160, 30, 40};
   pieza(m, 0, -16, 190, 10, plana(osc, y - 16, y + 10), [](float a, float b) { return dCaja(a, b, 120, -3, 72, 10, 10); });
   pieza(m, -158, -112, 158, 6, plana(roja, y - 112, y + 6, 0.82f), [](float a, float b) { return fmaxf(dElipse(a, b, 0, 0, 156, 108), b - 2); });
@@ -878,14 +926,13 @@ static void bailaMini(Rostro &r, const Entradas &e, float g, float vaiven, float
     const float G = golpeAhora;
     r.L.incl = r.R.incl = fmaxf(r.L.incl, 0.2f * G); escalar(r, 1, 1 - 0.14f * G * g); mover(r, 0, 12 * G * g);
   }   // en el pase sigue el micrófono con los ojos
-  if (ofreceAhora > 0.01f) {                          // "¡canta tú!": ojos grandes y abiertos mirándote, cejas arriba, anima con el golpe
-    const float O = ofreceAhora;
+  if (ofreceAhora > 0.01f) {                          // "¡canta tú!": se calla, pone el oído y ladea la cabeza hacia la mano que escucha
+    const float O = ofreceAhora, sg = ladoMic >= 0 ? 1 : -1;
     r.L.feliz *= 1 - O; r.R.feliz *= 1 - O; r.corazon *= 1 - O;
     r.L.tapa *= 1 - O; r.R.tapa *= 1 - O;
-    mirar(r, 0, 0.15f * O);
-    escalar(r, 1 + 0.1f * O, 1 + 0.1f * O);
-    mover(r, 0, -8 * O + 9 * O * g);
-    r.L.incl = r.R.incl = r.L.incl * (1 - O) + 0.1f * O * vaiven;
+    mirar(r, -0.28f * sg * O, 0.05f * O);             // mira de reojo hacia el lado del oído
+    mover(r, 8 * sg * O, -6 * O + 5 * O * g);         // le hace campo a la mano del oído y asiente con el golpe
+    r.L.incl = r.R.incl = r.L.incl * (1 - O) - 0.13f * sg * O;
   }
   if (tAhora < guinoHasta) {                          // guiña el ojo del lado donde quedó el micrófono, el otro bien abierto
     Ojo &o = ladoMic > 0 ? r.R : r.L, &q = ladoMic > 0 ? r.L : r.R;
@@ -923,65 +970,108 @@ static void arcoTrazo(float x, float y, float R, float a0, float a1, float g, fl
   figura(x - R - g, y - R - g, x + R + g, y + R + g, solido(BL, alfa), [=](float px, float py) { return dArco(px, py, x, y, R, a0, a1) - g; });
 }
 // manito: palma con pulgar; "apunta" saca el índice, si no es un puño que agarra. ang = hacia dónde van los dedos
+// manitos: cada cara tiene la suya. 0 guante gordito de tres dedos (Caricatura), 1 de pura línea (Trazo), 2 manopla lisa (Bolita),
+// 3 la de siempre (minimalista)
+void estiloManos(int e) { manoEstilo = e; }
 static void manoBlanca(float x, float y, float ang, float e, bool apunta, float alfa = 1) {
   Marco m = marco(x, y, ang, e);
+  const int est = manoEstilo;
   auto d = [=](float a, float b) {
-    float p = dElipse(a, b, 0, 0, 19, 15);
-    p = smin(p, apunta ? dSegmento(a, b, 8, -5, 34, -5, 6.5f) : dSegmento(a, b, 6, -3, 16, -3, 11), 5);
-    return smin(p, dSegmento(a, b, 2, 9, 14, 13, 5.5f), 4);
+    if (est == 3) {                                                                        // la de siempre
+      float p = dElipse(a, b, 0, 0, 19, 15);
+      p = smin(p, apunta ? dSegmento(a, b, 8, -5, 34, -5, 6.5f) : dSegmento(a, b, 6, -3, 16, -3, 11), 5);
+      return smin(p, dSegmento(a, b, 2, 9, 14, 13, 5.5f), 4);
+    }
+    // puño de caricatura: palma cuadradita y redonda, los dedos doblados asoman al frente como tres lomitos y el pulgar
+    // abraza por un lado. Si apunta, el índice sale derecho. En Mochi (2) todo se funde en una manopla lisa.
+    const float k = est == 2 ? 6 : est == 1 ? 3.5f : 1.6f;
+    float p, dedos, pulgar;
+    if (apunta) {
+      p = dCaja(a, b, 0, 1, 13, 12, 10);
+      dedos = fminf(dSegmento(a, b, 6, -8, 35, -8, 5.6f), fminf(dCirculo(a, b, 14, 0.5f, 5.6f), dCirculo(a, b, 12.5f, 8, 5.2f)));
+      pulgar = dSegmento(a, b, -7, 10, 4, 16, 4.8f);
+    } else {
+      p = dCaja(a, b, 2, -1, 15, 12.5f, 10.5f);
+      dedos = fminf(dCirculo(a, b, 15.5f, -8.6f, 5.6f), fminf(dCirculo(a, b, 17.8f, -1, 6), dCirculo(a, b, 15.5f, 6.6f, 5.6f)));
+      pulgar = dSegmento(a, b, -6, 9.5f, 6, 15.5f, 5);
+    }
+    return smin(smin(p, dedos, k), pulgar, est == 2 ? 3 : 2);
   };
-  pieza(m, -27, -25, 45, 25, solido(NEG, alfa), [=](float a, float b) { return d(a, b) - 4; });   // borde negro: la separa de lo que toca
-  pieza(m, -22, -20, 40, 20, solido(BL, alfa), d);
+  auto rayas = [=](float a, float b) {                                                     // dos rayitas cortas entre los dedos
+    if (apunta) return fminf(dSegmento(a, b, 12, -3.3f, 19, -3.3f, 1.2f), dSegmento(a, b, 11, 4.6f, 17.5f, 4.6f, 1.2f));
+    return fminf(dSegmento(a, b, 14, -4.9f, 20.5f, -4.9f, 1.2f), dSegmento(a, b, 14, 2.9f, 20.5f, 2.9f, 1.2f));
+  };
+  pieza(m, -27, -25, 45, 27, solido(NEG, alfa), [=](float a, float b) { return d(a, b) - 4; });   // borde negro: la separa de lo que toca
+  if (est == 1) {                                                                          // Lino: solo el contorno y las rayitas, como los instrumentos
+    pieza(m, -24, -22, 42, 25, solido(NEG, alfa), d);
+    pieza(m, -24, -22, 42, 25, solido(BL, alfa), [=](float a, float b) { return fabsf(d(a, b)) - 1.8f; });   // el trazo va sobre el borde; sin rayitas, que en línea se veían como huellas
+    return;
+  }
+  pieza(m, -24, -22, 42, 25, solido(BL, alfa), d);
+  if (est == 0) pieza(m, 8, -8, 24, 8, solido(NEG, 0.9f * alfa), rayas);
 }
 // disco de vinilo de línea: borde, surcos que giran y el centro
 static void disco(float x, float y, float R, float giro, float alfa) {
-  anillo(x, y, R, 2.6f, alfa);
-  for (int k = 0; k < 2; k++) {
+  circulo(x, y, R, Col{40, 40, 50}, alfa);                                      // el vinilo, oscuro
+  anillo(x, y, R, 1.6f, alfa);
+  for (int k = 0; k < 2; k++) {                                                 // los brillos que giran
     float a0 = giro + k * PI;
-    arcoTrazo(x, y, R * 0.7f, a0, a0 + 1.3f, 2.1f, alfa);
-    arcoTrazo(x, y, R * 0.47f, a0 + 0.8f, a0 + 1.9f, 2.1f, alfa);
+    arcoTrazo(x, y, R * 0.74f, a0, a0 + 1.3f, 1.8f, 0.7f * alfa);
+    arcoTrazo(x, y, R * 0.56f, a0 + 0.8f, a0 + 1.9f, 1.8f, 0.7f * alfa);
   }
-  anillo(x, y, R * 0.17f, 2, alfa);
+  circulo(x, y, R * 0.36f, Col{255, 110, 150}, alfa);                           // la etiqueta
+  linea(x, y, x + cosf(giro) * R * 0.3f, y + sinf(giro) * R * 0.3f, 1.6f, Col{255, 220, 230}, alfa);
+  circulo(x, y, R * 0.07f, Col{20, 20, 26}, alfa);
 }
-// guitarra de línea, acostada sobre el eje del marco (cuerpo en 0, mástil hacia +a). vibra = cuánto vibran las cuerdas
+// guitarra rellena y de color, acostada sobre el eje del marco (cuerpo en 0, mástil hacia +a). vibra = cuánto vibran las cuerdas
 static void guitarraLinea(float x, float y, float ang, float e, bool electrica, float vibra, float alfa) {
   Marco m = marco(x, y, ang, e);
-  const float t = 2.6f, n0 = electrica ? 32 : 60;
+  const float n0 = electrica ? 32 : 60;
+  const Col cu = electrica ? Col{228, 54, 66} : Col{226, 152, 78}, bo = electrica ? Col{150, 22, 36} : Col{152, 92, 42}, mad{124, 84, 56};
   auto cuerpo = [=](float a, float b) {
     if (!electrica) return smin(dCirculo(a, b, 0, 0, 34), dCirculo(a, b, 40, 0, 25), 12);   // acústica: dos curvas y la cintura
     float d = smin(dElipse(a, b, 0, 0, 36, 26), dSegmento(a, b, 8, -12, 34, -30, 9), 8);    // eléctrica: dos cuernos
     return smin(d, dSegmento(a, b, 8, 12, 28, 26, 8), 8);
   };
-  pieza(m, -42, -46, 72, 42, solido(BL, alfa), [=](float a, float b) { return fabsf(cuerpo(a, b)) - t; });
-  pieza(m, n0 - 4, -9, 134, 9, solido(BL, alfa), [=](float a, float b) { return fabsf(dCaja(a, b, (n0 + 130) / 2, 0, (130 - n0) / 2, 5.5f, 3)) - t * 0.8f; });
-  pieza(m, 126, -14, 162, 14, solido(BL, alfa), [=](float a, float b) { return fabsf(dCaja(a, b, 144, electrica ? -3 : 0, 12, 8, 4)) - t * 0.8f; });
+  pieza(m, n0 - 4, -9, 134, 9, solido(mad, alfa), [=](float a, float b) { return dCaja(a, b, (n0 + 130) / 2, 0, (130 - n0) / 2, 6.5f, 3); });   // el mástil
+  for (int i = 0; i < 5; i++) { const float fa = n0 + 12 + i * 13; pieza(m, fa - 2, -7, fa + 2, 7, solido(Col{214, 196, 160}, 0.8f * alfa), [=](float a, float b) { return dCaja(a, b, fa, 0, 0.7f, 5.5f, 0.5f); }); }   // trastes
+  pieza(m, 126, -14, 162, 14, solido(electrica ? cu : mad, alfa), [=](float a, float b) { return dCaja(a, b, 144, electrica ? -3 : 0, 13, 9, 4); });   // la cabeza
+  pieza(m, -42, -46, 72, 42, solido(cu, alfa), cuerpo);
+  pieza(m, -42, -46, 72, 42, solido(bo, alfa), [=](float a, float b) { return fabsf(cuerpo(a, b) + 1.8f) - 1.8f; });                         // el borde del cuerpo
   if (electrica) for (int i = 0; i < 2; i++) {                       // pastillas
     float pa = -12 + i * 14;
-    pieza(m, pa - 6, -15, pa + 6, 15, solido(BL, alfa), [=](float a, float b) { return fabsf(dCaja(a, b, pa, 0, 3, 11, 2)) - 1.8f; });
-  } else pieza(m, 8, -14, 36, 14, solido(BL, alfa), [=](float a, float b) { return fabsf(dCirculo(a, b, 22, 0, 10)) - 2.2f; });   // boca
+    pieza(m, pa - 6, -15, pa + 6, 15, solido(Col{232, 232, 240}, alfa), [=](float a, float b) { return dCaja(a, b, pa, 0, 3.4f, 11, 2); });
+  } else {
+    pieza(m, 8, -14, 36, 14, solido(Col{54, 32, 20}, alfa), [=](float a, float b) { return dCirculo(a, b, 22, 0, 10); });                    // la boca
+    pieza(m, 8, -14, 36, 14, solido(bo, alfa), [=](float a, float b) { return fabsf(dCirculo(a, b, 22, 0, 11.5f)) - 1.2f; });
+  }
   pieza(m, -20, -9, -12, 9, solido(BL, alfa), [=](float a, float b) { return dSegmento(a, b, -16, -7, -16, 7, 2.2f); });               // puente
   for (int i = -1; i <= 1; i += 2) {                                  // cuerdas
     float yy = i * 2.4f;
-    pieza(m, -18, -12, 134, 12, solido(BL, 0.75f * alfa), [=](float a, float b) {
+    pieza(m, -18, -12, 134, 12, solido(BL, 0.8f * alfa), [=](float a, float b) {
       float v = vibra * sinf(a * 0.35f + tAhora * 70) * fmaxf(0.f, 1 - fabsf(a - 30) / 90);
       return fmaxf(fabsf(b - yy - v) - 0.9f, fabsf(a - 58) - 74);
     });
   }
 }
-// saxofón de línea, de pie: boquilla arriba, campana abajo que sube a la derecha
+// saxofón dorado, de pie: boquilla arriba, campana abajo que sube a la derecha
 static void saxoLinea(float x, float y, float ang, float e, float alfa) {
   Marco m = marco(x, y, ang, e);
   auto tubo = [=](float a, float b) { return smin(dCapsula2(a, b, -6, -70, 5, 0, 22, 13), dCapsula2(a, b, 6, 36, 13, 34, 4, 19), 10); };
-  pieza(m, -24, -80, 58, 54, solido(BL, alfa), [=](float a, float b) { return fabsf(tubo(a, b)) - 2.6f; });
-  pieza(m, -24, -92, -2, -64, solido(BL, alfa), [=](float a, float b) { return dSegmento(a, b, -6, -70, -18, -86, 3); });    // boquilla
-  for (int i = 0; i < 3; i++) { float kx, ky; aPantalla(m, -3 + i * 1.5f, -40 + i * 18, kx, ky); circulo(kx, ky, 3.5f * e, BL, alfa); }   // llaves
+  pieza(m, -24, -80, 58, 54, solido(Col{246, 196, 74}, alfa), tubo);
+  pieza(m, -24, -80, 58, 54, solido(Col{182, 124, 34}, alfa), [=](float a, float b) { return fabsf(tubo(a, b) + 1.6f) - 1.6f; });
+  pieza(m, -24, -92, -2, -64, solido(Col{214, 214, 224}, alfa), [=](float a, float b) { return dSegmento(a, b, -6, -70, -18, -86, 3); });    // boquilla
+  for (int i = 0; i < 3; i++) { float kx, ky; aPantalla(m, -3 + i * 1.5f, -40 + i * 18, kx, ky); circulo(kx, ky, 3.5f * e, Col{255, 244, 200}, alfa); }   // llaves
 }
-// micrófono de línea: cabeza en (x, y) y el mango hacia ang
-static void microLinea(float x, float y, float ang, float e, float alfa) {
+// micrófono de mano relleno: cabeza gris con rejilla en (x, y) y el mango hacia ang
+static void microLinea(float x, float y, float ang, float e, float alfa, float largo = 1) {   // largo < 1: mango corto, apunta a quien mira
   Marco m = marco(x, y, ang, e);
-  pieza(m, -20, -20, 20, 20, solido(BL, alfa), [=](float a, float b) { return fabsf(dCirculo(a, b, 0, 0, 15)) - 2.6f; });
-  pieza(m, -14, -14, 14, 14, solido(BL, 0.7f * alfa), [=](float a, float b) { return fmaxf(fminf(fabsf(a) - 1.2f, fabsf(b) - 1.2f), dCirculo(a, b, 0, 0, 13)); });
-  pieza(m, 12, -10, 66, 10, solido(BL, alfa), [=](float a, float b) { return fabsf(dCapsula2(a, b, 17, 0, 7, 60, 0, 4.5f)) - 2.4f; });
+  const Col gris{184, 186, 196}, osc{104, 106, 120}, mango{138, 140, 154};
+  pieza(m, 12, -10, 66, 10, solido(mango, alfa), [=](float a, float b) { return dCapsula2(a, b, 17, 0, 8, 17 + 43 * largo, 0, 5.5f + 2.5f * (1 - largo)); });
+  pieza(m, -20, -20, 20, 20, solido(gris, alfa), [=](float a, float b) { return dCirculo(a, b, 0, 0, 16.5f); });
+  pieza(m, -16, -16, 16, 16, solido(osc, 0.85f * alfa), [=](float a, float b) {                                     // la rejilla
+    return fmaxf(dCirculo(a, b, 0, 0, 14.5f), fminf(fabsf(fmodf(a + b + 70, 7.f) - 3.5f), fabsf(fmodf(a - b + 70, 7.f) - 3.5f)) - 0.7f); });
+  pieza(m, 12, -10, 20, 10, solido(osc, alfa), [=](float a, float b) { return dCaja(a, b, 16, 0, 2.4f, 8.5f, 1.5f); });   // el aro
 }
 // teléfono: ícono verde redondo con el auricular blanco; tiembla mientras timbra y suelta ondas a los lados
 static void telefonoIcono(float x, float y, float R, float u, float alfa) {
@@ -1026,6 +1116,9 @@ static void manoLibre(const Entradas &e, int n, float g, int paso, float a, int 
 
 // Los instrumentos van abajo: crecen con la cara pero un poco menos y anclados al borde de abajo, para no salirse de la
 // pantalla. El micrófono y la mano libre siguen pegados a la cara (con su mismo tamaño).
+// cuándo cambió de ritmo (o empezó a cantar): el instrumento y el fondo entran de nuevo con su transición
+static uint8_t ritmoAntes = 255; static float cambioEn = -10;
+static void cambioRitmo(const Entradas &e, float u) { if (e.ritmo != ritmoAntes || u < 0.05f) { ritmoAntes = e.ritmo; cambioEn = tAhora; } }
 struct ZoomInstrumento {
   float z, x, y; bool activo;
   explicit ZoomInstrumento(bool a) : z(dib::zoom), x(dib::zx), y(dib::zy), activo(a) {
@@ -1037,6 +1130,9 @@ struct ZoomInstrumento {
 
 static void extrasMini(float u, const Entradas &e) {
   ZoomInstrumento zi(e.ritmo != R_KPOP);
+  // el instrumento y las manos entran subiendo desde abajo: al empezar a cantar y cada vez que cambia de instrumento
+  cambioRitmo(e, u);
+  struct Sube { ~Sube() { dib::sube = 0; } } sb; dib::sube = 230 * (1 - tramo(tAhora - cambioEn, 0, 0.55f));
   int n = (int)pulsosVistos;
   float g = expf(-e.pulso * 6), f = n + e.pulso, vaiven = sinf(f * PI);
   // velocidad por niveles según qué tan fuerte suena: suave 1 toque por golpe, normal 2, fuerte 4 (con un margen para
@@ -1075,7 +1171,8 @@ static void extrasMini(float u, const Entradas &e) {
         const float x = CX + s2 * (132 - 16 * sh), y = EY + 104 - 58 * sh;
         const float ang = s2 * (0.3f + 0.55f * sh) + 0.4f * sh * sinf(u * 45), hx = x + sinf(ang) * 46, hy = y - cosf(ang) * 46;
         linea(x, y, hx, hy, 4.5f, BL, 1);
-        volumen(hx - 22, hy - 22, hx + 22, hy + 22, 1, [=](float px, float py) { return dElipse(px, py, hx, hy, 17, 21); });
+        figura(hx - 22, hy - 22, hx + 22, hy + 22, solido(s2 < 0 ? Col{240, 84, 96} : Col{255, 190, 64}, 1), [=](float px, float py) { return dElipse(px, py, hx, hy, 17, 21); });
+        figura(hx - 22, hy - 6, hx + 22, hy + 6, solido(BL, 0.9f), [=](float px, float py) { return fmaxf(dElipse(px, py, hx, hy, 17, 21), fabsf(py - hy) - 2.2f); });   // la franja
         manoBlanca(x, y + 4, -PI / 2, 0.75f, false);
         const float af = s2 > 0 ? -0.5f : PI - 0.5f;                                   // rayitas hacia afuera
         for (int i = 0; i < 2; i++) arcoTrazo(hx, hy, 32 + 11 * i, af - 0.45f, af + 0.45f, 2, sh * (1 - 0.4f * i));
@@ -1140,21 +1237,26 @@ static void extrasMini(float u, const Entradas &e) {
       float mx = ahora.bx + lado * (56 + 46 * gritoAhora), my = ahora.by + 4 + (lanzaMic ? -135 * vuelo : 36 * suave(pase)), esc = 1.3f, hx, hy;
       my -= (3 + 14 * Em) * g * (1 - vuelo); mx += lado * 9 * Em * vaiven * (1 - vuelo);   // marca el golpe: poquito en baladas, mucho en lo movido
       mx += (ahora.bx - mx) * D; my += (ahora.by + 62 - my) * D; ang += (PI / 2 - ang) * D;   // dos manos: al centro, de pie
-      // "¡canta tú!": el micrófono viene al centro y crece hacia la pantalla, de frente, latiendo con el golpe
-      mx += (ahora.bx - mx) * O; my += (ahora.by + 44 - my) * O; ang += (PI / 2 - ang) * O;
-      esc *= 1 + O * (0.85f + 0.07f * g);
-      microLinea(mx, my, ang, esc, 1);
+      // "¡canta tú!": el micrófono se queda en su mano, con la cabeza hacia afuera, y lo empuja hacia el público con cada
+      // golpe (crece = va hacia adelante)
+      mx += (ahora.bx + sg * 80 - mx) * O; my += (ahora.by + 14 - 10 * g - my) * O; ang += (PI / 2 + sg * 0.18f - ang) * O;
+      esc *= 1 + O * (0.08f + 0.2f * g);                 // apenas crece: lo que cambia es que se voltea hacia quien mira
+      const float largo = 1 - 0.62f * O;                 // de frente el mango casi no se ve
+      microLinea(mx, my, ang, esc, 1, largo);
       if (enVuelo) {                                    // va por el aire: las dos manos abajo, esperándolo
         for (int s2 = -1; s2 <= 1; s2 += 2) manoBlanca(ahora.bx + s2 * 88, ahora.by + 49 - 18 * vuelo, -PI / 2 - s2 * 0.3f, 0.85f, false);
         break;
       }
-      aPantalla(marco(mx, my, ang, esc), 42 - 16 * D, 0, hx, hy);   // a dos manos agarra mas arriba: que quepan en la pantalla
+      aPantalla(marco(mx, my, ang, esc), (42 - 16 * D) * (1 - O) + 36 * O, 0, hx, hy);   // a dos manos agarra mas arriba: que quepan en la pantalla
       manoBlanca(hx, hy, ang - sg * PI / 2, 0.85f, false);
       const float dosM = fmaxf(D, O < 0.05f ? lim(emoAhora * 2 - 0.6f, 0, 1) : 0);
       if (dosM > 0.05f) {                               // con sentimiento o nota larga: el micrófono con las dos manos
         aPantalla(marco(mx, my, ang, esc), 64 - 20 * D, 0, hx, hy);
         manoBlanca(hx, hy, D > 0.5f ? ang + sg * PI / 2 : ang - sg * (PI / 2 + 0.25f), 0.85f, false, dosM);
-      } else if (O > 0.3f) manoLibre(e, n, gv, 1, O, -sg);   // la otra mano te anima: "¡dale!"
+      } else if (O > 0.3f) {                            // la otra mano, al oído: "¡no los oigo!"
+        const Ojo &o = sg > 0 ? ahora.L : ahora.R;
+        manoBlanca(o.x - sg * (o.w / 2 + 16), o.y - 2 + 5 * g, -PI / 2 - sg * 0.4f, 1.2f, false, O);
+      }
       else if (pase < 0.2f && (e.canta || bailaAhora > 0.05f)) manoLibre(e, n, gv, golpeAhora > 0.3f ? 3 : manoPaso, fmaxf(bailaAhora, 0.6f), -sg);   // la otra mano baila
       break;
     }
@@ -1194,11 +1296,28 @@ static void extrasMini(float u, const Entradas &e) {
       for (int i = 0; i < 3; i++) circulo(CX + ap + 16, ay - 18 + i * 18, 3, BL, (nv + i) % 3 == 0 ? 1 : 0.5f);   // botones
       break;
     }
+    case R_URBANO: {                                    // el raperito
+      zi.soltar();                                      // todo va pegado a la cara
+      const Ojo &oL = ahora.L, &oR = ahora.R;
+      const float bx = ahora.bx, by = ahora.by, top = fminf(oL.y - oL.h / 2 + oL.h * oL.tapa, oR.y - oR.h / 2 + oR.h * oR.tapa);
+      gorra((oL.x + oR.x) / 2 - 10, top - 14, -0.1f - 0.03f * gv, 0.72f);                   // la gorra, ladeada y calada hasta los ojos
+      {                                                                                    // la cadena de oro con su medalla, que salta con el golpe
+        const float cy = by + 2, R = 50, my = cy + R + 5 * gv, mxx = bx + 6 * vaiven;
+        figura(bx - R - 4, cy, bx + R + 4, cy + R + 6, solido(Col{250, 200, 70}), [=](float px, float py) { return dArco(px, py, bx, cy, R, 0.22f * PI, 0.78f * PI) - 2.4f; });
+        circulo(mxx, my, 11, Col{250, 200, 70}, 1); circulo(mxx, my, 7, Col{190, 130, 30}, 1); chispa(mxx + 6, my - 7, 5 + 4 * gv, 0.9f);
+      }
+      const float mx = bx + 46 + 5 * vaiven, my2 = by + 6 - 5 * gv;                        // el micrófono pegado a la boca
+      microLinea(mx, my2, 0.95f, 1.05f, 1);
+      manoBlanca(mx + 26, my2 + 36, PI + 0.95f, 1.05f, false);
+      // la otra mano marca las barras: apunta y baja con cada golpe, cambiando de altura
+      manoBlanca(oL.x - oL.w / 2 - 44 + 12 * gv, oL.y + 46 + 26 * (nv % 2) - 22 * gv, -0.35f + 0.5f * gv, 1.15f, true);
+      break;
+    }
     default:                                            // ecualizador: barritas blancas que saltan con la música
       for (int i = 0; i < 9; i++) {
         const float x = CX + (i - 4) * 36, a = 0.45f + 0.55f * fabsf(sinf(u * (2.6f + 0.37f * i) + i * 1.7f));
         const float h = 14 + 70 * lim(e.nivel * 1.4f, 0.15f, 1) * a * (0.65f + 0.35f * gv);
-        figura(x - 12, H - 14 - h, x + 12, H - 10, solido(BL, 0.95f), [=](float px, float py) { return dCaja(px, py, x, H - 12 - h / 2, 10, h / 2, 10); });
+        figura(x - 12, H - 14 - h, x + 12, H - 10, solido(COLORES[i % 5], 0.95f), [=](float px, float py) { return dCaja(px, py, x, H - 12 - h / 2, 10, h / 2, 10); });
       }
       break;
   }
@@ -1217,7 +1336,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       {
         // cada 7 s, a veces, un gesto suelto y distinto (curiosea, bosteza, se alegra, piensa, sospecha, se sacude):
         // que se vea vivo aunque no pase nada
-        float tapa = (elPaquete == MINIMALISTA ? 0.4f : 0.58f) + 0.06f * sinf(t * 0.8f);
+        float tapa = (esMini() ? 0.4f : 0.58f) + 0.06f * sinf(t * 0.8f);
         const int gi = (int)(t / 7);
         const float gu = t - gi * 7, k = tramo(gu, 0.3f, 0.7f) * (1 - tramo(gu, 2.1f, 2.6f));
         const float d = hash(gi, 6) < 0.5f ? -1.f : 1.f;
@@ -1241,6 +1360,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       break;
     case ESCUCHA:
       escalar(r, 1.08f, 1.08f); r.L.y -= 6; r.R.y += 6; mirar(r, 0.25f, -0.1f); tapas(r, bl * 0.9f);
+      if (esMini()) mover(r, -40, 0);   // deja campo para la mano en el oído
       break;
     case HABLA:
       r.boca = e.boca; r.bAncho = 0.75f + 0.6f * e.ancho; mover(r, 0, -5 * e.boca); tapas(r, bl);
@@ -1255,6 +1375,9 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       float vaiven = sinf((n + e.pulso) * PI);               // un golpe hacia cada lado
       float abre = 1;   // cuánto abre la boca este baile cuando hay voz (0 = no canta)
       if (comoMini()) bailaMini(r, e, g, vaiven, bl);
+      if (esMini() && e.ritmo == R_URBANO) {              // el raperito: mirada tranquila debajo de la gorra, cabecea con el golpe
+        escalar(r, 0.92f, 0.8f); mover(r, 0, 30 + 9 * g); r.L.feliz = r.R.feliz = 0; r.L.tapa = r.R.tapa = 0.36f; r.L.incl = r.R.incl = 0.06f;
+      }
       else switch (e.ritmo) {
         case R_URBANO:                                        // gorra, mirada tranquila, cabecea fuerte y rapea
           escalar(r, 0.92f, 0.86f - 0.06f * g); mover(r, 0, 26 + 12 * g); tapas(r, 0.38f);
@@ -1329,7 +1452,7 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
       // minimalista: la boca sigue la voz completa, como en la app (sin achicarla por baile)
       // bailando o cantando nunca con cara de preocupado: la inclinación negativa son cejas tristes
       r.L.incl = fmaxf(r.L.incl, 0); r.R.incl = fmaxf(r.R.incl, 0);
-      r.boca = e.canta && abre > 0 ? fmaxf(e.boca * (elPaquete == MINIMALISTA ? 1 : abre), 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;
+      r.boca = e.canta && abre > 0 ? fmaxf(e.boca * (esMini() ? 1 : abre), 0.07f) : 0; r.bAncho = 0.75f + 0.6f * e.ancho;
       if (comoMini() && ofreceAhora > 0.3f) r.boca = 0;       // le pasó el micrófono a quien mira: se calla y escucha
       {   // nota sostenida (un "aaah" con la misma vocal): emocion crece con lo que dura, y entre más dura más drama
         static float tE = 0; const float dE = lim(t - tE, 0, 0.1f); tE = t;
@@ -1361,6 +1484,20 @@ static Rostro deBase(float t, const Entradas &e, float &vel) {
   return r;
 }
 
+// La pantalla se ilumina por el borde según la emoción, muy difuminado: MARCO = todo el contorno, ABAJO = sube desde abajo,
+// ARRIBA = baja desde arriba. Va por detrás de la cara y pegada al borde (sin zoom). Siempre de color, en todas las caras.
+enum { MARCO, ABAJO, ARRIBA, OVALO_LUZ };   // OVALO_LUZ: viñeta ovalada, la más suave (no se le ve la forma de la pantalla)
+static void luzBorde(int donde, const Col &c, float alfa, float ancho, float radio = 44) {
+  if (alfa < 0.03f) return;
+  ConColor cc; dib::SinZoom sz;
+  if (donde == MARCO) resplandor(0, 0, W, H, c, alfa, ancho, [=](float px, float py) { return fabsf(dCaja(px, py, W / 2.f, H / 2.f, W / 2.f - 5, H / 2.f - 5, radio)); });   // un contorno redondeado que brilla hacia adentro y hacia afuera
+  else if (donde == OVALO_LUZ) resplandor(0, 0, W, H, c, alfa, ancho, [](float px, float py) {
+    const float ax = (px - W / 2.f) / (W * 0.6f), ay = (py - H / 2.f) / (H * 0.6f);
+    return fmaxf(0, (1 - sqrtf(ax * ax + ay * ay)) * H * 0.6f); });
+  else if (donde == ABAJO) resplandor(0, H, W, H, c, alfa, ancho, [=](float, float py) { return ancho * (1 - sqrtf(fmaxf(0, 1 - (H - py) / ancho))); });
+  else resplandor(0, 0, W, 0, c, alfa, ancho, [=](float, float py) { return ancho * (1 - sqrtf(fmaxf(0, 1 - py / ancho))); });
+}
+
 static void haloEscucha(float u, const Entradas &e) {
   ConColor cc;
   static const Col TONOS_HALO[3] = {{60, 220, 255}, {170, 110, 255}, {255, 100, 200}};   // turquesa, violeta, rosado
@@ -1376,18 +1513,92 @@ static void haloEscucha(float u, const Entradas &e) {
     figura(o.x - hw - 30, o.y - hh - 30, o.x + hw + 30, o.y + hh + 30, solido(c, entra * fminf(late, 1.f), 26),
            [=](float px, float py) { return fabsf(dPildora(px, py, o.x, o.y, hw, hh)) - 3; });
   }
-  for (int j = 0; j < 2; j++) {                         // ondas que salen de la cara, como si oyera
-    const float p = fmodf(u * 0.6f + j * 0.5f, 1.f), Rx = 150 + 120 * p, Ry = 95 + 80 * p, cy = (ahora.L.y + ahora.R.y) / 2;
-    figura(CX - Rx - 8, cy - Ry - 8, CX + Rx + 8, cy + Ry + 8, solido(c, entra * 0.5f * campana(p, 0, 1), 10),
-           [=](float px, float py) { return fabsf(dElipse(px, py, CX, cy, Rx, Ry)) - 2.5f; });
+  {                                                     // la mano de bocina en el oído y las ondas que le van llegando
+    const Ojo &o = ahora.R;
+    const float ox = o.x + o.w / 2 + 46, oy = o.y + 2;
+    for (int j = 0; j < 3; j++) {
+      const float p = fmodf(u * 0.9f + j / 3.f, 1.f), R = 22 + 44 * (1 - p);
+      figura(ox, oy - R - 6, ox + R + 6, oy + R + 6, solido(c, entra * 0.85f * campana(p, 0, 1), 8),
+             [=](float px, float py) { return dArco(px, py, ox, oy, R, -0.62f, 0.62f) - 2.4f - 1.2f * e.nivel; });
+    }
+    manoBlanca(o.x + o.w / 2 + 34, o.y + 6 - 3 * e.nivel + 200 * (1 - tramo(u, 0, 0.6f)), -PI / 2 + 0.4f, 1.1f, false, 1);
+  }
+}
+
+// El ambiente de cuando canta: discreto y siempre cambiando. Un par de luces chicas que se pasean por el borde y van pasando
+// de un color a otro (cada ritmo con su paleta y su manera), y una notita de vez en cuando. Lo oscuro va opaco sobre el negro: barato.
+static void ambienteCanta(float u, const Entradas &e) {
+  cambioRitmo(e, u);
+  if (e.ritmo == R_VELA) return;                       // a oscuras: la luz es la vela
+  ConColor cc; dib::SinZoom sz;
+  const float entra = tramo(tAhora - cambioEn, 0, 0.9f), g = expf(-e.pulso * 6);
+  // la paleta del ritmo: los colores se van turnando, fundiéndose de uno al siguiente
+  static const Col PAL[][3] = {
+      {{255, 110, 150}, {110, 190, 255}, {190, 140, 255}},   // 0 pop: rosado, azul, lila
+      {{255, 50, 50}, {255, 140, 40}, {255, 60, 140}},       // 1 rock: rojo, naranja, fucsia
+      {{255, 170, 60}, {255, 120, 40}, {255, 210, 110}},     // 2 guitarra: ámbares de fogata
+      {{60, 90, 255}, {150, 90, 255}, {40, 170, 255}},       // 3 jazz: azules y violeta
+      {{255, 60, 200}, {40, 220, 255}, {150, 255, 90}},      // 4 dj: magenta, cian, lima
+      {{255, 130, 50}, {255, 200, 60}, {255, 90, 110}},      // 5 tropical: atardecer
+      {{140, 70, 255}, {90, 240, 130}, {255, 80, 180}},      // 6 urbano: violeta, verde, fucsia
+      {{90, 110, 255}, {200, 210, 255}, {160, 120, 255}},    // 7 piano: noche
+      {{255, 130, 200}, {120, 220, 255}, {255, 240, 130}},   // 8 kpop: pastel
+      {{255, 210, 40}, {60, 100, 255}, {240, 50, 60}},       // 9 acordeón: amarillo, azul, rojo
+  };
+  int pal = 0, modo = 0;                               // modo: 0 luces que se pasean, 1 focos finos del techo, 2 rayos, 3 un tinte que sube o baja
+  switch (e.ritmo) {
+    case R_ROCK: case R_GROOVE: pal = 1; modo = 1; break;
+    case R_GUITARRA: case R_DISFRUTA: pal = 2; modo = 3; break;
+    case R_JAZZ: pal = 3; break;
+    case R_DJ: case R_ELECTRO: case R_BARRAS: pal = 4; modo = 2; break;
+    case R_TROPICAL: pal = 5; modo = 3; break;
+    case R_URBANO: pal = 6; break;
+    case R_PIANO: case R_CORAZON: pal = 7; modo = 3; break;
+    case R_KPOP: pal = 8; break;
+    case R_ACORDEON: pal = 9; break;
+    default: break;
+  }
+  auto color = [&](float desfase) {                    // el color de ahora: cada ~3 s pasa al siguiente de la paleta
+    const float t = u * 0.33f + desfase; const int i = (int)t % 3;
+    return mezcla(PAL[pal][i], PAL[pal][(i + 1) % 3], suave(t - (int)t));
+  };
+  const Col c0 = color(0), c1 = color(1.5f);
+  auto osc = [&](const Col &c, float k) { return Col{c.r * k * entra, c.g * k * entra, c.b * k * entra}; };
+  if (modo == 0) {                                     // dos luces chicas que dan la vuelta por el borde, una frente a la otra
+    for (int j = 0; j < 2; j++) {
+      const float a = u * 0.4f + j * PI + 0.5f * sinf(u * 0.7f + j);
+      circulo(CX + cosf(a) * (W / 2.f - 6), H / 2.f + sinf(a) * (H / 2.f - 6), (34 + 6 * j) * entra * (1 + 0.1f * g), osc(j ? c1 : c0, 0.3f), 1);
+    }
+  } else if (modo == 1) {                              // dos focos finos que barren desde el techo
+    for (int s2 = -1; s2 <= 1; s2 += 2) {
+      const float ax = CX + s2 * 150, bx = CX + s2 * (60 + 110 * sinf(u * 1.3f + s2 * 0.8f));
+      figura(0, 0, W, H, solido(osc(s2 < 0 ? c0 : c1, 0.26f + 0.08f * g)), [=](float px, float py) { return dTriangulo(px, py, ax, -12, bx - 22, H + 10, bx + 22, H + 10); });
+    }
+  } else if (modo == 2) {                              // dos rayos que barren y cambian de color
+    for (int i = 0; i < 2; i++)
+      linea(CX + (i ? 60 : -60), -6, CX + 240 * sinf(u * 1.1f + i * 2.3f), H + 6, 1.8f, i ? c1 : c0, (0.4f + 0.3f * g) * entra);
+  } else {                                             // un tinte bajito en el borde que va cambiando de color y respira
+    const bool abajo = e.ritmo != R_PIANO && e.ritmo != R_CORAZON;
+    luzBorde(abajo ? ABAJO : ARRIBA, c0, (0.4f + 0.1f * sinf(u * 1.7f) + 0.1f * g) * entra, 96);
+  }
+  {                                                    // una notita de vez en cuando (una sola a la vez, cada 4 s, alternando lado)
+    const float ciclo = u / 4.f; const int k = (int)ciclo; const float q = (ciclo - k) / 0.55f;
+    if (q < 1) notaColor((k % 2 ? W - 60 : 56) + 9 * sinf(q * 6), 190 - 80 * q, 12, c1, entra * campana(q, 0, 1) * 0.95f);
   }
 }
 
 static void extrasBase(float t, const Entradas &e, bool delante) {
   float u = t - baseDesde;
-  if (laBase == ESCUCHA && elPaquete == MINIMALISTA) { if (delante) haloEscucha(u, e); return; }
+  if (laBase == ESCUCHA && esMini()) { if (delante) haloEscucha(u, e); return; }
+  if (esMini() && !delante) switch (laBase) {            // la luz del borde de cada estado
+    case HABLA: luzBorde(MARCO, Col{80, 230, 196}, tramo(u, 0, 0.3f) * (0.15f + 0.5f * lim(e.boca * 1.5f, 0, 1)), 56); break;   // verde agua: late con la voz
+    case PIENSA: luzBorde(MARCO, Col{255, 190, 60}, tramo(u, 0, 0.3f) * (0.3f + 0.15f * sinf(u * 3)), 56); break;                // ámbar: dándole vueltas
+    case TELEFONO: luzBorde(MARCO, Col{60, 224, 120}, tramo(u, 0, 0.3f) * (0.2f + 0.4f * lim(e.boca * 1.5f, 0, 1)), 56); break;  // verde llamada
+    // ponytail: cantando no lleva luz: medido en el PC, el baile salía ~30 % más lento; ponerla si algún día sobra tiempo por cuadro
+    default: break;
+  }
   if (!delante && laBase != CANTA) return;
-  if (laBase == CANTA && comoMini()) { if (delante) extrasMini(u, e); return; }
+  if (laBase == CANTA && comoMini()) { if (delante) extrasMini(u, e); else if (esMini()) ambienteCanta(u, e); return; }
   switch (laBase) {
     case ESCUCHA: {
       for (int i = 0; i < 3; i++) {      // ondas de sonido al lado
@@ -1818,12 +2029,13 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       escalar(r, sx, sy); mover(r, 0, dy);
       break;
     }
-    case RISA:
+    case RISA: {                                                     // carcajada: se echa para atrás, se sacude y se dobla de la risa
+      const float k = 1 - tramo(u, 2.6f, 3.0f), dobla = campana(u, 1.3f, 2.5f);
       feliz(r, 1);
-      mover(r, 0, 6 * sinf(u * 44));
-      r.boca = 0.7f + 0.25f * fabsf(sinf(u * 14)); r.bAncho = 1.9f;
-      
+      mover(r, 9 * sinf(u * 3.4f), -12 * campana(u, 0, 0.9f) + 14 * dobla + 6 * sinf(u * 44) * k);
+      r.boca = (0.7f + 0.25f * fabsf(sinf(u * 14))) * k + 0.15f * (1 - k); r.bAncho = 1.9f;
       break;
+    }
     case FRENAZO: {                                                  // se estampa contra el vidrio, lo raja y se escurre
       float aplasta = 0, baja = 0;
       if (u < 0.14f) aplasta = suave(u / 0.14f);
@@ -1898,8 +2110,124 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       float cansa = tramo(u, 0, 0.6f) * (1 - tramo(u, 7.0f, 7.5f));
       tapas(r, 0.38f * cansa); r.L.incl = r.R.incl = 0.18f * cansa;
       mover(r, 0, 8 * cansa + 3 * sinf(u * 3));
+      if (esMini()) { tapas(r, 0.92f * cansa); r.L.alfa = r.R.alfa = 1 - tramo(cansa, 0.75f, 1); }   // se le cierran, y quedan                // los ojos son dos rayitas caídas (se dibujan aparte)
       r.boca = (0.2f + 0.12f * sinf(u * 9)) * cansa;               // jadea, nada de boca brava
       vel = 20;
+      break;
+    }
+    case CINTURON: {
+      const float k = tramo(u, 0, 0.3f) * (1 - tramo(u, 5.1f, 5.6f)), q = cinturonQ(u), listo = tramo(u, 2.45f, 2.6f);
+      // sigue la lengüeta con la mirada: del hombro (arriba a la derecha) a la hebilla (abajo a la izquierda)
+      mirar(r, k * (1 - listo) * (0.4f - 0.75f * q), k * (1 - listo) * (0.15f + 0.45f * q));
+      escalar(r, 1 - 0.2f * k, 1 - 0.2f * k); mover(r, -9 * k * q * (1 - listo), -34 * k + 5 * k * q * (1 - listo));          // se inclina con el jalón
+      const float pop = campana(u, 2.45f, 2.8f);
+      escalar(r, 1 + 0.08f * pop, 1 + 0.1f * pop); mover(r, 0, -9 * pop);            // brinquito con el clic
+      feliz(r, listo * (1 - tramo(u, 3.3f, 3.6f)));
+      if (u > 3.6f && u < 5.0f) {                                                    // guiño de "listo, vámonos"
+        const float g = tramo(u, 3.6f, 3.75f) * (1 - tramo(u, 4.7f, 5.0f));
+        r.R.feliz = g; r.L.incl = -0.06f * g; mover(r, 0, -4 * g);
+      }
+      vel = 30;
+      break;
+    }
+    case SONROJO: {                                                  // se sorprende, se pone rojo, se tapa, espía con un ojo y se vuelve a esconder
+      const float fin = 1 - tramo(u, 4.1f, 4.6f), k = tramo(u, 0, 0.25f) * fin, pena = tramo(u, 0.7f, 1.0f) * fin, espia = campana(u, 2.5f, 3.3f);
+      escalar(r, 1 + 0.12f * k * (1 - pena), 1 + 0.14f * k * (1 - pena));           // primero abre los ojos: "¿yo?"
+      feliz(r, pena);
+      if (espia > 0.3f) { r.R.feliz = 0; r.R.tapa = 0.3f; }                         // espía con uno
+      mover(r, 7 * pena * sinf(u * 4.2f), -8 * k + 6 * pena); mirar(r, 0.25f * espia, 0);
+      r.L.incl = r.R.incl = fmaxf(0, 0.06f * pena * sinf(u * 4.2f));
+      r.boca = 0.09f * pena; r.bAncho = 0.8f;
+      vel = 30;
+      break;
+    }
+    case ENOJO: {                                                    // se va llenando de rabia, aprieta los dientes, estalla y resopla
+      Rostro c = neutro(ROJO); r = c;
+      { const Rostro n0 = neutro(AZUL); const float tinta = tramo(u, 0.1f, 1.5f) * (1 - tramo(u, 3.6f, 4.4f)); r.a = mezcla(n0.a, c.a, tinta); r.b = mezcla(n0.b, c.b, tinta); }
+      const float k = tramo(u, 0, 0.3f) * (1 - tramo(u, 3.9f, 4.4f)), carga = tramo(u, 0.2f, 2.0f), pum = campana(u, 2.0f, 2.5f), calma = tramo(u, 2.9f, 3.6f);
+      tapas(r, (0.22f + 0.2f * carga) * k * (1 - 0.5f * calma)); r.L.incl = r.R.incl = (0.22f + 0.2f * carga) * k * (1 - 0.6f * calma);
+      escalar(r, 1 + 0.12f * pum, 1 - 0.1f * carga * (1 - calma) + 0.12f * pum);
+      mover(r, (2 + 3.5f * carga) * k * (1 - calma) * sinf(u * 52), 8 * k - 14 * pum);            // tiembla cada vez más
+      r.boca = k * (pum > 0.05f ? 0.5f * pum : 0); r.bAncho = 1.5f;   // la boca brava se dibuja aparte (un arco hacia abajo)
+      vel = 30;
+      break;
+    }
+    case PAPAS: {                                                    // come papas: abre cuando llega la papa y mastica contento
+      const float k = tramo(u, 0, 0.3f) * (1 - tramo(u, 4.5f, 5.0f)), p = fmodf(u, 1.5f) / 1.5f;      // cada 1,5 s una papa
+      mover(r, 0, -22 * k); mirar(r, -0.18f * k, 0.25f * k * (1 - p));
+      feliz(r, k * tramo(p, 0.55f, 0.7f));                                                            // cierra los ojos al saborear
+      r.boca = k * (p < 0.5f ? 0.45f * tramo(p, 0.25f, 0.5f) : 0.12f + 0.1f * fabsf(sinf(u * 14)));   // abre... y mastica
+      vel = 30;
+      break;
+    }
+    case BEBIDA: {                                                   // toma con pitillo: ojos relajados y la boquita chiquita
+      const float k = tramo(u, 0, 0.3f) * (1 - tramo(u, 4.5f, 5.0f));
+      mover(r, 0, -40 * k + 3 * k * sinf(u * 5)); tapas(r, 0.22f * k); mirar(r, 0, 0.3f * k);
+      r.boca = 0.1f * k; r.bAncho = 0.7f;
+      vel = 30;
+      break;
+    }
+    case CONSOLA: {                                                  // juega: concentrado, se inclina con la jugada
+      const float k = tramo(u, 0, 0.3f) * (1 - tramo(u, 4.5f, 5.0f)), lado = sinf(u * 2.6f);
+      mover(r, 9 * k * lado, -36 * k); mirar(r, 0.12f * k * lado, 0.55f * k);
+      tapas(r, 0.18f * k); r.L.incl = r.R.incl = 0.12f * k + 0.08f * k * lado;
+      vel = 30;
+      break;
+    }
+    case LEEMAPA: {                                                  // lee un mapa de papel: los ojos van de un lado a otro por encima
+      const float k = tramo(u, 0, 0.3f) * (1 - tramo(u, 4.0f, 4.5f));
+      escalar(r, 1 - 0.2f * k, 1 - 0.2f * k); mover(r, 0, -50 * k); mirar(r, 0.4f * k * sinf(u * 2.2f), 0.5f * k);
+      vel = 30;
+      break;
+    }
+    case CONO: {                                                     // lame un cono de helado: se lo acerca, lengüetazo, y saborea con los ojos cerrados
+      const float k = tramo(u, 0, 0.3f) * (1 - tramo(u, 5.1f, 5.6f)), p = fmodf(u, 1.7f) / 1.7f, cerca = tramo(p, 0.15f, 0.4f) * (1 - tramo(p, 0.62f, 0.8f));
+      escalar(r, 1 - 0.2f * k, 1 - 0.2f * k); mover(r, 0, -58 * k + 4 * k * cerca);
+      mirar(r, 0.12f * k * (1 - cerca), 0.5f * k * (1 - tramo(p, 0.6f, 0.75f)));
+      feliz(r, k * tramo(p, 0.62f, 0.75f));                                          // mmm...
+      r.boca = k * (0.1f + 0.2f * cerca); r.bAncho = 0.9f;
+      vel = 30;
+      break;
+    }
+    case CRISPETAS: {                                                // se lanza crispetas a la boca: la sigue con los ojos, la atrapa y mastica (la tercera le pega en la frente)
+      const float k = tramo(u, 0, 0.3f) * (1 - tramo(u, 5.1f, 5.6f)), p = fmodf(u, 1.4f) / 1.4f, q = lim((p - 0.2f) / 0.35f, 0, 1);
+      const bool falla = (int)(u / 1.4f) % 3 == 2, vuela = p > 0.2f && p < 0.55f;
+      mover(r, 0, -30 * k);
+      if (vuela) mirar(r, -0.3f * k * (1 - q), k * (0.3f * q - 0.55f * sinf(q * PI)));
+      if (falla) {                                                                   // ¡ay!: cierra los ojos con el golpe
+        if (p > 0.55f) { tapas(r, 0.85f * (1 - tramo(p, 0.7f, 0.95f))); mover(r, 0, 7 * campana(p, 0.55f, 0.75f)); }
+        r.boca = k * 0.45f * tramo(p, 0.3f, 0.5f) * (1 - tramo(p, 0.75f, 0.95f)); r.bAncho = 0.9f;
+      } else {
+        feliz(r, k * tramo(p, 0.6f, 0.7f) * (1 - tramo(p, 0.92f, 1)));
+        r.boca = k * (p < 0.55f ? 0.5f * tramo(p, 0.3f, 0.5f) : 0.12f + 0.1f * fabsf(sinf(u * 15)));
+      }
+      vel = 30;
+      break;
+    }
+    case FELIZ: {                                                    // feliz: brinca con las manos arriba
+      const float k = tramo(u, 0, 0.2f) * (1 - tramo(u, 3.2f, 3.6f)), br = fabsf(sinf(u * 6.5f));
+      feliz(r, k); mover(r, 6 * k * sinf(u * 3.25f), -8 * k - 16 * k * br); escalar(r, 1 + 0.05f * k * br, 1 + 0.05f * k * (1 - br));
+      r.boca = 0.36f * k + 0.1f * k * br; r.bAncho = 1.7f;
+      vel = 30;
+      break;
+    }
+    case TRISTE: {                                                   // triste: baja la mirada, puchero, se le salen las lágrimas y al final se las seca
+      const float k = tramo(u, 0, 0.6f) * (1 - tramo(u, 4.5f, 5.0f)), seca = campana(u, 3.3f, 4.3f);
+      tapas(r, 0.3f * k); r.L.incl = r.R.incl = -0.3f * k;                            // cejas caídas
+      mirar(r, -0.1f * k, 0.45f * k); mover(r, 0, 22 * k + 2 * k * sinf(u * 2)); escalar(r, 0.94f, 0.88f);
+      if (seca > 0.3f) r.L.tapa = 0.9f;
+      r.boca = 0.09f * k; r.bAncho = 1.3f; r.bx += 1.6f * k * sinf(u * 40);          // le tiembla la boquita
+      vel = 20;
+      break;
+    }
+    case SUENO: {                                                    // le da sueño: se le caen los párpados, bosteza grande y cabecea
+      const float k = tramo(u, 0, 0.5f) * (1 - tramo(u, 5.0f, 5.5f)), bos = campana(u, 1.0f, 3.0f);
+      const float cab = u > 3.2f && u < 5.0f ? powf(fmodf(u - 3.2f, 0.9f) / 0.9f, 2) : 0;   // se va cayendo... y se despierta de un brinco
+      tapas(r, fminf(0.9f, k * (0.45f + 0.35f * bos + 0.45f * cab)));
+      mover(r, 0, -10 * bos * k + 20 * cab * k); escalar(r, 1, 1 + 0.06f * bos);
+      r.L.incl = r.R.incl = -0.08f * k;
+      r.boca = k * 0.75f * bos; r.bAncho = 0.75f;
+      vel = 25;
       break;
     }
     case SORPRESA: {
@@ -1962,7 +2290,7 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       Rostro c = neutro(HIELO); r = c;
       escalar(r, 0.9f, 0.88f); mover(r, 3.5f * sinf(u * 70), 4);      // tirita
       tapas(r, 0.2f);
-      r.boca = 0.12f + 0.06f * fabsf(sinf(u * 40));
+      r.boca = esMini() ? 0 : 0.12f + 0.06f * fabsf(sinf(u * 40));   // en las caras de ahora la boca es una rayita ondulada (va aparte)
       vel = 40;
       break;
     }
@@ -1971,11 +2299,14 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
       escalar(r, 0.9f, 0.86f); mover(r, 0, 54);
       vel = 8;
       break;
-    case GUINO:
-      if (u > 0.15f && u < 1.0f) { r.R.feliz = 1; r.R.y -= 6; }
-      r.L.incl = -0.05f; mover(r, 0, -4 * campana(u, 0.1f, 1.0f));
+    case GUINO: {                                                    // guiña, sonríe de lado y suelta una estrella
+      const float g = tramo(u, 0.15f, 0.3f) * (1 - tramo(u, 1.3f, 1.5f));
+      if (g > 0.5f) { r.R.feliz = 1; r.R.y -= 6; }
+      r.L.incl = -0.05f * g; mover(r, 5 * g, -5 * campana(u, 0.1f, 1.4f));
+      r.boca = 0.12f * g; r.bAncho = 1.5f; r.bx += 10 * g;
       vel = 25;
       break;
+    }
     case KAME: {                                                     // concentra energía en las manos y te la lanza
       float conc = tramo(u, 0, 0.3f), carga = tramo(u, 0.4f, 2.6f), rayo = tramo(u, 2.6f, 2.75f) * (1 - tramo(u, 3.9f, 4.4f));
       float orgullo = tramo(u, 4.2f, 4.5f) * (1 - tramo(u, 4.7f, 5.0f));
@@ -2150,6 +2481,7 @@ static void discoGiro(float dx, float ty, float R, float lado, float u, float a)
 // pantalla de mapa completo, sin el muñequito: el mapa en toda la pantalla, el carro abajo y arriba la barra con el giro
 static void pantallaMapa(float lado, float u, float a) {
   dib::SinZoom sz;
+  ConColor cc;   // el mapa conserva sus colores en las caras blancas
   figura(0, 0, W, H, solido(Col{9, 13, 26}, a), [](float, float) { return -1.f; });   // el fondo (y marca toda la pantalla para mandarla)
   const float cy = 286;
   pintarCalles(CX, 0, cy, 0.8f, 0, a, 3);
@@ -2169,7 +2501,36 @@ static void pantallaMapa(float lado, float u, float a) {
   if (calleTxt[0]) texto(calleTxt, xt, hayM ? by + 20 : by, 20, Col{190, 205, 235}, a);
 }
 
+// la luz del borde en cada reacción
+static void luzReac(float u) {
+  if (!esMini()) return;
+  int donde = MARCO; Col c{255, 214, 70}; float f = 0.4f, ancho = 64, radio = 44;
+  switch (laReac) {
+    case ENOJO: {                                                   // el rojo va subiendo con la rabia, pega un salto con el estallido y baja al calmarse
+      const float carga = tramo(u, 0.2f, 2.0f), pum = campana(u, 2.0f, 2.6f), calma = tramo(u, 3.0f, 4.2f);
+      donde = ABAJO; c = Col{200, 14, 36}; f = (0.5f + 0.4f * carga) * (1 - calma) / fmaxf(0.01f, tramo(u, 0, 0.4f));
+      ancho = (30 + 170 * carga + 70 * pum) * (1 - 0.8f * calma); if (f > 2) f = 2; break;
+    }      // rojo que sube
+    case CALOR: donde = ARRIBA; c = Col{196, 14, 30}; f = 0.92f + 0.05f * sinf(u * 3); ancho = 20 + 190 * tramo(u, 0.2f, 2.2f) * (1 - tramo(u, 6.3f, 7.5f)); break;           // el calor baja de arriba
+    case FRIO: c = Col{64, 196, 244}; f = 1; ancho = 46; radio = 92; break;                                                  // marco de hielo
+    case SONROJO: donde = OVALO_LUZ; c = Col{255, 92, 152}; f = 0.6f * tramo(u, 0.6f, 1.4f); ancho = 170; break;                       // se pone rosita
+    case AMOR: case CARICIA: c = Col{255, 92, 152}; donde = OVALO_LUZ; f = 0.5f; ancho = 150; break;
+    case TRISTE: donde = ARRIBA; c = Col{44, 96, 210}; f = 0.55f; ancho = 230; break;
+    case SUENO: donde = ARRIBA; c = Col{110, 80, 220}; f = 0.4f; ancho = 230; break;
+    case SORPRESA: c = Col{255, 255, 255}; f = 0.6f * expf(-u * 3); ancho = 80; break;
+    case WHATSAPP: case LLAMADA: c = Col{60, 224, 120}; f = 0.35f + 0.25f * fabsf(sinf(u * 4)); break;
+    case BATERIA: donde = ABAJO; c = Col{230, 40, 40}; f = 0.3f + 0.3f * fabsf(sinf(u * 3.9f)); ancho = 130; break;
+    case CINTURON:                                                    // solo con el clic: un destello verde que se va apagando
+      if (u < 2.45f) return;
+      c = Col{70, 230, 120}; f = 0.9f * expf(-(u - 2.45f) * 1.4f); ancho = 100; break;
+    case FELIZ: case LLEGAMOS: f = 0.35f + 0.1f * sinf(u * 6.5f); break;                                            // amarillo
+    default: return;
+  }
+  luzBorde(donde, c, f * tramo(u, 0, donde == MARCO || donde == OVALO_LUZ ? 1.2f : 0.4f) * (1 - tramo(u, DURA[laReac] - 0.6f, DURA[laReac])), ancho, radio);
+}
+
 static void extrasReac(float u, bool delante) {
+  if (!delante) luzReac(u);
   switch (laReac) {
     case KAME:
       if (delante) kame(u);
@@ -2195,9 +2556,19 @@ static void extrasReac(float u, bool delante) {
       }
       break;
     case RISA:
-      if (delante) for (int s = -1; s <= 1; s += 2) {                // lagrimitas de risa
-        float p = fmodf(u * 1.6f + (s > 0 ? 0.5f : 0), 1.f), a = tramo(u, 0, 0.15f) * (1 - tramo(u, 1.75f, 2.0f));
-        gota(CX + s * (EX + 66 + p * 20), EY - 10 + p * 60, 9, a * campana(p, 0, 1));
+      if (delante) {
+        const float a = tramo(u, 0, 0.15f) * (1 - tramo(u, 2.6f, 3.0f));
+        for (int s = -1; s <= 1; s += 2) {                           // lagrimitas de risa
+          const Ojo &o = s < 0 ? ahora.L : ahora.R;
+          const float p = fmodf(u * 1.6f + (s > 0 ? 0.5f : 0), 1.f);
+          gota(o.x + s * (o.w / 2 + 22 + p * 20), o.y - 10 + p * 60, 9, a * campana(p, 0, 1));
+        }
+        for (int i = 0; i < 5; i++) {                                // "ja ja ja" que va saltando a los lados
+          const float q = (u - 0.2f - i * 0.5f) / 0.9f;
+          if (q <= 0 || q >= 1) continue;
+          dib::texto("JA", CX + (i % 2 ? -1 : 1) * (140 + 10 * q), 104 + 30 * (i % 3) - 34 * q, 32 + 12 * q, Col{255, 220, 80}, a * campana(q, 0, 1));
+        }
+        manoBlanca(CX + 112, 316 + subeDe(u, 3.0f, 0) - 16 * fabsf(sinf(u * 11)), -PI / 2 - 0.3f, 1.05f, false, a);   // palmotea
       }
       break;
     case FRENAZO:
@@ -2281,18 +2652,294 @@ static void extrasReac(float u, bool delante) {
     case CALOR:
       if (delante) {
         float a = tramo(u, 0.2f, 0.6f) * (1 - tramo(u, 7.0f, 7.5f));
+        if (esMini()) for (int s = -1; s <= 1; s += 2) {             // ojos cerrados del sofoco: rayitas con la punta de afuera caída
+          const Ojo &o = s < 0 ? ahora.L : ahora.R;
+          linea(o.x - s * 30, o.y + o.h / 2 - 16, o.x + s * 30, o.y + o.h / 2 - 5, 5.5f, ahora.a, tramo(u, 0.45f, 0.7f) * (1 - tramo(u, 7.0f, 7.4f)));
+        }
         for (int i = 0; i < 4; i++) {                                // gotas de sudor que caen
           float p = fmodf(u * 0.5f + i * 0.27f, 1.f), s = (i % 2) ? 1 : -1;
           gota(CX + s * (EX + 70 + 12 * (i / 2)), EY - 70 + p * 150, 10, a * campana(p, 0, 1));
         }
+        {                                                            // se echa aire con un abanico
+          const float ax = CX + 128, ay = 296 + subeDe(u, 7.5f, 0.3f), mid = -PI / 2 - 0.55f + 0.34f * sinf(u * 11);
+          for (int i = 0; i < 5; i++) {
+            const float an = mid + (i - 2) * 0.36f, ex = ax + cosf(an) * 76, ey = ay + sinf(an) * 76;
+            figura(fminf(ax, ex) - 16, fminf(ay, ey) - 16, fmaxf(ax, ex) + 16, fmaxf(ay, ey) + 16, solido(i % 2 ? Col{150, 200, 245} : Col{196, 228, 252}, a),
+                   [=](float qx, float qy) { return dCapsula2(qx, qy, ax, ay, 3, ex, ey, 15); });
+          }
+          for (int i = 0; i < 5; i++) { const float an = mid + (i - 2) * 0.36f; linea(ax, ay, ax + cosf(an) * 84, ay + sinf(an) * 84, 1.5f, Col{70, 110, 160}, a); }   // las varillas
+          manoBlanca(ax + 6, ay + 10, mid, 1.0f, false, a);
+          for (int i = 0; i < 3; i++) {                              // el airecito del abanico le llega a la cara
+            const float p = fmodf(u * 1.5f + i * 0.33f, 1.f), x = ax - 34 - 70 * p, y = 232 + i * 17 + 4 * sinf(p * 6 + i);
+            linea(x, y, x - 20, y - 3, 1.7f, Col{214, 236, 255}, 0.7f * a * campana(p, 0, 1));
+          }
+          if (u > 3.0f && u < 4.6f) {                                // se seca la frente con la otra mano y salpica
+            const float q = suave((u - 3.2f) / 1.0f), hx = ahora.L.x - 30 + (ahora.R.x - ahora.L.x + 60) * q, hy = ahora.L.y - ahora.L.h / 2 - 4;
+            manoBlanca(hx, hy, 0.2f, 1.0f, false, a * campana(u, 3.0f, 4.6f) * 1.6f > 1 ? a : a * campana(u, 3.0f, 4.6f) * 1.6f);
+            for (int i = 0; i < 3; i++) gota(hx + 30 + 14 * i, hy - 6 - 10 * i + 40 * q * q, 5, a * campana(u, 3.3f, 4.4f));
+          }
+        }
       } else {
         float a = tramo(u, 0.2f, 0.6f) * (1 - tramo(u, 7.0f, 7.5f));
-        for (int i = 0; i < 3; i++) {                                // aire caliente que sube
-          float x0 = CX + (i - 1) * 150, p = fmodf(u * 0.4f + i * 0.3f, 1.f);
-          for (int k = 0; k < 5; k++) {
-            float ya = 60 + k * 18 - p * 30, yb = ya + 18;
-            linea(x0 + 8 * sinf(ya * 0.08f + u * 4), ya, x0 + 8 * sinf(yb * 0.08f + u * 4), yb, 2.5f, TONOS[NARANJA].a, a * 0.6f * campana(p, 0, 1));
+      }
+      break;
+    case CINTURON:
+      {
+        const float a = tramo(u, 0.05f, 0.35f) * (1 - tramo(u, 5.1f, 5.6f)), q = cinturonQ(u), dc = u - 2.45f;
+        const Col tela{224, 220, 234}, sombra{120, 114, 140}, hilo{168, 162, 186}, metal{196, 202, 214}, metalO{112, 118, 134};
+        const Col caja{44, 46, 58}, roja{228, 56, 68}, rojaL{255, 128, 132}, chis{255, 216, 72};
+        const float hx = CX - 112, hy = 304, sx = CX + 178, sy = 140;                 // la hebilla y el anclaje del hombro
+        const float ax = CX + 160, ay = 196, bx = hx + 44, by = hy - 4;               // la lengüeta va de (a) a (b)
+        const float lx = ax + (bx - ax) * q, ly = ay + (by - ay) * q;
+        // la correa: dos tramos con comba mientras la jala; con el clic se tensa y vibra hasta quedarse quieta
+        const float comba = 18 * sinf(q * PI) * (1 - tramo(u, 2.4f, 2.5f)) + (dc > 0 ? 7 * expf(-dc * 6) * sinf(dc * 42) : 0);
+        const float dx = lx - sx, dy = ly - sy, L = sqrtf(dx * dx + dy * dy) + 0.01f, nx = -dy / L, ny = dx / L;
+        const float mx = (sx + lx) / 2 - nx * comba, my = (sy + ly) / 2 - ny * comba;   // la comba cuelga hacia abajo
+        auto tramoCorrea = [&](float x0, float y0, float x1, float y1) {
+          linea(x0, y0, x1, y1, 12.5f, sombra, a); linea(x0, y0, x1, y1, 10.5f, tela, a);
+          const float ex = x1 - x0, ey = y1 - y0, l = sqrtf(ex * ex + ey * ey) + 0.01f, px = -ey / l * 6.5f, py = ex / l * 6.5f;
+          for (float d = 6; d < l - 8; d += 13)                                        // las costuras, a cada lado
+            for (int s2 = -1; s2 <= 1; s2 += 2)
+              linea(x0 + ex * d / l + px * s2, y0 + ey * d / l + py * s2, x0 + ex * (d + 6) / l + px * s2, y0 + ey * (d + 6) / l + py * s2, 0.9f, hilo, a);
+        };
+        if (!delante) break;                                                          // todo va por delante, sólido: la correa cruza por debajo de los ojos
+        linea(sx, sy, mx, my, 15.5f, NEG, a); linea(mx, my, lx, ly, 15.5f, NEG, a);   // el borde negro la separa de lo que toque
+        tramoCorrea(sx, sy, mx, my); tramoCorrea(mx, my, lx, ly);
+        circulo(sx, sy, 15, metalO, a); circulo(sx, sy, 9, metal, a);                 // la argolla
+        // la hebilla: su correíta, la caja oscura y el botón rojo con brillo; da un saltico con el clic
+        const float salto = dc > 0 ? 5 * expf(-dc * 9) * sinf(dc * 30) : 0, hyy = hy + salto;
+        linea(hx - 20, hyy + 8, hx - 74, hyy + 62, 11, sombra, a); linea(hx - 20, hyy + 8, hx - 74, hyy + 62, 9, tela, a);
+        figura(hx - 36, hyy - 26, hx + 36, hyy + 26, solido(caja, a), [=](float qx, float qy) { return dCaja(qx, qy, hx, hyy, 30, 20, 8); });
+        figura(hx - 36, hyy - 26, hx + 36, hyy + 26, solido(metalO, a), [=](float qx, float qy) { return fabsf(dCaja(qx, qy, hx, hyy, 30, 20, 8)) - 1.2f; });
+        figura(hx - 24, hyy - 14, hx + 12, hyy + 14, solido(roja, a), [=](float qx, float qy) { return dCaja(qx, qy, hx - 6, hyy, 15, 10, 5); });
+        figura(hx - 20, hyy - 10, hx + 6, hyy - 2, solido(rojaL, 0.7f * a), [=](float qx, float qy) { return dCaja(qx, qy, hx - 7, hyy - 6, 10, 1.6f, 1.6f); });
+        figura(hx + 16, hyy - 10, hx + 32, hyy + 10, solido(NEG, a), [=](float qx, float qy) { return dCaja(qx, qy, hx + 25, hyy, 4, 7, 2); });   // la ranura
+        // la lengüeta de metal con su ojal y la cabeza de plástico donde da la vuelta la correa
+        const float ux = (bx - ax), uy = (by - ay), ul = sqrtf(ux * ux + uy * uy), cx2 = ux / ul, sy2 = uy / ul;
+        if (q < 1) linea(lx, ly, lx + cx2 * 22, ly + sy2 * 22, 6.5f, metal, a), linea(lx + cx2 * 9, ly + sy2 * 9, lx + cx2 * 15, ly + sy2 * 15, 2.2f, metalO, a);
+        linea(lx - cx2 * 10, ly - sy2 * 10, lx + cx2 * 2, ly + sy2 * 2, 11, caja, a);
+        // la mano: sube a agarrarla, la lleva y después del clic la suelta
+        const float llega = suave(lim((u - 0.5f) / 0.45f, 0, 1)), suelta = tramo(u, 3.1f, 3.5f);
+        const float mhx = lx + 20 + (1 - llega) * 30 + suelta * 60, mhy = ly - 16 + (1 - llega) * 150 + suelta * 120;
+        if (suelta < 1) manoBlanca(mhx, mhy, PI * 0.82f, 1.1f, false, a * (1 - suelta));
+        if (dc > 0 && dc < 0.6f) {                                                     // ¡clic!: un aro de luz y chispas
+          const float t = dc / 0.6f, R = 14 + 64 * t;
+          figura(hx - R - 6, hy - R - 6, hx + R + 6, hy + R + 6, solido(BLANCO, 0.8f * a * (1 - t)), [=](float qx, float qy) { return fabsf(dCirculo(qx, qy, hx + 10, hy, R)) - 2.4f * (1 - t) - 0.6f; });
+          for (int i = 0; i < 6; i++) {
+            const float an = -PI + i * 0.52f + 0.3f, r0 = 30 + 34 * t, r1 = r0 + 14 * (1 - t);
+            linea(hx + 10 + cosf(an) * r0, hy - 4 + sinf(an) * r0, hx + 10 + cosf(an) * r1, hy - 4 + sinf(an) * r1, 2.8f, chis, a * (1 - t));
           }
+        }
+        if (u > 3.4f) {                                                                // pulgar arriba y una estrellita junto al ojo que guiña
+          const float sube = tramo(u, 3.4f, 3.7f), rebote = 1 + 0.25f * campana(u, 3.5f, 3.9f), af = a * sube;
+          manoBlanca(CX + 96, 286 + 60 * (1 - sube) - 5 * fabsf(sinf(u * 6)), -PI / 2 + 0.1f, 1.25f * rebote, true, af);
+          chispa(ahora.R.x + 58, ahora.R.y - 48, 14 + 5 * sinf(u * 9), af * campana(u, 3.6f, 5.0f));
+        }
+      }
+      break;
+    case SONROJO:
+      if (delante) {
+        const float fin = 1 - tramo(u, 4.1f, 4.6f), a = tramo(u, 0.3f, 0.8f) * fin, pena = tramo(u, 0.7f, 1.0f) * fin, espia = campana(u, 2.5f, 3.3f);
+        for (int s2 = -1; s2 <= 1; s2 += 2) {
+          const Ojo &o = s2 < 0 ? ahora.L : ahora.R;
+          const float bx = o.x + s2 * 8, by = o.y + 50, late = 1 + 0.08f * sinf(u * 6);  // el rubor, debajo de cada ojo: sube y late
+          // las manitos suben a taparse la cara; la del ojo que espía se corre un poquito
+          const float corre = s2 > 0 ? 16 * espia : 0;
+          manoBlanca(o.x + s2 * (56 + corre), o.y + 84 + 130 * (1 - pena) - 5 * sinf(u * 4.2f) + corre * 0.6f, -PI / 2 - s2 * 0.25f, 1.15f, false, a);
+        }
+        if (u > 0.85f && u < 1.9f) for (int i = 0; i < 2; i++) {                       // "pff": le sale humito de la pena
+          const float p = (u - 0.85f - i * 0.2f) / 0.85f;
+          if (p > 0 && p < 1) circulo(CX + (i ? 26 : -22) + 8 * sinf(p * 5), 78 - 30 * p, 8 + 9 * p, Col{255, 200, 214}, 0.55f * (1 - p));
+        }
+        for (int i = 0; i < 3; i++) {                                                  // corazoncitos que suben
+          const float p = fmodf(u * 0.45f + i * 0.33f, 1.f);
+          corazonito(CX + (i - 1) * 146 + 10 * sinf(p * 6 + i), 150 - p * 90, 9 + 3 * (i % 2), a * campana(p, 0, 1));
+        }
+      }
+      break;
+    case ENOJO:
+      if (delante) {
+        const float a = tramo(u, 0.1f, 0.3f) * (1 - tramo(u, 3.9f, 4.4f)), carga = tramo(u, 0.2f, 2.0f), dp = u - 2.0f, calma = tramo(u, 2.9f, 3.6f);
+        const float late = 1 + 0.18f * fabsf(sinf(u * 7)), R = (8 + 5 * carga) * late;
+        if (dp < 0 || dp > 0.5f) {                                                    // la boca brava: un arquito hacia abajo
+          const float bx = ahora.bx, by = ahora.by + 10;
+          figura(bx - 22, by - 22, bx + 22, by, solido(Col{255, 255, 255}, a), [=](float qx, float qy) { return dArco(qx, qy, bx, by, 15, -PI * 0.82f, -PI * 0.18f) - 3.6f; });
+        }
+        const float mx = ahora.R.x + 58, my = ahora.R.y - 72;                          // la venita de la rabia: crece mientras se carga
+        for (int sx = -1; sx <= 1; sx += 2) for (int sy = -1; sy <= 1; sy += 2) {
+          const float cx2 = mx + sx * R * 1.35f, cy2 = my + sy * R * 1.35f, mid = atan2f(-sy, -sx);
+          figura(cx2 - R - 5, cy2 - R - 5, cx2 + R + 5, cy2 + R + 5, solido(Col{238, 48, 62}, a * (1 - calma), 6), [=](float qx, float qy) { return dArco(qx, qy, cx2, cy2, R, mid - 0.75f, mid + 0.75f) - 3.2f; });
+        }
+        for (int s2 = -1; s2 <= 1; s2 += 2) {
+          // los puños apretados, temblando; con el estallido suben y golpean
+          const float golpe = dp > 0 && dp < 0.5f ? sinf(dp / 0.5f * PI) : 0;
+          manoBlanca(CX + s2 * 138 + 2.5f * carga * sinf(u * 50 + s2), 300 + subeDe(u, 4.4f, 0.2f) - 46 * golpe + 14 * (dp > 0.25f ? expf(-(dp - 0.25f) * 8) : 0), -PI / 2, 1.1f + 0.1f * carga, false, a);
+          if (dp > 0 && dp < 1.5f) for (int i = 0; i < 3; i++) {                       // ¡le sale humo por los lados!
+            const float p = dp / 1.5f + i * 0.14f;
+            if (p < 1) circulo((s2 < 0 ? ahora.L.x : ahora.R.x) + s2 * (44 + 60 * p), ahora.R.y - 54 - 44 * p, 7 + 13 * p, Col{226, 226, 236}, 0.75f * a * (1 - p));
+          }
+          const float p = fmodf(u * 1.1f + (s2 > 0 ? 0.5f : 0), 1.f);                  // resopla
+          circulo(CX + s2 * (40 + 50 * p), ahora.by + 18 + 8 * p, 6 + 8 * p, Col{226, 226, 236}, 0.8f * a * (1 - p) * calma);
+        }
+        if (dp > 0 && dp < 0.45f) for (int i = 0; i < 10; i++) {                       // el estallido: rayas rojas alrededor
+          const float an = i * 0.628f + 0.2f, t = dp / 0.45f, r0 = 128 + 40 * t, r1 = r0 + 20 * (1 - t), cy0 = 170;
+          linea(CX + cosf(an) * r0 * 1.25f, cy0 + sinf(an) * r0 * 0.8f, CX + cosf(an) * r1 * 1.25f, cy0 + sinf(an) * r1 * 0.8f, 3, Col{255, 70, 60}, a * (1 - t));
+        }
+      }
+      break;
+    case PAPAS:
+      if (delante) {
+        const float a = tramo(u, 0.1f, 0.4f) * (1 - tramo(u, 4.5f, 5.0f)), p = fmodf(u, 1.5f) / 1.5f;
+        const Col roja{214, 44, 48}, osc{150, 22, 30}, papa{255, 206, 70}, tost{226, 150, 40};
+        const float cx = CX + 112, cy = 312 + subeDe(u, 5.0f);                                               // la cajita roja, abajo a la derecha
+        for (int i = 0; i < 6; i++) {                                                      // las papas asoman
+          const float x0 = cx - 26 + i * 10.5f, alto = 30 + 9 * ((i * 7) % 3), inc = (i - 2.5f) * 2.4f;
+          linea(x0, cy - 12, x0 + inc, cy - 12 - alto, 4.6f, i % 2 ? papa : tost, a);
+        }
+        figura(cx - 40, cy - 24, cx + 40, cy + 34, solido(roja, a), [=](float qx, float qy) { return dCaja(qx, qy, cx, cy + 6, 34 - (qy - cy) * 0.14f, 24, 7); });
+        figura(cx - 20, cy - 4, cx + 20, cy + 22, solido(osc, a), [=](float qx, float qy) { return dCaja(qx, qy, cx, cy + 9, 12, 7, 5); });
+        manoBlanca(cx + 34, cy + 22, -PI / 2 - 0.5f, 0.95f, false, a);                     // una mano sostiene la caja
+        // la otra lleva una papa a la boca: sube en la primera mitad, espera el mordisco y vuelve
+        const float sube = p < 0.5f ? suave(p / 0.5f) : 1 - suave((p - 0.62f) / 0.38f), bx = ahora.bx, by = ahora.by;
+        const float hx = cx - 70 + (bx - 46 - (cx - 70)) * sube, hy = cy - 6 + (by + 26 - (cy - 6)) * sube;
+        const float largo = p > 0.5f && p < 0.62f ? 12 : 24;                                // mordida: queda la mitad
+        if (p < 0.62f) linea(hx + 12, hy - 12, hx + 12 + largo * 0.7f, hy - 12 - largo * 0.7f, 4.6f, papa, a);
+        manoBlanca(hx, hy, -PI / 4, 1.0f, false, a);
+      }
+      break;
+    case BEBIDA:
+      if (delante) {
+        const float a = tramo(u, 0.1f, 0.4f) * (1 - tramo(u, 4.5f, 5.0f)), cy = 318 + 3 * sinf(u * 5) + subeDe(u, 5.0f), bx = ahora.bx, by = ahora.by;
+        const Col vaso{246, 150, 172}, tapa{255, 206, 216}, osc{214, 104, 134};
+        linea(CX + 8, cy - 46, CX + 8, by + 34, 3.4f, BLANCO, a); linea(CX + 8, by + 34, bx + 2, by + 6, 3.4f, BLANCO, a);   // el pitillo, doblado hacia la boca
+        figura(CX - 50, cy - 40, CX + 50, cy + 46, solido(vaso, a), [=](float qx, float qy) { return dCaja(qx, qy, CX, cy + 2, 40 - (qy - cy) * 0.16f, 36, 8); });
+        figura(CX - 40, cy + 2, CX + 40, cy + 20, solido(osc, 0.8f * a), [=](float qx, float qy) { return dCaja(qx, qy, CX, cy + 10, 34, 5, 4); });   // la franja del vaso
+        figura(CX - 56, cy - 50, CX + 56, cy - 30, solido(tapa, a), [=](float qx, float qy) { return dCaja(qx, qy, CX, cy - 40, 48, 7, 5); });       // la tapa
+        for (int s2 = -1; s2 <= 1; s2 += 2) manoBlanca(CX + s2 * 50, cy + 8, s2 > 0 ? PI : 0, 0.95f, false, a);   // las dos manos
+      }
+      break;
+    case CONSOLA:
+      if (delante) {
+        const float a = tramo(u, 0.1f, 0.4f) * (1 - tramo(u, 4.5f, 5.0f)), lado = sinf(u * 2.6f), cx = CX + 6 * lado, cy = 306 + subeDe(u, 5.0f);
+        const Col roja{232, 72, 72}, azul{70, 150, 242}, gris{60, 64, 78}, raya{104, 110, 128};
+        figura(cx - 112, cy - 40, cx - 52, cy + 40, solido(roja, a), [=](float qx, float qy) { return dCaja(qx, qy, cx - 78, cy, 26, 36, 14); });   // mando rojo
+        figura(cx + 52, cy - 40, cx + 112, cy + 40, solido(azul, a), [=](float qx, float qy) { return dCaja(qx, qy, cx + 78, cy, 26, 36, 14); });   // mando azul
+        figura(cx - 60, cy - 40, cx + 60, cy + 40, solido(gris, a), [=](float qx, float qy) { return dCaja(qx, qy, cx, cy, 58, 36, 5); });           // la pantalla
+        figura(cx - 52, cy - 30, cx + 52, cy + 30, solido(raya, a), [=](float qx, float qy) {                                                       // el juego: rayas que corren
+          return fmaxf(dCaja(qx, qy, cx, cy, 50, 28, 3), fabsf(fmodf(qx + qy + tAhora * 60 + 2000, 34.f) - 17) - 6); });
+        circulo(cx - 78, cy - 14, 6, Col{120, 24, 30}, a); circulo(cx + 78, cy + 12, 5, Col{24, 70, 140}, a); circulo(cx + 88, cy - 4, 5, Col{24, 70, 140}, a);
+        for (int s2 = -1; s2 <= 1; s2 += 2)                                              // las manos, con el pulgar apretando por turnos
+          manoBlanca(cx + s2 * 96, cy + 14 + 3 * fabsf(sinf(u * 9 + (s2 > 0 ? 1.6f : 0))), s2 > 0 ? PI : 0, 1.0f, false, a);
+      }
+      break;
+    case LEEMAPA:
+      if (delante) {
+        const float a = tramo(u, 0.1f, 0.4f) * (1 - tramo(u, 4.0f, 4.5f)), cy = 282 + subeDe(u, 4.5f) + 3 * sinf(u * 2.2f);
+        const Col papel{246, 240, 224}, doblez{196, 186, 160}, via{200, 204, 214};
+        figura(CX - 132, cy - 66, CX + 132, cy + 66, solido(papel, a), [=](float qx, float qy) {         // el papel, plegado en tres: zigzag arriba y abajo
+          const float z = 8 * (fabsf(fmodf((qx - CX + 126) / 84, 2.f) - 1) - 0.5f);
+          return dCaja(qx, qy + z, CX, cy, 126, 56, 4); });
+        for (int k2 = -1; k2 <= 1; k2 += 2) linea(CX + k2 * 42, cy - 52, CX + k2 * 42, cy + 52, 1.2f, doblez, a);   // los dobleces
+        linea(CX - 110, cy + 10, CX - 30, cy - 24, 3, via, a); linea(CX - 30, cy - 24, CX + 104, cy - 6, 3, via, a); linea(CX - 60, cy + 44, CX - 10, cy - 40, 3, via, a);
+        linea(CX - 96, cy + 34, CX - 44, cy + 4, 3.4f, Col{66, 150, 246}, a); linea(CX - 44, cy + 4, CX + 30, cy + 18, 3.4f, Col{66, 150, 246}, a);
+        linea(CX + 30, cy + 18, CX + 78, cy - 18, 3.4f, Col{66, 150, 246}, a);                              // la ruta
+        circulo(CX + 78, cy - 24, 8, Col{232, 60, 66}, a); circulo(CX + 78, cy - 24, 3, papel, a);         // el destino
+        for (int s2 = -1; s2 <= 1; s2 += 2) manoBlanca(CX + s2 * 128, cy + 10, s2 > 0 ? PI : 0, 1.0f, false, a);
+      }
+      break;
+    case CONO:
+      if (delante) {
+        const float a = tramo(u, 0.1f, 0.4f) * (1 - tramo(u, 5.1f, 5.6f)), p = fmodf(u, 1.7f) / 1.7f, cerca = tramo(p, 0.15f, 0.4f) * (1 - tramo(p, 0.62f, 0.8f));
+        const int n = (int)(u / 1.7f) + (p > 0.5f ? 1 : 0);                               // lamidas: la bola de arriba se va gastando
+        const Col cono{222, 160, 84}, rejilla{166, 104, 46}, vainilla{255, 238, 196}, fresa{255, 146, 180}, brillo{255, 216, 228};
+        const float bx = ahora.bx, by = ahora.by, cx = bx + 40 * (1 - cerca), top = by + 18 + 14 * (1 - cerca) + subeDe(u, 5.6f);
+        const float r2 = 21 - 2 * fminf(n, 3), r1 = 26, y2 = top + r2, y1 = y2 + r2 * 0.6f + r1 * 0.55f, yc = y1 + r1 * 0.5f;
+        figura(cx - 25, yc, cx + 25, yc + 54, solido(cono, a), [=](float qx, float qy) { return dTriangulo(qx, qy, cx - 23, yc, cx + 23, yc, cx, yc + 52); });
+        figura(cx - 25, yc, cx + 25, yc + 54, solido(rejilla, a), [=](float qx, float qy) {                                     // la galleta: rejilla en rombos
+          return fmaxf(dTriangulo(qx, qy, cx - 23, yc, cx + 23, yc, cx, yc + 52), fminf(fabsf(fmodf(qx + qy + 2000, 11.f) - 5.5f), fabsf(fmodf(qx - qy + 2000, 11.f) - 5.5f)) - 0.8f); });
+        circulo(cx, y1, r1, vainilla, a); circulo(cx - 1, y2, r2, fresa, a);
+        linea(cx + 7, y2 + r2 * 0.7f, cx + 8, y2 + r2 * 0.7f + 9 + 4 * sinf(u * 3), 3.2f, fresa, a);                             // se chorrea
+        figura(cx - r2, y2 - r2, cx, y2, solido(brillo, 0.8f * a), [=](float qx, float qy) { return dElipse(qx, qy, cx - r2 * 0.36f, y2 - r2 * 0.4f, r2 * 0.3f, r2 * 0.18f); });
+        figura(cx - 28, yc - 6, cx + 28, yc + 6, solido(cono, a), [=](float qx, float qy) { return dCaja(qx, qy, cx, yc, 26, 4.2f, 3.5f); });   // el borde de la galleta
+        if (n == 0) { linea(cx + 3, top - 4, cx + 9, top - 15, 1.3f, Col{120, 70, 40}, a); circulo(cx + 3, top - 2, 6, Col{226, 40, 60}, a); }   // la cereza (se va con el primer lengüetazo)
+        manoBlanca(cx + 16, yc + 36, PI, 0.9f, false, a);
+        const float lame = campana(p, 0.36f, 0.64f);                                       // la lengüita
+        if (lame > 0.05f) figura(bx - 9, by, bx + 9, by + 24, solido(Col{255, 120, 150}, a), [=](float qx, float qy) { return dCaja(qx, qy, bx, by + 3 + 8 * lame, 6.5f, 2 + 8 * lame, 6); });
+      }
+      break;
+    case CRISPETAS:
+      if (delante) {
+        const float a = tramo(u, 0.1f, 0.4f) * (1 - tramo(u, 5.1f, 5.6f)), p = fmodf(u, 1.4f) / 1.4f, q = lim((p - 0.2f) / 0.35f, 0, 1);
+        const bool falla = (int)(u / 1.4f) % 3 == 2;
+        const Col roja{222, 48, 52}, blanca{250, 246, 240}, crema{255, 246, 214}, tost{255, 226, 150}, mant{255, 200, 70};
+        auto crispeta = [&](float x, float y, float s, float al) {
+          circulo(x - s * 0.5f, y + s * 0.2f, s * 0.62f, crema, al); circulo(x + s * 0.5f, y + s * 0.25f, s * 0.6f, tost, al);
+          circulo(x, y - s * 0.3f, s * 0.7f, crema, al); circulo(x + s * 0.1f, y + s * 0.15f, s * 0.28f, mant, al);
+        };
+        const float cx = CX + 100, cy = 308 + subeDe(u, 5.6f);                                               // la caja de rayas, abajo a la derecha
+        for (int i = 0; i < 7; i++)                                                        // el montón (de vez en cuando salta una)
+          crispeta(cx - 25 + i * 8.4f, cy - 34 - 5 * (i % 2) - 4 * (i % 3) - 16 * campana(fmodf(u * 0.9f + i * 0.37f, 1.f), 0, 0.3f), 8.5f, a);
+        auto dCajaP = [=](float qx, float qy) { return dCaja(qx, qy, cx, cy, 30 - (qy - cy) * 0.13f, 30, 4); };
+        figura(cx - 36, cy - 32, cx + 36, cy + 32, solido(roja, a), dCajaP);
+        figura(cx - 36, cy - 32, cx + 36, cy + 32, solido(blanca, a), [=](float qx, float qy) {
+          const float w = 30 - (qy - cy) * 0.13f;
+          return fmaxf(dCajaP(qx, qy), (fabsf(fmodf((qx - cx) / w * 2.5f + 10.25f, 1.f) - 0.5f) - 0.25f) * w * 0.4f); });
+        figura(cx - 40, cy - 36, cx + 40, cy - 24, solido(blanca, a), [=](float qx, float qy) { return dCaja(qx, qy, cx, cy - 30, 37, 4.5f, 4); });
+        manoBlanca(cx + 36, cy + 10, PI, 0.95f, false, a);
+        // la otra mano la lanza: la crispeta sube en arco hasta la boca... o le pega en la frente y rebota
+        const float mx0 = CX - 66, my0 = 306 + subeDe(u, 5.6f), lanza = campana(p, 0.08f, 0.3f);
+        const float tx = falla ? CX + 6 : ahora.bx, ty = falla ? (ahora.L.y + ahora.R.y) / 2 - ahora.L.h / 2 - 6 : ahora.by;
+        if (p < 0.2f) crispeta(mx0 + 10, my0 - 26 - 22 * lanza, 9, a);
+        else if (p < 0.55f) crispeta(mx0 + 10 + (tx - mx0 - 10) * q, my0 - 48 + (ty - my0 + 48) * q - 70 * sinf(q * PI), 9, a);
+        else if (falla && p < 0.95f) {
+          const float t = (p - 0.55f) / 0.4f;
+          crispeta(tx + 70 * t, ty - 36 * sinf(t * PI * 0.6f) + 150 * t * t, 9, a * (1 - t * t));
+          chispa(tx, ty, 13 * (1 - t), a * (1 - t), Col{255, 240, 190});
+        }
+        manoBlanca(mx0, my0 - 22 * lanza, -PI / 2 + 0.25f, 1.0f, false, a);
+      }
+      break;
+    case FELIZ:
+      if (delante) {
+        const float a = tramo(u, 0.05f, 0.3f) * (1 - tramo(u, 3.2f, 3.6f)), br = fabsf(sinf(u * 6.5f));
+        for (int s2 = -1; s2 <= 1; s2 += 2)                                               // las manos arriba, celebrando
+          manoBlanca(CX + s2 * (140 + 6 * sinf(u * 6.5f)), 172 + subeDe(u, 3.6f, 0) - 30 * br, -PI / 2 + s2 * (0.3f + 0.3f * sinf(u * 13)), 1.15f, false, a);
+        for (int i = 0; i < 6; i++) {                                                      // destellos que van saltando alrededor
+          const float p = fmodf(u * 0.9f + i * 0.31f, 1.f), an = i * 1.05f + 0.4f;
+          chispa(CX + cosf(an) * 150, 150 + sinf(an) * 96, 8 + 10 * sinf(p * PI), a * campana(p, 0, 1), i % 2 ? Col{255, 226, 90} : Col{255, 250, 220});
+        }
+      }
+      break;
+    case TRISTE:
+      if (delante) {
+        const float a = tramo(u, 0.4f, 0.9f) * (1 - tramo(u, 4.5f, 5.0f)), seca = campana(u, 3.3f, 4.3f);
+        const Col nube{150, 160, 184}, nubeO{112, 122, 150};
+        const float nx = CX + 6 * sinf(u * 1.3f), ny = 76;                                // la nubecita gris encima, con su llovizna
+        for (int i = 0; i < 4; i++) {
+          const float p = fmodf(u * 1.6f + i * 0.27f, 1.f), x = nx - 30 + i * 20;
+          linea(x, ny + 14 + 22 * p, x - 2, ny + 22 + 22 * p, 1.6f, Col{120, 190, 255}, a * (1 - p));
+        }
+        circulo(nx - 24, ny + 3, 13, nubeO, a); circulo(nx + 24, ny + 4, 12, nubeO, a); circulo(nx - 8, ny - 5, 17, nube, a); circulo(nx + 12, ny - 2, 15, nube, a);
+        figura(nx - 38, ny + 2, nx + 38, ny + 18, solido(nube, a), [=](float qx, float qy) { return dCaja(qx, qy, nx, ny + 9, 36, 7, 7); });
+        for (int s2 = -1; s2 <= 1; s2 += 2) {                                              // los lagrimones
+          const Ojo &o = s2 < 0 ? ahora.L : ahora.R;
+          const float p = fmodf(u * 0.75f + (s2 > 0 ? 0.5f : 0), 1.f);
+          if (s2 < 0 && seca > 0.3f) continue;
+          gota(o.x + s2 * 8, o.y + o.h / 2 + 12 + p * 64, 6 + 4 * tramo(p, 0, 0.3f), a * (1 - tramo(p, 0.75f, 1)));
+        }
+        if (seca > 0.02f) manoBlanca(ahora.L.x - 6 + 12 * sinf(u * 9), ahora.L.y + 14 + 90 * (1 - seca), -PI / 2 + 0.3f, 1.05f, false, a * fminf(1, seca * 3));   // se seca con la mano
+      }
+      break;
+    case SUENO:
+      if (delante) {
+        const float a = tramo(u, 0.2f, 0.6f) * (1 - tramo(u, 5.0f, 5.5f)), bos = campana(u, 1.0f, 3.0f);
+        if (bos > 0.05f) {                                                                 // se tapa el bostezo dándose palmaditas, y le sale una lagrimita
+          manoBlanca(ahora.bx + 30 - 8 * fabsf(sinf(u * 9)), ahora.by + 22 + 150 * (1 - fminf(1, bos * 2.5f)), -PI / 2 - 0.45f, 1.15f, false, a);
+          gota(ahora.R.x + ahora.R.w / 2 + 8, ahora.R.y + 4 + 10 * bos, 6, a * tramo(bos, 0.6f, 0.9f));
+        }
+        for (int i = 0; i < 3; i++) {                                                      // z z z
+          const float p = fmodf((u - 3.0f) * 0.5f + i / 3.f, 1.f);
+          if (u > 3.0f + i * 0.6f) dib::texto("z", CX + 96 + p * 54, 120 - p * 70, 18 + p * 22, Col{190, 170, 255}, a * campana(p, 0, 1) * 0.9f);
         }
       }
       break;
@@ -2328,6 +2975,7 @@ static void extrasReac(float u, bool delante) {
         const bool hayM = tAhora < gradosHasta && gradosM, ya = hayM && gradosN <= 60;        // ya toca girar
         const bool conMapa = mapaHay();                                                         // hay calles del celular: el mini mapa va a la derecha
         dib::SinZoom sz;                                                                        // en pixeles de pantalla: que quepa justo, con cualquier cara
+        ConColor cc;                                                                            // el letrero conserva sus colores en las caras blancas
         const float tw = 214, th = 95, ty = 267 + 30 * (1 - suave(lim(u / 0.45f, 0, 1))), top = ty - th;   // entra subiendo
         figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{14, 20, 38}, a), [=](float px, float py) { return dCaja(px, py, CX, ty, tw, th, 34); });
         figura(CX - tw - 4, ty - th - 4, CX + tw + 4, ty + th + 4, solido(Col{70, 110, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCaja(px, py, CX, ty, tw, th, 34)) - 1.5f; });
@@ -2386,6 +3034,13 @@ static void extrasReac(float u, bool delante) {
       if (delante) lluviaVidrio(u);
       break;
     case FRIO:
+      if (delante && esMini()) {                                   // la boquita ondulada, tiritando
+        const float af = tramo(u, 0, 0.3f) * (1 - tramo(u, 4.5f, 5.0f)), bx = ahora.bx, by = ahora.by - 4;
+        for (int i = 0; i < 6; i++) {
+          const float x0 = bx - 21 + i * 7, y0 = by + 3.5f * sinf(i * 1.57f + u * 26), y1 = by + 3.5f * sinf((i + 1) * 1.57f + u * 26);
+          linea(x0, y0, x0 + 7, y1, 2.3f, ahora.a, af);
+        }
+      }
       if (delante) for (int i = 0; i < 9; i++) {
         float p = fmodf(u * (0.25f + 0.1f * hash(i, 12)) + hash(i, 13), 1.f);
         copo(hash(i, 14) * W + sinf(u * 2 + i) * 14, -10 + p * (H + 20), 9 + 5 * hash(i, 15), u + i, campana(p, 0, 1) * (1 - tramo(u, 4.5f, 5.0f)));
@@ -2395,7 +3050,11 @@ static void extrasReac(float u, bool delante) {
       if (delante) pilita(CX, 56, 0.15f, fmodf(u, 0.8f) < 0.45f, tramo(u, 0, 0.3f) * (1 - tramo(u, 3.6f, 4.0f)));
       break;
     case GUINO:
-      if (delante && u > 0.15f && u < 1.0f) chispa(ahora.R.x + 64, ahora.R.y - 70, 16, campana(u, 0.15f, 1.0f));
+      if (delante && u > 0.2f) {                                   // la estrella sale del ojo, crece y se va, dejando chispitas
+        const float q = lim((u - 0.2f) / 1.3f, 0, 1), al = campana(u, 0.2f, 1.8f), x = ahora.R.x + 36 + 56 * q, y = ahora.R.y - 34 - 50 * q;
+        chispa(x, y, 10 + 18 * sinf(q * PI), al, Col{255, 226, 90});
+        for (int i = 0; i < 3; i++) chispa(x - 16 - i * 15, y + 13 + i * 12, 6 - i, al * (1 - q), Col{255, 246, 200});
+      }
       break;
     default: break;
   }
@@ -2415,8 +3074,10 @@ Reac reaccionActual() { return laReac; }
 
 void cuadro(float t, float dt, const Entradas &e) {
   tAhora = t; curvaAhora = e.curva;
-  dib::blanco = elPaquete == ATARDECER;   // el minimalista va con los colores de Lumi azul
-  dib::zoom = elTamano; dib::zx = CX; dib::zy = 250;   // crece hacia arriba y a los lados; abajo casi no se corta
+  dib::blanco = elPaquete == TRAZO || elPaquete == BOLITA;   // Lino y Mochi: todo en un solo color, el de "Color de los ojos" (blanco de fábrica)
+  // las caras nuevas van más contenidas: con el tamaño de fábrica nada se sale de la pantalla
+  const bool nueva = elPaquete >= CARICATURA;
+  dib::zoom = nueva ? elTamano * 0.75f : elTamano; dib::zx = CX; dib::zy = nueva ? 176 : 250;   // de fábrica quedan un poco más chicas que la pantalla   // crece hacia arriba y a los lados; abajo casi no se corta
   // modo mapa (el celular va mandando la posición): la pantalla de navegación se queda fija; ni la música ni el
   // tiempo la quitan, solo otra reacción o que el celular deje de mandar
   if (esMaps(laReac) && t - mapaT < 8 && t - reacDesde - reacExtra > 2.5f) {

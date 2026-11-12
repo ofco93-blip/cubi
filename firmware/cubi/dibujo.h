@@ -116,6 +116,7 @@ void sinFondo();
 // zoom de la cara (para el acrílico que la agranda): lo que se dibuja se escala alrededor de (zx, zy).
 // Las figuras se siguen describiendo en las medidas de siempre; figura() y texto() hacen la cuenta.
 extern float zoom, zx, zy;
+extern float sube;   // corre hacia abajo lo que se dibuje (para que algo entre subiendo desde fuera de la pantalla)
 
 inline Pintura solido(const Col &c, float alfa = 1, float halo = 0) {
   Pintura p; p.arriba = p.abajo = p.haloCol = c; p.alfa = alfa; p.halo = halo; return p;
@@ -188,13 +189,49 @@ void figura1(float bx0, float by0, float bx1, float by1, const Pintura &p0, F d)
 
 template <typename F>
 void figura(float bx0, float by0, float bx1, float by1, const Pintura &p0, F d) {
-  if (zoom == 1) { figura1(bx0, by0, bx1, by1, p0, d); return; }
+  if (zoom == 1 && sube == 0) { figura1(bx0, by0, bx1, by1, p0, d); return; }
   // el brillo no crece con el zoom (sale más barato y casi no se nota); la cuenta va con el inverso, sin dividir
-  const float z = zoom, iz = 1.f / z, ox = zx - zx * iz, oy = zy - zy * iz;
+  const float z = zoom, iz = 1.f / z, ox = zx - zx * iz, oy = zy - (zy + sube) * iz;
   Pintura p = p0;
-  p.y0 = zy + (p0.y0 - zy) * z; p.y1 = zy + (p0.y1 - zy) * z;
-  figura1(zx + (bx0 - zx) * z, zy + (by0 - zy) * z, zx + (bx1 - zx) * z, zy + (by1 - zy) * z, p,
+  p.y0 = zy + (p0.y0 - zy) * z + sube; p.y1 = zy + (p0.y1 - zy) * z + sube;
+  figura1(zx + (bx0 - zx) * z, zy + (by0 - zy) * z + sube, zx + (bx1 - zx) * z, zy + (by1 - zy) * z + sube, p,
           [&](float x, float y) { return d(ox + x * iz, oy + y * iz) * z; });
+}
+// resplandor: solo la luz difuminada alrededor de una figura, sin pintar la figura. Va barato porque es una mancha suave:
+// la distancia se calcula cada 4 pixeles y adentro se interpola. halo en pixeles de pantalla (no crece con el zoom).
+template <typename F>
+void resplandor(float bx0, float by0, float bx1, float by1, const Col &c0, float alfa, float halo, F d) {
+  if (alfa <= 0.01f || halo < 1) return;
+  const Col c = blanco ? sinColor(c0) : c0;
+  const float z = zoom, iz = 1.f / z, ox = zx - zx * iz, oy = zy - zy * iz, ih = 1.f / halo;
+  constexpr int P = 4;
+  int x0 = (int)fmaxf(0, floorf(zx + (bx0 - zx) * z - halo)) & ~(P - 1), y0 = (int)fmaxf(0, floorf(zy + (by0 - zy) * z - halo)) & ~(P - 1);
+  const int x1 = (int)fminf(W, ceilf(zx + (bx1 - zx) * z + halo)), y1 = (int)fminf(H, ceilf(zy + (by1 - zy) * z + halo));
+  if (x0 >= x1 || y0 >= y1) return;
+  marcar(x0, y0, x1, y1);
+  const int ny = (y1 - y0 + P - 1) / P + 1;
+  float ca[H / P + 2], cb[H / P + 2], *izq = ca, *der = cb;                       // las distancias de dos columnas vecinas
+  auto columna = [&](float *v, int x) { for (int j = 0; j < ny; j++) v[j] = d(ox + x * iz, oy + (y0 + j * P) * iz) * z; };
+  columna(izq, x0);
+  for (int tx = x0; tx < x1; tx += P) {
+    columna(der, tx + P);
+    for (int j = 0; j + 1 < ny; j++) {
+      const float d00 = izq[j], d01 = izq[j + 1], d10 = der[j], d11 = der[j + 1];
+      if (fminf(fminf(d00, d01), fminf(d10, d11)) >= halo) continue;               // este cuadrito queda fuera de la luz
+      for (int px = 0; px < P && tx + px < x1; px++) {
+        const float fx = px * (1.f / P), da = d00 + (d10 - d00) * fx, db = d01 + (d11 - d01) * fx;
+        for (int py = 0; py < P; py++) {
+          const int y = y0 + j * P + py;
+          if (y >= y1) break;
+          const float k = 1 - fmaxf(0, da + (db - da) * (py * (1.f / P))) * ih;
+          // tramado fino (4x4): la pantalla tiene pocos tonos por color y sin esto el degradado se ve en anillos
+          static const float TRAMA[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
+          if (k > 0.04f) mezclar(idx(tx + px, y), c, k * k * alfa + (TRAMA[(px & 3) | ((y & 3) << 2)] - 7.5f) * (1.f / 300));
+        }
+      }
+    }
+    float *t = izq; izq = der; der = t;
+  }
 }
 // para lo que va pegado al borde de la pantalla (números, grados, el sol de la esquina): sin zoom mientras exista
 struct SinZoom { float z; SinZoom() : z(zoom) { zoom = 1; } ~SinZoom() { zoom = z; } };
