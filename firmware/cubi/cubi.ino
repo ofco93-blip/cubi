@@ -14,11 +14,6 @@
 #define XPOWERS_CHIP_AXP2101
 #include <XPowersLib.h>
 #include "es8311.h"
-#include <freertos/stream_buffer.h>
-#include "esp_wn_iface.h"   // la palabra de despertar (WakeNet de Espressif)
-#include "esp_wn_models.h"
-#include "model_path.h"
-#include "despertar_modelo.h"
 #include "config.h"
 #include "caras.h"
 
@@ -261,31 +256,6 @@ void analizarVoz(bool hay) {
   aVoz = vozS; aCanta = canta; aBoca = boca; aAncho = ancho; aBocaCruda = cruda; aAbre = abre;
 }
 
-// ---- Despertar con el micrófono del robot (WakeNet de Espressif, lo que usa Xiaozhi): sin celular ni internet. ----
-// De prueba la palabra es "Hi ESP" (la que trae la librería); "Hola Cubi" habría que mandarla a entrenar.
-// Va en su propia tarea, con prioridad baja, para no frenar el audio ni el dibujo.
-StreamBufferHandle_t colaVoz = nullptr;
-volatile bool oyoNombre = false;
-volatile int8_t vozEstado = 0;     // 0 arrancando, 1 oyendo, -1 no cargó el modelo
-volatile uint16_t vozUs = 0;       // lo que tarda cada bloque (microsegundos)
-void tareaDespertar(void *) {
-  srmodel_list_t *ms = srmodel_load(MODELO_VOZ);
-  char *nombre = ms ? esp_srmodel_filter(ms, ESP_WN_PREFIX, NULL) : nullptr;
-  const esp_wn_iface_t *wn = nombre ? esp_wn_handle_from_name(nombre) : nullptr;
-  model_iface_data_t *md = wn ? wn->create(nombre, DET_MODE_90) : nullptr;
-  if (!md) { vozEstado = -1; Serial.println("WakeNet no cargo"); vTaskDelete(nullptr); return; }
-  const size_t bytes = wn->get_samp_chunksize(md) * sizeof(int16_t);
-  int16_t *b = (int16_t *)malloc(bytes);
-  vozEstado = 1;
-  for (;;) {
-    size_t hay = 0;
-    while (hay < bytes) hay += xStreamBufferReceive(colaVoz, (uint8_t *)b + hay, bytes - hay, portMAX_DELAY);
-    uint32_t t0 = micros();
-    if (wn->detect(md, b) == WAKENET_DETECTED) oyoNombre = true;
-    vozUs = micros() - t0;
-  }
-}
-
 void tareaAudio(void *) {
   float bAvg = 0, bPrev = 0, piso = 30, pico = 300, fB = 0, fM = 0, fA = 0;
   uint32_t ultBeat = 0, tEval = 0, tSon = 0, mudoHasta = 0, paHasta = 0;
@@ -300,11 +270,6 @@ void tareaAudio(void *) {
     sonando = s;
     if (s) { mudoHasta = now + 250; paHasta = now + 400; digitalWrite(P_PA, HIGH); }
     else if (now > paHasta) digitalWrite(P_PA, LOW);  // apaga el amplificador: sin soplido
-    if (colaVoz && n == sizeof(rxBuf) && now >= mudoHasta) {   // lo que oye va también a la palabra de despertar (no su propio sonido)
-      static int16_t mono[NF];
-      for (int i = 0; i < NF; i++) mono[i] = (rxBuf[2 * i] + rxBuf[2 * i + 1]) / 2;
-      xStreamBufferSend(colaVoz, mono, sizeof(mono), 0);
-    }
     if (n < sizeof(rxBuf) || now < mudoHasta || !musicaOn) {
       if (!musicaOn) { estilo = NADA; aCanta = false; aBoca = 0; }
       continue;
@@ -413,8 +378,6 @@ void audioInit() {
   es8311_microphone_gain_set(es, (es8311_mic_gain_t)micGan);
   es8311_voice_volume_set(es, volumen, NULL);
   xTaskCreatePinnedToCore(tareaAudio, "audio", 8192, nullptr, 2, nullptr, 0);
-  colaVoz = xStreamBufferCreate(NF * 2 * 4, 1);
-  if (colaVoz) xTaskCreatePinnedToCore(tareaDespertar, "voz", 8192, nullptr, 1, nullptr, 0);
 }
 
 // =====================================================================================
@@ -1240,7 +1203,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
       ",\"estilo\":\"" + EST_NOM[estilo] + "\",\"bpm\":" + int(aBpm) + ",\"bat\":" + bat + ",\"usb\":" + (pmuOk && pmu.isVbusIn() ? 1 : 0) +
       ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"mc\":" + musicaCel + ",\"tam\":" + tamCara + ",\"carro\":" + apagarConCarro + ",\"lab\":" + labios + ",\"bm\":" + bocaMic + ",\"ojos\":" + colorOjos +
       ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
-      ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"curvas\":" + int(pesoIzq) + ",\"wk\":" + int(vozEstado) + ",\"wkus\":" + vozUs + ",\"fw\":" + VERSION_FW +
+      ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"curvas\":" + int(pesoIzq) + ",\"fw\":" + VERSION_FW +
       ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + ",\"paq\":" + String(caras::paqueteAhora()) + "}";  // cuadros por segundo del último cuadro
   }
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
@@ -1448,7 +1411,6 @@ void setup() {
 }
 
 void loop() {
-  if (oyoNombre) { oyoNombre = false; if (asis == NO_ASIS) llamarAsistente(); }   // oyó su nombre con su propio micrófono
   uint32_t now = millis();
   serialDebug();
   bleAtender();
