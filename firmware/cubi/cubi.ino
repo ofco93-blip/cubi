@@ -262,7 +262,7 @@ void analizarVoz(bool hay) {
 }
 
 // ---- Despertar con el micrófono del robot (WakeNet de Espressif, lo que usa Xiaozhi): sin celular ni internet. ----
-// De prueba la palabra es "Hi ESP" (la que trae la librería); "Hola Cubi" habría que mandarla a entrenar.
+// La palabra es "Hi Lili" (la escogió el usuario entre las que Espressif da hechas); "Hola Cubi" habría que mandarla a entrenar.
 // Va en su propia tarea, con prioridad baja, para no frenar el audio ni el dibujo.
 StreamBufferHandle_t colaVoz = nullptr;
 volatile bool oyoNombre = false;
