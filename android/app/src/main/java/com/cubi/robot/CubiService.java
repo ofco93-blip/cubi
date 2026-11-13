@@ -279,6 +279,7 @@ public class CubiService extends Service {
                     if (otaTerminando) otaFin(true, "Cubi se está reiniciando con la versión nueva");
                     else if (otaActiva) otaFin(false, "Se perdió la conexión. Cubi sigue con la versión que tenía; vuelve a intentarlo.");
                     avisar("desconectado");
+                    ui.post(CubiService.this::revisarAsistente);   // sin Cubi, el celular deja de escuchar "Hola Cubi"
                     ui.postDelayed(CubiService.this::buscar, otaTerminando ? 6000 : 3000);  // se reconecta solo
                 }
             }
@@ -1819,7 +1820,8 @@ public class CubiService extends Service {
         // ni con un video sonando (Facebook, reels): eso lo despertaba de la nada
         // con música SÍ escucha: en el carro la música sale por los parlantes del carro y uno le quiere hablar igual
         boolean libre = asisEstado.isEmpty() && am.getMode() == AudioManager.MODE_NORMAL && !otaActiva && ahora >= charlaHasta && !video;
-        if (oidoQuiere && modelo != null && libre) arrancarOido();
+        // solo con Cubi conectado: con el robot apagado contestaba el celular solo, sin carita
+        if (oidoQuiere && modelo != null && libre && listo) arrancarOido();
         else pararOido();
     }
 
