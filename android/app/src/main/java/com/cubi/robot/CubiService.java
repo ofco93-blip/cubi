@@ -947,8 +947,10 @@ public class CubiService extends Service {
 
     boolean hayInternet() {
         android.net.ConnectivityManager cm = getSystemService(android.net.ConnectivityManager.class);
-        android.net.NetworkCapabilities c = cm.getNetworkCapabilities(cm.getActiveNetwork());
-        return c != null && c.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+        try {
+            android.net.NetworkCapabilities c = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            return c != null && c.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+        } catch (SecurityException e) { return true; }   // sin permiso para mirar la red: se intenta con internet
     }
 
     // sin internet el reconocedor de Google no sirve: oye con Vosk (el mismo modelo de "Hola Cubi", en el celular)

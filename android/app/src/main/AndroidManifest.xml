@@ -3,6 +3,8 @@
 
     <!-- Bajar actualizaciones de GitHub -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Saber si hay internet (sin esto "Hablarle a Cubi" y "Hola Cubi" cerraban la app) -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Bluetooth: Android 12 en adelante -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
