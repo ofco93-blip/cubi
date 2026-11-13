@@ -285,6 +285,18 @@ public class MainActivity extends Activity {
             });
         }
 
+        // los registros de la app: al portapapeles o a "Compartir" (WhatsApp, correo…)
+        @JavascriptInterface
+        public void copiar(String t) {
+            runOnUiThread(() -> ((android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("Cubi", t)));
+        }
+
+        @JavascriptInterface
+        public void compartir(String t) {
+            Intent s = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, t);
+            runOnUiThread(() -> startActivity(Intent.createChooser(s, "Mandar")));
+        }
+
         @JavascriptInterface
         public String caida() { return CubiService.yo == null ? "" : CubiService.yo.caida(); }
 

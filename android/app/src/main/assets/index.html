@@ -6,42 +6,43 @@
 <title>Cubi</title>
 <style>
 :root {
-  --bg: #0d0f12; --panel: #161a1f; --panel2: #1e242b; --line: #2a323b;
-  --ink: #e9eef2; --muted: #8d99a6; --accent: #3cd6e8; --accent-ink: #041417;
+  --bg: #07090c; --panel: #12161b; --panel2: #1b2128; --line: #262e37;
+  --ink: #eef2f5; --muted: #8894a1; --accent: #3cd6e8; --accent-ink: #041417;
   --sing: #ff6fa3; --music: #ffc43d; --ok: #5be38a; --bad: #ff6b5b;
-  --r: 16px;
+  --cara: #ffffff;   /* el color escogido para la cara de Cubi */
+  --r: 20px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; }
-body { padding: 0 16px calc(84px + env(safe-area-inset-bottom)); }
-h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 26px 2px 10px; font-weight: 600; }
+body { padding: 0 16px calc(92px + env(safe-area-inset-bottom)); }
+h2 { font-size: 20px; margin: 28px 4px 12px; font-weight: 700; letter-spacing: -.01em; }
 button { font: inherit; color: inherit; border: 0; cursor: pointer; }
-input, select { font: inherit; }
+p { margin: 0; }
 
 /* cabecera */
-.top { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 14px 0 10px; display: flex; align-items: center; gap: 12px; }
-.logo { width: 42px; height: 42px; border-radius: 50%; background: #000; display: grid; place-items: center; flex: none; }
-.logo i { display: inline-block; width: 8px; height: 14px; border-radius: 4px; background: var(--accent); margin: 0 2.5px; }
-.top .t { flex: 1; min-width: 0; }
-.top b { display: block; font-size: 18px; }
-.top small { color: var(--muted); display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top { position: sticky; top: 0; z-index: 5; background: linear-gradient(var(--bg) 78%, transparent); padding: 14px 4px 14px; display: flex; align-items: center; gap: 10px; }
+.top b { font-size: 22px; flex: 1; letter-spacing: -.02em; }
+.estado { display: flex; align-items: center; gap: 7px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 13px; color: var(--muted); }
+.estado span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); flex: none; }
-.dot.on { background: var(--ok); }
+.dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
 
 /* tarjetas y controles */
-.card { background: var(--panel); border-radius: var(--r); padding: 16px; display: grid; gap: 14px; }
+.card { background: var(--panel); border: 1px solid rgba(255, 255, 255, .05); border-radius: var(--r); padding: 16px; display: grid; gap: 14px; }
 .row { display: flex; align-items: center; gap: 12px; }
 .row > span:first-child { flex: 1; }
-.btn { background: var(--panel2); border-radius: 12px; padding: 12px 14px; font-weight: 600; }
+.btn { background: var(--panel2); border-radius: 14px; padding: 13px 14px; font-weight: 600; text-align: center; }
 .btn.main { background: var(--accent); color: var(--accent-ink); }
-.btn:active { transform: scale(.97); }
+.btn:active, .paq:active, .colores button:active { transform: scale(.97); }
 .btn:disabled { opacity: .4; transform: none; }
 .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 label.sl { display: grid; gap: 6px; }
 label.sl .row span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 14px; }
-input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; }
-input[type=text], input[type=password] { width: 100%; background: var(--panel2); border: 1px solid var(--line); color: var(--ink); border-radius: 12px; padding: 12px; }
+input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; margin: 0; }
+input[type=text], input[type=password], input:not([type]), select, textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--ink); border-radius: 14px; padding: 13px; font: inherit; }
+textarea { resize: vertical; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .sw { position: relative; width: 50px; height: 30px; flex: none; }
 .sw input { opacity: 0; width: 0; height: 0; position: absolute; }
 .sw i { position: absolute; inset: 0; background: var(--line); border-radius: 15px; transition: .2s; }
@@ -49,22 +50,42 @@ input[type=text], input[type=password] { width: 100%; background: var(--panel2);
 .sw input:checked + i { background: var(--accent); }
 .sw input:checked + i::after { left: 23px; }
 .note { color: var(--muted); font-size: 14px; }
+/* las explicaciones largas van guardadas: se abren al tocarlas */
+.ayuda { color: var(--muted); font-size: 14px; }
+.ayuda summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 13px; font-weight: 600; padding: 2px 0; }
+.ayuda summary::-webkit-details-marker { display: none; }
+.ayuda summary::before { content: "?"; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid currentColor; font-size: 11px; }
+.ayuda[open] summary { margin-bottom: 6px; }
+/* lo que Cubi va reportando: letra chica, se puede copiar y mandar */
+.log { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
+.log > :first-child { font: 12px/1.5 ui-monospace, "Roboto Mono", monospace; color: var(--muted); white-space: pre-wrap; word-break: break-word; max-height: 132px; overflow: auto; user-select: text; }
+.log:has(> :first-child:empty) { display: none; }
+.lb { display: flex; gap: 8px; justify-content: flex-end; }
+.lb button { background: var(--panel2); color: var(--ink); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; }
 
-/* caras */
-.face { background: var(--panel2); border-radius: 14px; padding: 14px 6px 10px; display: grid; justify-items: center; gap: 8px; font-size: 13px; }
-.face .eyes { display: flex; gap: 9px; height: 26px; align-items: center; }
-.face .eyes i { width: 13px; height: 22px; border-radius: 7px; background: var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 50%, transparent); }
-.face.sel { outline: 2px solid var(--accent); }
+/* la cara: en grande arriba y en chiquito en cada personaje (las medidas van en em) */
+.eyes { display: flex; gap: .34em; align-items: center; justify-content: center; font-size: 30px; height: 1.1em; }
+.eyes i { width: .37em; height: .67em; border-radius: .2em; background: var(--cara); box-shadow: 0 0 .4em color-mix(in srgb, var(--cara) 50%, transparent); }
+[data-paq="8"] .eyes i { width: .67em; height: .67em; border-radius: .33em .33em .17em .17em; }
+[data-paq="9"] .eyes i { background: none; border: .07em solid var(--cara); }
+[data-paq="10"] .eyes i { height: .5em; border-radius: 50%; }
+.pantalla { justify-self: center; width: 216px; height: 176px; border-radius: 34px; background: #000; border: 1px solid var(--line); display: grid; place-content: center;
+  box-shadow: 0 0 44px -6px color-mix(in srgb, var(--cara) 34%, transparent); transition: box-shadow .3s; }
+.pantalla .eyes { font-size: 84px; }
+.pantalla .eyes i { animation: parpadeo 5s infinite; transition: background .3s, border-color .3s; }
+@keyframes parpadeo { 0%, 93%, 100% { transform: none; } 96% { transform: scaleY(.12); } }
+@media (prefers-reduced-motion: reduce) { .pantalla .eyes i { animation: none; } }
 .paqs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.paq { background: var(--panel2); border: 0; color: var(--ink); border-radius: 14px; padding: 14px 8px 12px; display: grid; justify-items: center; gap: 6px; font: inherit; }
-.paq .eyes { display: flex; gap: 10px; height: 34px; align-items: center; }
-.paq .eyes i { width: 15px; height: 28px; border-radius: 8px; background: var(--c); box-shadow: 0 0 12px color-mix(in srgb, var(--c) 50%, transparent); }
-.paq[data-paq="1"] .eyes i { width: 11px; height: 20px; border-radius: 6px; }
-.paq[data-paq="8"] .eyes i { width: 20px; height: 20px; border-radius: 10px 10px 5px 5px; }
-.paq[data-paq="9"] .eyes i { width: 11px; height: 20px; border-radius: 6px; background: none; border: 2px solid var(--c); box-sizing: border-box; }
-.paq[data-paq="10"] .eyes i { width: 11px; height: 15px; border-radius: 50%; }
+.paq { background: var(--panel2); color: var(--ink); border-radius: 16px; padding: 14px 8px 12px; display: grid; justify-items: center; gap: 6px; border: 2px solid transparent; }
 .paq small { color: var(--muted); font-size: 12px; }
-.paq.sel { outline: 2px solid var(--accent); }
+.paq.sel { border-color: var(--accent); }
+.colores { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.colores button, .colores input { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--line); padding: 0; background: var(--c); }
+.colores button.sel { border-color: var(--ink); box-shadow: 0 0 0 2px var(--bg) inset; }
+.colores input { background: conic-gradient(#f55, #fc3, #5e8, #3cf, #a7f, #f55); overflow: hidden; }
+.colores input::-webkit-color-swatch-wrapper, .colores input::-webkit-color-swatch { opacity: 0; }
+.face { background: var(--panel2); border-radius: 14px; padding: 14px 6px 10px; display: grid; justify-items: center; gap: 8px; font-size: 13px; --cara: var(--c); }
+.face.sel { outline: 2px solid var(--accent); }
 
 /* música en vivo */
 .live { display: grid; gap: 14px; }
@@ -82,12 +103,12 @@ input[type=text], input[type=password] { width: 100%; background: var(--panel2);
 .mouth div { width: 60px; height: 8px; border-radius: 50%; border: 5px solid var(--sing); background: #2a0614; transition: height .08s linear, width .12s; }
 
 /* pestañas */
-nav { position: fixed; left: 0; right: 0; bottom: 0; display: flex; background: #0f1216; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); z-index: 6; }
-nav button { flex: 1; padding: 12px 0 14px; display: grid; justify-items: center; gap: 4px; font-size: 12px; color: var(--muted); background: none; }
-nav button svg { width: 24px; height: 24px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-nav button.on { color: var(--accent); }
+nav { position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 0 0 10px var(--bg), 0 30px 0 10px var(--bg); padding: 6px; z-index: 6; }
+nav button { flex: 1; padding: 8px 0 7px; display: grid; justify-items: center; gap: 3px; font-size: 12px; color: var(--muted); background: none; border-radius: 16px; }
+nav button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+nav button.on { color: var(--accent); background: var(--panel2); }
 section[hidden] { display: none; }
-.toast { position: fixed; left: 16px; right: 16px; bottom: calc(92px + env(safe-area-inset-bottom)); background: var(--panel2); border: 1px solid var(--line); padding: 12px 14px; border-radius: 12px; opacity: 0; transform: translateY(8px); transition: .25s; pointer-events: none; z-index: 7; }
+.toast { position: fixed; left: 16px; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom)); background: var(--panel2); border: 1px solid var(--line); padding: 12px 14px; border-radius: 14px; opacity: 0; transform: translateY(8px); transition: .25s; pointer-events: none; z-index: 7; }
 .toast.on { opacity: 1; transform: none; }
 .bloqueo { position: fixed; inset: 0; z-index: 20; background: rgba(5, 7, 9, .92); display: grid; place-items: center; padding: 24px; touch-action: none; }
 .bloqueo[hidden] { display: none; }
@@ -101,48 +122,52 @@ section[hidden] { display: none; }
 <body>
 
 <div class="top">
-  <div class="logo"><i></i><i></i></div>
-  <div class="t"><b>Cubi</b><small><span class="dot" id="dot"></span><span id="conn">Buscando al robot…</span></small></div>
+  <b>Cubi</b>
+  <div class="estado"><span class="dot" id="dot"></span><span id="conn">Buscando al robot…</span></div>
 </div>
 
-<!-- ================= CARA ================= -->
-<section id="tab-cara">
-  <h2>Asistente</h2>
+<!-- ================= CUBI ================= -->
+<section id="tab-cubi">
   <div class="card">
-    <button class="btn main" id="gemini">Hablar con Gemini</button>
-    <p class="note">También con <b>doble toque</b> en la pantalla de Cubi. Mientras Gemini te contesta, Cubi mueve la boca.</p>
-    <div class="row"><span>Despertar con “Hola Cubi” u “Oye robot”</span><label class="sw"><input type="checkbox" id="hola"><i></i></label></div>
-    <p class="note">El celular escucha sin internet y nada sale de él. También escucha con música (háblale fuerte, cerca del celular). Con un video sonando (Facebook, reels) no escucha: ahí háblale con doble toque. Android muestra el puntito verde del micrófono. Sin internet igual te entiende lo básico: baila, música, pausa, siguiente, volumen, la hora, chistes y kamehameha.</p>
-    <p class="note" id="holaAhora"></p>
-    <button class="btn" id="permisoGemini" hidden>Permitir que Cubi abra Gemini con la pantalla apagada</button>
+    <div class="pantalla" id="pantalla" data-paq="1"><span class="eyes"><i></i><i></i></span></div>
+    <div class="grid2">
+      <button class="btn main" id="hablarCubi">Hablarle a Cubi</button>
+      <button class="btn" id="gemini">Gemini</button>
+    </div>
+    <details class="ayuda"><summary>Cómo hablarle</summary>
+      <p>Di “Hi Lili” (lo oye el micrófono del robot), “Hola Cubi” (lo oye el celular) o toca dos veces su pantalla. Espera su carita de escuchar y pide lo que quieras: “haz un kamehameha”, “cuéntame un chiste”. Mientras escucha y habla, la música se baja sola. Sin clave de Claude, el doble toque abre Gemini; mientras Gemini te contesta, Cubi mueve la boca.</p>
+    </details>
   </div>
-  <h2>Cubi habla (Claude)</h2>
+  <h2>Su cara</h2>
   <div class="card">
-    <p class="note" id="claudeNota"></p>
-    <input type="password" id="claveClaude" placeholder="Clave de la API de Anthropic" autocomplete="off"
-      style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font:inherit;margin:6px 0">
-    <button class="btn" id="guardarClaude">Guardar clave</button>
-    <div class="row"><span>Voz de Cubi</span></div>
-    <select id="vozCubi" style="width:100%;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font:inherit;margin:6px 0"></select>
-    <div class="row"><span>Tono (más agudo = más robotito)</span></div>
-    <input type="range" id="tonoCubi" min="0.8" max="2" step="0.05" value="1.4" style="width:100%">
-    <button class="btn" id="probarVoz">Probar voz</button>
-    <button class="btn" id="bajarVoces">Bajar más voces</button>
-    <button class="btn" id="spotify">Conectar Spotify</button>
-    <button class="btn" id="permisoMusica" hidden>Permitir que Cubi controle la música y cante con la letra</button>
-    <p class="note">Abre los ajustes de voz del celular: elige “Servicios de voz de Google”, toca el engranaje → Instalar datos de voz → Español. Al volver, las voces nuevas aparecen aquí.</p>
-    <p class="note" id="caidaNota" hidden style="user-select:text;word-break:break-word"></p>
-    <button class="btn main" id="hablarCubi">Hablarle a Cubi</button>
-    <p class="note">Di “Hola Cubi” o toca dos veces su pantalla (o “Hablarle a Cubi”), espera su carita de escuchar y pide lo que quieras: “haz un kamehameha”, “cuéntame un chiste”. Mientras escucha y habla, la música se baja sola. Sin clave, el doble toque abre Gemini como antes.</p>
+    <div class="paqs">
+      <button class="paq" data-paq="1"><span class="eyes"><i></i><i></i></span><b>Cubi</b><small>Ojitos de píldora</small></button>
+      <button class="paq" data-paq="8"><span class="eyes"><i></i><i></i></span><b>Pancho</b><small>Ojos de pan y guantes</small></button>
+      <button class="paq" data-paq="9"><span class="eyes"><i></i><i></i></span><b>Lino</b><small>Todo en línea</small></button>
+      <button class="paq" data-paq="10"><span class="eyes"><i></i><i></i></span><b>Mochi</b><small>Ojitos chiquitos</small></button>
+    </div>
+    <div class="row"><span>Color</span></div>
+    <div class="colores" id="colores"><input type="color" id="ojos" value="#ffffff" aria-label="Otro color"></div>
+    <details class="ayuda"><summary>Qué toma el color</summary>
+      <p>Todos vienen blancos. Cubi y Pancho lo toman en los ojos y la boca (sus guantes y efectos siguen a color); Lino y Mochi lo toman en todo: ojos, boca, manitos e instrumentos.</p>
+    </details>
   </div>
-  <h2>Personalidad</h2>
+  <h2>Pantalla y sonido</h2>
   <div class="card">
-    <p class="note">Elige cómo es Cubi. Puedes cambiar sus reglas o crear una nueva; los trucos, la música y el clima funcionan igual con todas.</p>
-    <select id="persona" style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font:inherit;margin:6px 0"></select>
-    <input id="pNombre" placeholder="Nombre de la personalidad" style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font:inherit;margin:6px 0">
-    <textarea id="pReglas" rows="7" placeholder="Cómo es y cómo habla Cubi" style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font:inherit;margin:6px 0;resize:vertical"></textarea>
-    <button class="btn main" id="pGuardar">Usar y guardar</button>
-    <div class="grid2"><button class="btn" id="pNueva">Nueva</button><button class="btn" id="pBorrar">Borrar</button></div>
+    <label class="sl"><div class="row"><span>Tamaño de la cara</span><span id="vTam"></span></div><input type="range" id="tam" min="100" max="150" step="5"></label>
+    <p class="note" id="fluidez">Más grande se ve mejor con el acrílico, pero a Cubi le cuesta más dibujarla.</p>
+    <label class="sl"><div class="row"><span>Brillo</span><span id="vBri"></span></div><input type="range" id="bri" min="10" max="255"></label>
+    <label class="sl"><div class="row"><span>Volumen</span><span id="vVol"></span></div><input type="range" id="vol" min="0" max="100"></label>
+    <div class="row"><span>Sonidos del robot</span><label class="sw"><input type="checkbox" id="son"><i></i></label></div>
+    <div class="row"><span>Mover la boca con la letra</span><label class="sw"><input type="checkbox" id="lab"><i></i></label></div>
+    <div class="row"><span>Apagarse cuando se apaga el carro</span><label class="sw"><input type="checkbox" id="carro"><i></i></label></div>
+    <details class="ayuda"><summary>Qué hace cada uno</summary>
+      <p>Mover la boca apagado: con la música solo baila y toca su instrumento, sin cantar. Apagarse con el carro: cuando el carro corta la corriente del USB, Cubi se despide y se apaga al minuto; al prender el carro vuelve solo. Si lo prendes con batería sin USB, no se apaga por esto.</p>
+    </details>
+    <button class="btn" id="rot">Girar la pantalla 180°</button>
+    <div hidden><label class="sl"><div class="row"><span>Qué tan duro hay que frenar para que se estrelle</span><span id="vFr"></span></div>
+      <input type="range" id="fr" min="15" max="90" step="1"></label></div>
+    <button class="btn" id="adl">Si al frenar se alegra en vez de asustarse, toca aquí</button>
   </div>
   <div hidden>
   <h2>Reacciones</h2>
@@ -159,16 +184,56 @@ section[hidden] { display: none; }
   </div>
 </section>
 
+<!-- ================= VOZ ================= -->
+<section id="tab-voz" hidden>
+  <h2>Despertarlo</h2>
+  <div class="card">
+    <div class="row"><span>“Hola Cubi” u “Oye robot” desde el celular</span><label class="sw"><input type="checkbox" id="hola"><i></i></label></div>
+    <div class="log"><div id="holaAhora"></div></div>
+    <details class="ayuda"><summary>Cómo funciona</summary>
+      <p>“Hi Lili” lo oye el robot con su propio micrófono, siempre. “Hola Cubi” lo oye el celular, solo mientras Cubi está conectado: escucha sin internet y nada sale de él. También escucha con música (háblale fuerte, cerca del celular). Con un video sonando (Facebook, reels) no escucha: ahí háblale con doble toque. Android muestra el puntito verde del micrófono. Sin internet igual te entiende lo básico: baila, música, pausa, siguiente, volumen, la hora, chistes y kamehameha.</p>
+    </details>
+    <button class="btn" id="permisoGemini" hidden>Permitir que Cubi abra Gemini con la pantalla apagada</button>
+  </div>
+  <h2>Su voz</h2>
+  <div class="card">
+    <select id="vozCubi" aria-label="Voz de Cubi"></select>
+    <label class="sl"><div class="row"><span>Tono</span><span>más agudo = más robotito</span></div>
+      <input type="range" id="tonoCubi" min="0.8" max="2" step="0.05" value="1.4"></label>
+    <div class="grid2"><button class="btn" id="probarVoz">Probar voz</button><button class="btn" id="bajarVoces">Bajar más voces</button></div>
+    <details class="ayuda"><summary>Cómo bajar voces</summary>
+      <p>Abre los ajustes de voz del celular: elige “Servicios de voz de Google”, toca el engranaje → Instalar datos de voz → Español. Al volver, las voces nuevas aparecen aquí.</p>
+    </details>
+  </div>
+  <h2>Personalidad</h2>
+  <div class="card">
+    <select id="persona" aria-label="Personalidad"></select>
+    <input id="pNombre" placeholder="Nombre de la personalidad">
+    <textarea id="pReglas" rows="6" placeholder="Cómo es y cómo habla Cubi"></textarea>
+    <button class="btn main" id="pGuardar">Usar y guardar</button>
+    <div class="grid2"><button class="btn" id="pNueva">Nueva</button><button class="btn" id="pBorrar">Borrar</button></div>
+    <p class="note">Los trucos, la música y el clima funcionan igual con todas.</p>
+  </div>
+  <h2>Conexiones</h2>
+  <div class="card">
+    <p class="note" id="claudeNota"></p>
+    <input type="password" id="claveClaude" placeholder="Clave de la API de Anthropic" autocomplete="off">
+    <button class="btn" id="guardarClaude">Guardar clave</button>
+    <button class="btn" id="spotify">Conectar Spotify</button>
+    <button class="btn" id="permisoMusica" hidden>Permitir que Cubi controle la música y cante con la letra</button>
+  </div>
+</section>
+
 <!-- ================= MÚSICA ================= -->
 <section id="tab-musica" hidden>
   <h2>En vivo</h2>
   <div class="card live">
     <div class="state"><span class="chip" id="chip">Silencio</span><span class="bpm" id="bpm"></span></div>
     <div class="mouth"><div id="mouth"></div></div>
-    <p class="note" id="letraNota"></p>
-    <p class="note" id="insNota"></p>
     <div class="meter"><div class="row"><span>Volumen que escucha</span></div><div class="bar"><b id="mNivel"></b></div></div>
     <div class="meter"><div class="row"><span>Parecido a voz</span><span class="note">la línea es desde dónde canta</span></div><div class="bar"><b id="mVoz" style="background:var(--sing)"></b><u id="mUmbral"></u></div></div>
+    <div class="log"><div><span id="letraNota"></span>
+<span id="insNota"></span></div></div>
   </div>
   <div hidden>
   <h2>Probar sin música</h2>
@@ -180,26 +245,30 @@ section[hidden] { display: none; }
   <div class="grid2" id="bailes"></div>
   <p class="note" id="cps"></p>
   </div>
-  <h2>Capturador (para afinar los instrumentos)</h2>
-  <div class="card">
-    <div class="row"><span>Capturar lo que oye</span><label class="sw"><input type="checkbox" id="captura"><i></i></label></div>
-    <p class="note" id="capturaNota">Prendido, Cubi anota cada 2 segundos lo que oye, qué instrumento decidió y qué canción sonaba, y las indicaciones de Google Maps o Waze. Úsalo un día manejando con música y luego mándame el archivo.</p>
-    <div class="grid2"><button class="btn main" id="capturaMandar">Guardar y mandar</button><button class="btn" id="capturaBorrar">Borrar</button></div>
-  </div>
   <h2>Ajustar el canto</h2>
   <div class="card">
     <div class="row"><span>Reaccionar a la música</span><label class="sw"><input type="checkbox" id="mus"><i></i></label></div>
     <div class="row"><span>Esperar a que el celular reproduzca</span><label class="sw"><input type="checkbox" id="mc"><i></i></label></div>
-    <p class="note">Prendido: con Spotify (o tu app de música) en play baila de una, también por Android Auto, y usa la letra de la canción; si el celular no reproduce nada, baila con lo que oiga (radio, la música de la oficina); con un video del celular (reels, Facebook) no baila. Apagado: se guía solo por lo que oye su micrófono.</p>
+    <details class="ayuda"><summary>Cómo funciona</summary>
+      <p>Prendido: con Spotify (o tu app de música) en play baila de una, también por Android Auto, y usa la letra de la canción; si el celular no reproduce nada, baila con lo que oiga (radio, la música de la oficina); con un video del celular (reels, Facebook) no baila. Apagado: se guía solo por lo que oye su micrófono.</p>
+    </details>
     <label class="sl"><div class="row"><span>Sensibilidad del micrófono (boca)</span><span id="vUv"></span></div>
       <input type="range" id="uv" min="5" max="95" step="1"></label>
-    <p class="note">Más alto: abre la boca con la voz más bajita. Más bajo: solo con la voz fuerte (no se le mete el ruido).</p>
     <label class="sl"><div class="row"><span>Qué tanto abre la boca</span><span id="vGb"></span></div>
       <input type="range" id="gb" min="30" max="300" step="5"></label>
+    <details class="ayuda"><summary>Sensibilidad</summary>
+      <p>Más alto: abre la boca con la voz más bajita. Más bajo: solo con la voz fuerte (no se le mete el ruido).</p>
+    </details>
     <div hidden><label class="sl"><div class="row"><span>Sensibilidad a la música</span><span id="vSk"></span></div>
       <input type="range" id="sk" min="0" max="100" step="1"></label>
     <label class="sl"><div class="row"><span>Micrófono</span><span id="vMg"></span></div>
       <input type="range" id="mg" min="0" max="7" step="1"></label></div>
+  </div>
+  <h2>Capturador</h2>
+  <div class="card">
+    <div class="row"><span>Capturar lo que oye</span><label class="sw"><input type="checkbox" id="captura"><i></i></label></div>
+    <p class="note" id="capturaNota">Prendido, Cubi anota cada 2 segundos lo que oye, qué instrumento decidió y qué canción sonaba, y las indicaciones de Google Maps o Waze. Úsalo un día manejando con música y luego mándame el archivo.</p>
+    <div class="grid2"><button class="btn main" id="capturaMandar">Guardar y mandar</button><button class="btn" id="capturaBorrar">Borrar</button></div>
   </div>
 </section>
 
@@ -208,56 +277,36 @@ section[hidden] { display: none; }
   <h2>Clima y viaje</h2>
   <div class="card">
     <div class="row"><span>Usar el GPS</span><label class="sw"><input type="checkbox" id="gps"><i></i></label></div>
-    <p class="note">Cuando paran 3 minutos después de un viaje, Cubi celebra que llegaron (sin Google Maps). En el camino revisa el clima cada 8 km y reacciona si cambia (lluvia, sol, frío, calor). Si le hablas, sabe a qué velocidad van.</p>
-    <div class="row"><span>Flechas de Google Maps y Waze</span><label class="sw"><input type="checkbox" id="nav"><i></i></label></div>
-    <p class="note">Con una ruta puesta en el celular, Cubi muestra la flecha del próximo giro y los metros que faltan: avisa como la voz de Maps, unos segundos cada vez: con tiempo (800 m), cuando falta poco (300 m) y cuando ya toca (80 m). Entre aviso y aviso sigue cantando y bailando. Y celebra al llegar.</p>
-    <p class="note" id="navAhora"></p>
-    <div class="row"><span>Modo mapa (pantalla de navegación fija)</span><label class="sw"><input type="checkbox" id="navMapa"><i></i></label></div>
-    <p class="note">Para probar cómo sería un segundo Cubi solo de navegación: mientras haya una ruta, Cubi se queda en la pantalla de giro (flecha, metros y calle) en vez de bailar, sin sonar, y la música no lo quita. Con “Usar el GPS” prendido, además sale un mini mapa con las calles de alrededor: para eso el celular le manda tu posición a OpenStreetMap (overpass-api.de) mientras haya una ruta. La línea azul de Maps no se puede sacar; para ver una ruta, escribe el destino aquí abajo.</p>
-    <div class="row"><span>Mapa completo (sin el muñequito)</span><label class="sw"><input type="checkbox" id="navCompleto"><i></i></label></div>
-    <p class="note">Apagado: Cubi con la manito o el volante y la tarjeta con el mini mapa. Prendido: el mapa en toda la pantalla, con el carrito, la ruta y arriba la barra con el giro, los metros y la calle.</p>
-    <input type="text" id="destino" placeholder="Destino de la ruta (ej: Centro Comercial Andino, Bogotá)" autocomplete="off"
-      style="width:100%;box-sizing:border-box;padding:12px;border-radius:12px;border:1px solid #333;background:#111;color:#fff;font:inherit;margin:6px 0">
-    <button class="btn" id="trazar">Trazar ruta en el mapa</button>
-    <button class="btn" id="quitarRuta">Quitar ruta</button>
-    <p class="note">La ruta la calcula un servicio libre (OSRM), no Google: puede no ser la misma que te da Maps. Para buscar el destino y trazarla, el celular manda el destino y tu posición a nominatim.openstreetmap.org y router.project-osrm.org.</p>
-    <div class="row"><span>¿Dónde parqueé?</span></div>
-    <button class="btn" id="parqueoIr">Abrir en Maps</button>
-    <p class="note" id="parqueoNota">Cuando Cubi se desconecta (se apagó el carro), la app guarda aquí dónde quedó. No manda notificación y la ubicación no sale del celular.</p>
     <div class="row"><span>Reaccionar al clima</span><label class="sw"><input type="checkbox" id="clima"><i></i></label></div>
     <p class="note" id="climaNota">Solito: cuando empieza a llover, sale el sol o la temperatura sube o baja 3 grados, hace su animación y muestra los grados. Con lluvia saca la sombrilla, con sol se alegra, con calor suda y con frío tirita. Usa tu ubicación aproximada (~1 km) y se actualiza cada 20 minutos.</p>
+    <details class="ayuda"><summary>Para qué usa el GPS</summary>
+      <p>Cuando paran 3 minutos después de un viaje, Cubi celebra que llegaron (sin Google Maps). En el camino revisa el clima cada 8 km y reacciona si cambia (lluvia, sol, frío, calor). Si le hablas, sabe a qué velocidad van.</p>
+    </details>
   </div>
-  <h2>Paquete de caras</h2>
+  <h2>Navegación</h2>
   <div class="card">
-    <div class="paqs">
-      <button class="paq" data-paq="1"><span class="eyes" style="--c:#ffffff"><i></i><i></i></span><b>Cubi</b><small>El de siempre: ojitos de píldora</small></button>
-      <button class="paq" data-paq="8"><span class="eyes" style="--c:#fff"><i></i><i></i></span><b>Pancho</b><small>Ojos de pan blancos, guantes y efectos a color</small></button>
-      <button class="paq" data-paq="9"><span class="eyes" style="--c:#fff"><i></i><i></i></span><b>Lino</b><small>Todo en línea blanca; tú le escoges el color</small></button>
-      <button class="paq" data-paq="10"><span class="eyes" style="--c:#fff"><i></i><i></i></span><b>Mochi</b><small>Ojitos alargados blancos; tú le escoges el color</small></button>
-    </div>
+    <div class="row"><span>Flechas de Google Maps y Waze</span><label class="sw"><input type="checkbox" id="nav"><i></i></label></div>
+    <div class="row"><span>Modo mapa (pantalla de navegación fija)</span><label class="sw"><input type="checkbox" id="navMapa"><i></i></label></div>
+    <div class="row"><span>Mapa completo (sin el muñequito)</span><label class="sw"><input type="checkbox" id="navCompleto"><i></i></label></div>
+    <div class="log"><div id="navAhora"></div></div>
+    <details class="ayuda"><summary>Cómo funciona</summary>
+      <p>Con una ruta puesta en el celular, Cubi muestra la flecha del próximo giro y los metros que faltan: avisa como la voz de Maps, unos segundos cada vez: con tiempo (800 m), cuando falta poco (300 m) y cuando ya toca (80 m). Entre aviso y aviso sigue cantando y bailando. Y celebra al llegar.<br><br>
+      Modo mapa: mientras haya una ruta, Cubi se queda en la pantalla de giro (flecha, metros y calle) en vez de bailar, sin sonar, y la música no lo quita. Con “Usar el GPS” prendido, además sale un mini mapa con las calles de alrededor: para eso el celular le manda tu posición a OpenStreetMap (overpass-api.de) mientras haya una ruta. La línea azul de Maps no se puede sacar; para ver una ruta, escribe el destino aquí abajo.<br><br>
+      Mapa completo apagado: Cubi con la manito o el volante y la tarjeta con el mini mapa. Prendido: el mapa en toda la pantalla, con el carrito, la ruta y arriba la barra con el giro, los metros y la calle.</p>
+    </details>
+    <input type="text" id="destino" placeholder="Destino (ej: Centro Comercial Andino, Bogotá)" autocomplete="off">
+    <div class="grid2"><button class="btn" id="trazar">Trazar ruta</button><button class="btn" id="quitarRuta">Quitar ruta</button></div>
+    <p class="note">La ruta la calcula un servicio libre (OSRM), no Google: puede no ser la misma que te da Maps. Para buscar el destino y trazarla, el celular manda el destino y tu posición a nominatim.openstreetmap.org y router.project-osrm.org.</p>
   </div>
-  <h2>Pantalla y sonido</h2>
+  <h2>¿Dónde parqueé?</h2>
   <div class="card">
-    <label class="sl"><div class="row"><span>Tamaño de la cara</span><span id="vTam"></span></div><input type="range" id="tam" min="100" max="150" step="5"></label>
-    <p class="note" id="fluidez">Más grande se ve mejor con el acrílico, pero a Cubi le cuesta más dibujarla.</p>
-    <label class="sl"><div class="row"><span>Brillo</span><span id="vBri"></span></div><input type="range" id="bri" min="10" max="255"></label>
-    <label class="sl"><div class="row"><span>Volumen</span><span id="vVol"></span></div><input type="range" id="vol" min="0" max="100"></label>
-    <div class="row"><span>Sonidos del robot</span><label class="sw"><input type="checkbox" id="son"><i></i></label></div>
-    <div class="row"><span>Color de los ojos</span><input type="color" id="ojos" value="#ffffff"></div>
-    <p class="note">Para Lino y Mochi: lo toma todo, ojos, boca, manitos e instrumentos. Blanco = como siempre.</p>
-    <div class="row"><span>Mover la boca con la letra (lip sync)</span><label class="sw"><input type="checkbox" id="lab"><i></i></label></div>
-    <p class="note">Apagado: con la música solo baila y toca su instrumento, sin cantar.</p>
-    <div class="row"><span>Apagarse cuando se apaga el carro</span><label class="sw"><input type="checkbox" id="carro"><i></i></label></div>
-    <p class="note">Cuando el carro corta la corriente del USB, Cubi se despide y se apaga al minuto; al prender el carro vuelve solo. Si lo prendes con batería sin USB, no se apaga por esto.</p>
-    <button class="btn" id="rot">Girar la pantalla 180°</button>
-    <div hidden><label class="sl"><div class="row"><span>Qué tan duro hay que frenar para que se estrelle</span><span id="vFr"></span></div>
-      <input type="range" id="fr" min="15" max="90" step="1"></label></div>
-    <button class="btn" id="adl">Si al frenar se alegra en vez de asustarse, toca aquí</button>
+    <p class="note" id="parqueoNota">Cuando Cubi se desconecta (se apagó el carro), la app guarda aquí dónde quedó. No manda notificación y la ubicación no sale del celular.</p>
+    <button class="btn" id="parqueoIr">Abrir en Maps</button>
   </div>
   <h2>Bluetooth</h2>
   <div class="card">
     <p class="note" id="bleNota">La app se conecta sola a Cubi por Bluetooth. El celular sigue con su internet.</p>
-    <button class="btn main" id="reconectar">Conectar por Bluetooth</button>
+    <button class="btn" id="reconectar">Conectar por Bluetooth</button>
   </div>
   <h2>Actualizaciones</h2>
   <div class="card">
@@ -268,11 +317,17 @@ section[hidden] { display: none; }
     <button class="btn" id="buscarVer">Buscar versión nueva</button>
     <button class="btn" id="subir" hidden>Subir un firmware desde un archivo</button>
   </div>
-  <p class="note" id="info" style="margin:18px 2px"></p>
+  <h2>Diagnóstico</h2>
+  <div class="card">
+    <p class="note">Si algo falla, copia esto o mándalo.</p>
+    <div class="log"><div id="diag"></div></div>
+    <p class="note" id="info"></p>
+  </div>
 </section>
 
 <nav>
-  <button data-tab="cara" class="on"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9 10v1M15 10v1M8.5 15c1 1.2 2.2 1.8 3.5 1.8s2.5-.6 3.5-1.8"/></svg>Cara</button>
+  <button data-tab="cubi" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="M9 10v3M15 10v3"/></svg>Cubi</button>
+  <button data-tab="voz"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Voz</button>
   <button data-tab="musica"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Música</button>
   <button data-tab="ajustes"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Ajustes</button>
 </nav>
@@ -311,7 +366,7 @@ const SONIDOS = [['risa', 'Risa'], ['feliz', 'Feliz'], ['sorpresa', 'Sorpresa'],
   ['enamorado', 'Amor'], ['mareado', 'Mareado'], ['sueno', 'Sueño'], ['arranque', 'Arranque']];
 const ESTADOS = ['Silencio', 'Hablando', 'Sintiendo la música', 'Cantando'];
 
-let vivo = false, tab = 'cara', ini = true;
+let vivo = false, tab = 'cubi', ini = true;
 
 function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove('on'), 2600); }
 
@@ -357,7 +412,7 @@ function pintarEstado(j) {
   document.querySelectorAll('.face').forEach(b => b.classList.toggle('sel', b.dataset.n === j.emo));
   $('conn').textContent = 'Conectado por Bluetooth' + (j.bat >= 0 ? ' · batería ' + j.bat + '%' : '');
   if (j.fw !== undefined) { vFw = j.fw; notaVersiones(); }
-  if (j.paq !== undefined) document.querySelectorAll('.paq').forEach(b => b.classList.toggle('sel', +b.dataset.paq === j.paq));
+  if (j.paq !== undefined) pintarPaq(j.paq);
   if (j.cps) $('cps').textContent = 'Ahora Cubi dibuja a ' + j.cps + ' cuadros por segundo (lo normal es 15 o más)';
   if (j.cps) $('fluidez').textContent = 'Fluidez ahora: ' + j.cps + ' cuadros por segundo' + (j.cps < 15 ? ' (se ve trabado: baja el tamaño)' : '') + '. Más grande se ve mejor con el acrílico, pero a Cubi le cuesta más dibujarla.';
   $('info').textContent = 'Cubi v' + j.ver + (j.carga ? ' · cargando' : j.usb ? ' · conectado al USB' : ' · con batería');
@@ -366,7 +421,7 @@ function pintarEstado(j) {
     if (j.tam !== undefined) $('tam').value = j.tam;
     if (j.carro !== undefined) $('carro').checked = !!j.carro;
     if (j.lab !== undefined) $('lab').checked = !!j.lab;
-    if (j.ojos !== undefined && document.activeElement !== $('ojos')) $('ojos').value = '#' + j.ojos.toString(16).padStart(6, '0');
+    if (j.ojos !== undefined && document.activeElement !== $('ojos')) pintarColor('#' + j.ojos.toString(16).padStart(6, '0'));
     $('bri').value = j.bri; $('vol').value = j.vol; $('son').checked = !!j.son; $('mus').checked = !!j.mus; if (j.mc !== undefined) $('mc').checked = !!j.mc;
     $('uv').value = 100 - Math.round(j.uv * 100); $('gb').value = Math.round(j.gb * 100);
     $('sk').value = Math.round((8 - j.sk) / 6.7 * 100); $('mg').value = j.mg;
@@ -427,7 +482,24 @@ $('bri').onchange = e => mandar('/brillo?v=' + e.target.value);
 $('tam').onchange = e => mandar('/ajuste?tam=' + e.target.value);
 $('carro').onchange = e => mandar('/ajuste?carro=' + (e.target.checked ? 1 : 0));
 $('lab').onchange = e => mandar('/ajuste?lab=' + (e.target.checked ? 1 : 0));
-$('ojos').onchange = e => mandar('/ajuste?ojos=' + e.target.value.slice(1));
+// el color de la cara: unos ya listos y el que se quiera; la cara de la app se pinta igual
+const COLORES = ['#ffffff', '#5ee6ff', '#ff6fb0', '#ffd23f', '#7dff9a', '#b78cff', '#ff8a3d'];
+function pintarColor(c) {
+  $('ojos').value = c; document.documentElement.style.setProperty('--cara', c);
+  document.querySelectorAll('#colores button').forEach(b => b.classList.toggle('sel', b.dataset.c === c.toLowerCase()));
+}
+function pintarPaq(n) {
+  document.querySelectorAll('.paq').forEach(b => b.classList.toggle('sel', +b.dataset.paq === +n));
+  $('pantalla').dataset.paq = n;
+}
+const ponerColor = c => { pintarColor(c); mandar('/ajuste?ojos=' + c.slice(1)); };
+COLORES.forEach(c => {
+  const b = document.createElement('button');
+  b.dataset.c = c; b.style.setProperty('--c', c); b.setAttribute('aria-label', 'Color ' + c); b.onclick = () => ponerColor(c);
+  $('colores').insertBefore(b, $('ojos'));
+});
+pintarColor('#ffffff');
+$('ojos').onchange = e => ponerColor(e.target.value);
 $('vol').onchange = e => mandar('/ajuste?vol=' + e.target.value);
 $('son').onchange = e => mandar('/ajuste?son=' + (e.target.checked ? 1 : 0));
 $('rot').onclick = () => mandar('/ajuste?rot=1');
@@ -435,7 +507,7 @@ $('clima').onchange = e => Android.climaCubi(e.target.checked);
 $('gps').onchange = e => Android.gpsCubi(e.target.checked);
 function gpsEstado(si) { $('gps').checked = si; }
 $('nav').onchange = e => { Android.navCubi(e.target.checked); navAhora(); };
-function navAhora() { if (window.Android && Android.estadoNav) $('navAhora').innerHTML = '<b>Ahora:</b> ' + Android.estadoNav(); }
+function navAhora() { if (window.Android && Android.estadoNav) $('navAhora').textContent = Android.estadoNav(); }
 if (window.Android && Android.navActiva) setTimeout(() => { $('nav').checked = Android.navActiva(); navAhora(); }, 500);
 setInterval(navAhora, 3000);
 $('navMapa').onchange = e => Android.navMapaCubi(e.target.checked);
@@ -465,7 +537,7 @@ if (window.Android) setTimeout(() => { climaEstado(Android.climaActivo()); clima
 document.querySelectorAll('.paq').forEach(b => b.onclick = () => {
   if (!vivo) return toast('Primero conecta a Cubi por Bluetooth');
   mandar('/ajuste?paq=' + b.dataset.paq);
-  document.querySelectorAll('.paq').forEach(o => o.classList.toggle('sel', o === b));
+  pintarPaq(b.dataset.paq);
   toast('Listo: Cubi ahora es ' + b.querySelector('b').textContent);
 });
 $('fr').onchange = e => mandar('/ajuste?fr=' + (e.target.value / 100));
@@ -531,8 +603,23 @@ $('guardarClaude').onclick = () => {
   Android.claudeClave(k); $('claveClaude').value = ''; claudeEstado(); toast('Clave guardada');
 };
 $('hablarCubi').onclick = () => { if (window.Android) Android.hablarCubi(); };
-// si la app se cerró sola, aquí queda el motivo (para mandárselo a quien la arregla)
-setTimeout(() => { const c = window.Android && Android.caida ? Android.caida() : ''; if (c) { $('caidaNota').hidden = false; $('caidaNota').textContent = 'La última vez que la app se cerró sola: ' + c; } }, 1500);
+// ---------- registros: letra chica, con "Copiar" y "Enviar" ----------
+function copiar(t) { if (window.Android && Android.copiar) Android.copiar(t); else if (navigator.clipboard) navigator.clipboard.writeText(t); toast('Copiado'); }
+function enviar(t) { if (window.Android && Android.compartir) Android.compartir(t); else if (navigator.share) navigator.share({text: t}); }
+document.querySelectorAll('.log').forEach(l => {
+  const d = document.createElement('div'); d.className = 'lb';
+  [['Copiar', copiar], ['Enviar', enviar]].forEach(([t, f]) => {
+    const x = document.createElement('button'); x.textContent = t; x.onclick = () => f(l.firstElementChild.textContent.trim()); d.appendChild(x);
+  });
+  l.appendChild(d);
+});
+// todo junto, para mandárselo a quien arregla la app
+function diag() {
+  if (!window.Android) return;
+  const c = Android.caida ? Android.caida() : '';
+  $('diag').textContent = [$('verNota').textContent, $('info').textContent, 'Hola Cubi: ' + $('holaAhora').textContent,
+    'Navegación: ' + $('navAhora').textContent, c ? 'Último cierre de la app: ' + c : ''].filter(x => x).join(String.fromCharCode(10));
+}
 // ---------- capturador ----------
 function capturaEstado() {
   if (!window.Android) return;
@@ -596,7 +683,7 @@ document.addEventListener('visibilitychange', () => {   // vuelve de los ajustes
 setTimeout(claudeEstado, 500);
 $('hola').onchange = e => Android.holaCubi(e.target.checked);
 function holaEstado(si) { $('hola').checked = si; holaAhora(); }
-function holaAhora() { if (window.Android) $('holaAhora').innerHTML = '<b>Ahora:</b> ' + Android.estadoHola(); }
+function holaAhora() { if (window.Android) $('holaAhora').textContent = Android.estadoHola().split(' — La última vez')[0]; diag(); }
 setTimeout(holaAhora, 800); setInterval(holaAhora, 3000);
 function revisarPermisoGemini() {
   if (!window.Android) return;

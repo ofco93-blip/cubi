@@ -42,6 +42,7 @@ int main(int argc, char **argv) {
   dib::fb = mem; dib::giro = 0;
   FILE *o = fopen(argv[3], "wb");
   iniciar(7);
+  if (const char *c = getenv("TINTE")) { long v = strtol(c, nullptr, 16); dib::tinte = {float(v >> 16 & 255), float(v >> 8 & 255), float(v & 255)}; }   // TINTE=ff7ab8: el color escogido en la app
   bool esBase = false; int ritmo = 0;
   if (que.rfind("mini_", 0) == 0) { paquete(MINIMALISTA); que = que.substr(5); }
   for (auto pq : {std::make_pair("novas_", NOVA_S), std::make_pair("kiras_", KIRA_S), std::make_pair("colores_", ATARDECER), std::make_pair("ovalo_", OVALO), std::make_pair("neon_", NEON), std::make_pair("simple_", SIMPLE), std::make_pair("pancho_", CARICATURA), std::make_pair("lino_", TRAZO), std::make_pair("mochi_", BOLITA)})   // las caras nuevas, igual que mini_

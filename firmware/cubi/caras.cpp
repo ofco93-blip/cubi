@@ -94,11 +94,12 @@ static float cinturonQ(float u) {            // por dónde va la lengüeta: 0 en
 }
 static Rostro neutro(int tono = AZUL) {
   Rostro r;
-  // Pancho: los ojos siempre blancos (el color va en los efectos y las cositas). Lino y Mochi: todo blanco, o del color que se escoja en la app.
+  // Todas vienen blancas y toman el color que se escoja en la app: Cubi y Pancho en ojos y boca (sus efectos siguen a color); Lino y Mochi en todo.
   if (((elPaquete == CARICATURA || elPaquete == MINIMALISTA) && tono != ROJO) || tono == AZUL) tono = tonoBase;
   r.L = {CX - EX, EY, EW, EH, 0, 0, 0, 1};
   r.R = {CX + EX, EY, EW, EH, 0, 0, 0, 1};
   r.a = TONOS[tono].a; r.b = TONOS[tono].b;
+  if (tono == T_PANCHO) { r.a = dib::sinColor(r.a); r.b = dib::sinColor(r.b); }   // Cubi y Pancho: ojos y boca del color escogido (blanco de fábrica)
   r.boca = 0; r.bx = CX; r.by = MY; r.bAncho = 1; r.mejillas = 0; r.corazon = 0;
   {  // ojitos de píldora parada, más chicos (como el robot del tablero)
     r.L.x = CX - EX * 0.8f; r.R.x = CX + EX * 0.8f; r.L.w = r.R.w = EW * 0.6f; r.L.h = r.R.h = EH * 0.72f;
@@ -234,7 +235,7 @@ static void boca(const Rostro &r) {
   if (elPaquete >= CARICATURA) {   // las caras nuevas: sonrisa abierta, óvalo de línea o bolita
     const int pq = elPaquete;
     figura(x - w * 0.85f - 3, y - h / 2 - 3, x + w * 0.85f + 3, y + h / 2 + 3, tonoP(r, y - h / 2, y + h / 2, 10), [=](float px, float py) {
-      if (pq == CARICATURA) return smax(dElipse(px, py, x, y - h / 2, w * 0.82f, h), (y - h / 2) - py, 5);   // media luna hacia abajo
+      if (pq == CARICATURA) return dElipse(px, py, x, y, w * 0.62f, h * 0.5f);   // Pancho: óvalo casi redondo
       if (pq == TRAZO) return fabsf(dCaja(px, py, x, y, w / 2, h / 2, fminf(w, h) / 2) + 2.6f) - 2.6f;
       return dElipse(px, py, x, y, w * 0.46f, h * 0.44f);
     });
