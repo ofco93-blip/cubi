@@ -711,6 +711,8 @@ public class CubiService extends Service {
 
     // ---------- asistente: Cubi pide abrir Gemini y se le cuenta si escucha o habla ----------
     private void evento(String e) {
+        if (e.equals("nombre")) { nombreT = System.currentTimeMillis(); despertoPor = hora() + " el robot oyó “Hi Lili”"; }
+        if (e.equals("asistente") && System.currentTimeMillis() - nombreT > 2000) despertoPor = hora() + " doble toque en la pantalla del robot";
         if (e.equals("asistente")) { if (claveClaude().isEmpty()) abrirAsistente(); else charla(); }
         if (e.equals("cancelar")) {   // lo tocaron mientras escuchaba o hablaba: se corta todo
             try { if (oreja != null) oreja.cancel(); } catch (Throwable ignorado) {}
@@ -1855,6 +1857,9 @@ public class CubiService extends Service {
     // para que la app muestre qué pasa: si el micrófono trae sonido, qué oyó por última vez y si falló algo
     private volatile int nivelMic = -1;
     private volatile String oidoOyo = "", oidoError = "";
+    private volatile String despertoPor = "";   // qué lo puso a escuchar la última vez, para el diagnóstico
+    private long nombreT;
+    private static String hora() { return new java.text.SimpleDateFormat("HH:mm:ss", Locale.US).format(new java.util.Date()); }
     private volatile boolean oidoQuiere;
     private volatile Thread oido, hiloOido;
     private volatile int miSesion = -1;
@@ -1927,7 +1932,7 @@ public class CubiService extends Service {
                 miSesion = r.getAudioSessionId();
                 r.startRecording();
                 short[] b = new short[2048];
-                int pico = 0, bloques = 0;
+                int pico = 0, bloques = 0, seguidas = 0;
                 oidoError = "";
                 while (oido == Thread.currentThread()) {
                     int n = r.read(b, 0, b.length);
@@ -1940,7 +1945,13 @@ public class CubiService extends Service {
                         String oyo = texto.replaceAll("(?s).*\"text\"\\s*:\\s*\"([^\"]*)\".*", "$1").replace("[unk]", "algo").trim();
                         if (!oyo.isEmpty() && !oyo.startsWith("{")) oidoOyo = oyo;
                     }
-                    if (HOLA.matcher(texto).find()) {
+                    // ponytail: una suposición a medias del reconocedor cambia de un bloque a otro; solo cuenta si se sostiene.
+                    // Si aún se despierta solo, subir los bloques o dejar solo el resultado final.
+                    Matcher m = HOLA.matcher(texto);
+                    seguidas = m.find() ? seguidas + 1 : 0;
+                    if (seguidas >= (fin ? 1 : 3)) {
+                        seguidas = 0;
+                        despertoPor = hora() + " el celular oyó “" + m.group() + "”";
                         rec.reset();
                         ui.post(this::oyoHola);
                     }
@@ -2009,7 +2020,7 @@ public class CubiService extends Service {
     // para la app: por qué "Hola Cubi" escucha o no
     String estadoHola() {
         String caida = caida();
-        return estadoHola0() + (caida.isEmpty() ? "" : " — La última vez que la app se cerró sola: " + caida);
+        return estadoHola0() + (despertoPor.isEmpty() ? "" : " Lo último que lo despertó: " + despertoPor + ".") + (caida.isEmpty() ? "" : " — La última vez que la app se cerró sola: " + caida);
     }
 
     private String estadoHola0() {

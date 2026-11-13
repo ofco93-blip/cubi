@@ -1451,7 +1451,7 @@ void setup() {
 }
 
 void loop() {
-  if (oyoNombre) { oyoNombre = false; if (asis == NO_ASIS && millis() > sordoHasta) llamarAsistente(); }   // oyó su nombre con su propio micrófono
+  if (oyoNombre) { oyoNombre = false; if (asis == NO_ASIS && millis() > sordoHasta) { bleEvento("nombre"); llamarAsistente(); } }   // oyó su nombre con su propio micrófono
   uint32_t now = millis();
   serialDebug();
   bleAtender();
