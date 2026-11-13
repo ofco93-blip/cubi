@@ -302,7 +302,7 @@ void tareaAudio(void *) {
     else if (now > paHasta) digitalWrite(P_PA, LOW);  // apaga el amplificador: sin soplido
     if (colaVoz && n == sizeof(rxBuf) && now >= mudoHasta) {   // lo que oye va también a la palabra de despertar (no su propio sonido)
       static int16_t mono[NF];
-      for (int i = 0; i < NF; i++) mono[i] = (rxBuf[2 * i] + rxBuf[2 * i + 1]) / 2;
+      for (int i = 0; i < NF; i++) mono[i] = constrain((rxBuf[2 * i] + rxBuf[2 * i + 1]) / 2 * GANANCIA_DESPERTAR, -32768, 32767);
       xStreamBufferSend(colaVoz, mono, sizeof(mono), 0);
     }
     if (n < sizeof(rxBuf) || now < mudoHasta || !musicaOn) {

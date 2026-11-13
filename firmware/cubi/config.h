@@ -15,6 +15,7 @@
 
 // --- Sonido (parlante de la placa) ---
 #define VOLUMEN_INICIAL 70          // 0..100
+#define GANANCIA_DESPERTAR 4        // cuánto se amplifica lo que oye la palabra de despertar ("Hi Lili"): sube si toca gritarle, baja si se despierta solo
 #define GANANCIA_MIC 4              // 0..7 (sube si no reacciona a la música, baja si reacciona a todo)
 
 // --- Detección de música (se ven los valores en vivo en la app, pestaña Música) ---
