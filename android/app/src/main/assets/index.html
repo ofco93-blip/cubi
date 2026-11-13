@@ -190,6 +190,9 @@ section[hidden] { display: none; }
   <div class="card">
     <div class="row"><span>“Hola Cubi” u “Oye robot” desde el celular</span><label class="sw"><input type="checkbox" id="hola"><i></i></label></div>
     <div class="log"><div id="holaAhora"></div></div>
+    <label class="sl"><div class="row"><span>Sensibilidad de “Hi Lili”</span><span id="vWkg"></span></div>
+      <input type="range" id="wkg" min="0" max="6" step="1" value="2"></label>
+    <p class="note">Súbela si toca gritarle; bájala si se despierta solo. En 0 no oye su nombre. Un toque en su pantalla lo hace dejar de escuchar.</p>
     <details class="ayuda"><summary>Cómo funciona</summary>
       <p>“Hi Lili” lo oye el robot con su propio micrófono, siempre. “Hola Cubi” lo oye el celular, solo mientras Cubi está conectado: escucha sin internet y nada sale de él. También escucha con música (háblale fuerte, cerca del celular). Con un video sonando (Facebook, reels) no escucha: ahí háblale con doble toque. Android muestra el puntito verde del micrófono. Sin internet igual te entiende lo básico: baila, música, pausa, siguiente, volumen, la hora, chistes y kamehameha.</p>
     </details>
@@ -421,6 +424,7 @@ function pintarEstado(j) {
     if (j.tam !== undefined) $('tam').value = j.tam;
     if (j.carro !== undefined) $('carro').checked = !!j.carro;
     if (j.lab !== undefined) $('lab').checked = !!j.lab;
+    if (j.wkg !== undefined) $('wkg').value = j.wkg;
     if (j.ojos !== undefined && document.activeElement !== $('ojos')) pintarColor('#' + j.ojos.toString(16).padStart(6, '0'));
     $('bri').value = j.bri; $('vol').value = j.vol; $('son').checked = !!j.son; $('mus').checked = !!j.mus; if (j.mc !== undefined) $('mc').checked = !!j.mc;
     $('uv').value = 100 - Math.round(j.uv * 100); $('gb').value = Math.round(j.gb * 100);
@@ -470,6 +474,7 @@ function etiquetas() {
   $('vBri').textContent = Math.round($('bri').value / 2.55) + '%';
   $('vTam').textContent = $('tam').value + '%';
   $('vVol').textContent = $('vol').value + '%';
+  $('vWkg').textContent = +$('wkg').value ? $('wkg').value + ' de 6' : 'apagada';
 }
 document.querySelectorAll('input[type=range]').forEach(r => r.addEventListener('input', etiquetas));
 $('uv').onchange = e => mandar('/ajuste?uv=' + ((100 - e.target.value) / 100));
@@ -481,6 +486,7 @@ $('mc').onchange = e => mandar('/ajuste?mc=' + (e.target.checked ? 1 : 0));
 $('bri').onchange = e => mandar('/brillo?v=' + e.target.value);
 $('tam').onchange = e => mandar('/ajuste?tam=' + e.target.value);
 $('carro').onchange = e => mandar('/ajuste?carro=' + (e.target.checked ? 1 : 0));
+$('wkg').onchange = e => mandar('/ajuste?wkg=' + e.target.value);
 $('lab').onchange = e => mandar('/ajuste?lab=' + (e.target.checked ? 1 : 0));
 // el color de la cara: unos ya listos y el que se quiera; la cara de la app se pinta igual
 const COLORES = ['#ffffff', '#5ee6ff', '#ff6fb0', '#ffd23f', '#7dff9a', '#b78cff', '#ff8a3d'];

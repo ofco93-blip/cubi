@@ -712,6 +712,13 @@ public class CubiService extends Service {
     // ---------- asistente: Cubi pide abrir Gemini y se le cuenta si escucha o habla ----------
     private void evento(String e) {
         if (e.equals("asistente")) { if (claveClaude().isEmpty()) abrirAsistente(); else charla(); }
+        if (e.equals("cancelar")) {   // lo tocaron mientras escuchaba o hablaba: se corta todo
+            try { if (oreja != null) oreja.cancel(); } catch (Throwable ignorado) {}
+            ui.removeCallbacks(orejaTarda);
+            if (voz != null) voz.stop();
+            asisDesde = 0; asisEstado = "";
+            terminarCharla();
+        }
     }
 
     // ---------- Cubi conversa: "Cubi" + lo que digas -> Claude Haiku -> lo dice en voz alta y hace un truco ----------

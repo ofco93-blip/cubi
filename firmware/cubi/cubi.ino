@@ -72,7 +72,7 @@ uint8_t pwrOn = 0, pwrOff = 0;  // por qué prendió / se apagó la última vez 
 I2SClass i2s;
 es8311_handle_t es = nullptr;
 
-uint8_t rotacion = ROTACION_INICIAL, volumen = VOLUMEN_INICIAL, micGan = GANANCIA_MIC;
+uint8_t rotacion = ROTACION_INICIAL, volumen = VOLUMEN_INICIAL, micGan = GANANCIA_MIC, ganVoz = GANANCIA_DESPERTAR;
 bool sonidoOn = true, musicaOn = true;
 uint8_t tamCara = 120;  // % del tamaño de la cara (para el acrílico)
 bool bocaMic = true;         // la boca sigue su propio micrófono (con las vocales); false: sigue la letra que manda el celular
@@ -300,9 +300,9 @@ void tareaAudio(void *) {
     sonando = s;
     if (s) { mudoHasta = now + 250; paHasta = now + 400; digitalWrite(P_PA, HIGH); }
     else if (now > paHasta) digitalWrite(P_PA, LOW);  // apaga el amplificador: sin soplido
-    if (colaVoz && n == sizeof(rxBuf) && now >= mudoHasta) {   // lo que oye va también a la palabra de despertar (no su propio sonido)
+    if (colaVoz && ganVoz && n == sizeof(rxBuf) && now >= mudoHasta) {   // lo que oye va también a la palabra de despertar (no su propio sonido)
       static int16_t mono[NF];
-      for (int i = 0; i < NF; i++) mono[i] = constrain((rxBuf[2 * i] + rxBuf[2 * i + 1]) / 2 * GANANCIA_DESPERTAR, -32768, 32767);
+      for (int i = 0; i < NF; i++) mono[i] = constrain((rxBuf[2 * i] + rxBuf[2 * i + 1]) / 2 * ganVoz, -32768, 32767);
       xStreamBufferSend(colaVoz, mono, sizeof(mono), 0);
     }
     if (n < sizeof(rxBuf) || now < mudoHasta || !musicaOn) {
@@ -453,7 +453,7 @@ int celRitmo = -1;  // el instrumento que se destaca en la canción (lo dice Hai
 uint32_t tGolpe = 0;  // pedida desde la app o tocando: le gana a la música; las del movimiento no
 uint8_t anim = NINGUNA; uint32_t animT0 = 0, animProx = 8000, animPaso = 0;
 float bostezo = 0, abreDer = 1;
-uint8_t asis = NO_ASIS; uint32_t asisHasta = 0, asisT0 = 0;
+uint8_t asis = NO_ASIS; uint32_t asisHasta = 0, asisT0 = 0, sordoHasta = 0;   // sordoHasta: recién cortado con un toque, no oye su nombre
 void ponerAsistente(uint8_t e, uint32_t ms) { asis = e; asisT0 = millis(); asisHasta = asisT0 + ms; emoHasta = 0; }
 void setEmo(Emo e, uint32_t ms) { if (e != emo) sonar(SONIDO_EMO[e]); emo = e; emoHasta = ms ? millis() + ms : 0; emoForzada = false; }
 
@@ -1055,7 +1055,9 @@ void touchUpdate(uint32_t now) {
   // toque corto: se ríe. Dos toques seguidos: llama al asistente del celular (Gemini).
   // El primer toque espera 350 ms para saber si viene el segundo.
   static uint32_t toque1 = 0;
-  if (!t && tPrev && now - tDown < 600) {
+  if (!t && tPrev && now - tDown < 600 && asis) {   // está escuchando o hablando: un toque lo corta
+    toque1 = 0; ponerAsistente(NO_ASIS, 0); sordoHasta = now + 5000; bleEvento("cancelar");
+  } else if (!t && tPrev && now - tDown < 600) {
     if (toque1 && now - toque1 < 350) { toque1 = 0; llamarAsistente(); }
     else toque1 = now;
   }
@@ -1110,7 +1112,7 @@ void energiaUpdate(uint32_t now) {
 
 void guardar() {
   prefs.putUChar("rot", rotacion); prefs.putUChar("vol", volumen); prefs.putBool("son", sonidoOn); prefs.putBool("mus", musicaOn); prefs.putBool("mc", musicaCel); prefs.putUChar("tam", tamCara); prefs.putBool("carro", apagarConCarro); prefs.putBool("lab", labios); prefs.putBool("bmic", bocaMic); prefs.putUInt("ojos", colorOjos);
-  prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan); prefs.putChar("adl", adelante); prefs.putFloat("fr", umbralFreno);
+  prefs.putFloat("uv", umbralVoz); prefs.putFloat("gb", ganBoca); prefs.putFloat("sk", sensK); prefs.putUChar("mg", micGan); prefs.putUChar("wkg", ganVoz); prefs.putChar("adl", adelante); prefs.putFloat("fr", umbralFreno);
 }
 
 // ---------- Órdenes de la app: "ruta?clave=valor&..." -> texto o JSON ----------
@@ -1231,6 +1233,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     if (p.has("gb")) ganBoca = constrain(p.get("gb").toFloat(), 0.3f, 3.f);
     if (p.has("sk")) sensK = constrain(p.get("sk").toFloat(), 1.3f, 8.f);
     if (p.has("paq")) { caras::paquete(p.get("paq").toInt()); prefs.putUChar("paq", p.get("paq").toInt()); dib::todo(); }
+    if (p.has("wkg")) ganVoz = constrain(p.get("wkg").toInt(), 0, 6);   // sensibilidad de "Hi Lili" (0 = no oye su nombre)
     if (p.has("mg")) { micGan = constrain(p.get("mg").toInt(), 0, 7); if (es) es8311_microphone_gain_set(es, (es8311_mic_gain_t)micGan); }
     guardar(); return "ok";
   }
@@ -1240,7 +1243,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
       ",\"estilo\":\"" + EST_NOM[estilo] + "\",\"bpm\":" + int(aBpm) + ",\"bat\":" + bat + ",\"usb\":" + (pmuOk && pmu.isVbusIn() ? 1 : 0) +
       ",\"carga\":" + (pmuOk && pmu.isCharging() ? 1 : 0) + ",\"vol\":" + volumen + ",\"son\":" + sonidoOn + ",\"mus\":" + musicaOn + ",\"mc\":" + musicaCel + ",\"tam\":" + tamCara + ",\"carro\":" + apagarConCarro + ",\"lab\":" + labios + ",\"bm\":" + bocaMic + ",\"ojos\":" + colorOjos +
       ",\"bri\":" + brillo + ",\"ver\":\"" VERSION "\"" + ",\"uv\":" + String(umbralVoz, 2) + ",\"gb\":" + String(ganBoca, 2) +
-      ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"curvas\":" + int(pesoIzq) + ",\"wk\":" + int(vozEstado) + ",\"wkus\":" + vozUs + ",\"fw\":" + VERSION_FW +
+      ",\"sk\":" + String(sensK, 1) + ",\"mg\":" + micGan + ",\"adl\":" + int(adelante) + ",\"fr\":" + String(umbralFreno, 2) + ",\"curvas\":" + int(pesoIzq) + ",\"wk\":" + int(vozEstado) + ",\"wkg\":" + ganVoz + ",\"wkus\":" + vozUs + ",\"fw\":" + VERSION_FW +
       ",\"cps\":" + String(1000000UL / max((uint32_t)33000, frameUs)) + ",\"paq\":" + String(caras::paqueteAhora()) + "}";  // cuadros por segundo del último cuadro
   }
   if (ruta == "/audio") {  // en vivo, para ver y calibrar el canto desde la app
@@ -1402,7 +1405,7 @@ void setup() {
   labios = prefs.getBool("lab", true); bocaMic = prefs.getBool("bmic", true); ponerColor(prefs.getUInt("ojos", 0xFFFFFF));
   caras::paquete(prefs.getUChar("paq", caras::MINIMALISTA));
   umbralVoz = prefs.getFloat("uv", UMBRAL_VOZ); ganBoca = prefs.getFloat("gb", GANANCIA_BOCA);
-  sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = UMBRAL_FRENO;
+  sensK = prefs.getFloat("sk", SONIDO_K); micGan = prefs.getUChar("mg", GANANCIA_MIC); ganVoz = prefs.getUChar("wkg", GANANCIA_DESPERTAR); adelante = prefs.getChar("adl", ADELANTE_SIGNO); umbralFreno = UMBRAL_FRENO;
   izqAcum = { prefs.getFloat("izx", 0), prefs.getFloat("izy", 0), prefs.getFloat("izz", 0) }; pesoGuardado = pesoIzq = prefs.getFloat("izp", 0);
   // la app ya no tiene estos ajustes de prueba: vuelven a los de fábrica (la boca, el brillo y el volumen sí se guardan)
   sensK = SONIDO_K; micGan = GANANCIA_MIC;
@@ -1448,7 +1451,7 @@ void setup() {
 }
 
 void loop() {
-  if (oyoNombre) { oyoNombre = false; if (asis == NO_ASIS) llamarAsistente(); }   // oyó su nombre con su propio micrófono
+  if (oyoNombre) { oyoNombre = false; if (asis == NO_ASIS && millis() > sordoHasta) llamarAsistente(); }   // oyó su nombre con su propio micrófono
   uint32_t now = millis();
   serialDebug();
   bleAtender();
