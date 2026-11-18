@@ -2188,7 +2188,7 @@ static void pantallaMapa(float lado, float u, float a) {
       if (destinoM >= 10000) snprintf(v, sizeof v, "%d", (destinoM + 500) / 1000); else if (destinoM >= 1000) snprintf(v, sizeof v, "%d,%d", destinoM / 1000, destinoM % 1000 / 100); else snprintf(v, sizeof v, "%d", destinoM);
       texto(v, 62, 188, 52, tinta, a); texto(destinoM >= 1000 ? "km" : "m", 62, 220, 18, gris, a);
     }
-    if (llegaTxt[0]) { texto("llegas", 62, 250, 15, gris, a); texto(llegaTxt, 62, 274, 30, tinta, a); }
+    if (llegaTxt[0]) { texto("llegamos", 62, 250, 15, gris, a); texto(llegaTxt, 62, 274, 30, tinta, a); }
   }
   const bool hayM = tAhora < gradosHasta && gradosM, ya = hayM && gradosN <= 60;
   if (hayM && mapaKmh >= 8 && gradosN * 3.6f / mapaKmh < 100) {                                             // a la derecha: en cuántos segundos toca girar, a la velocidad que va (la velocidad no se muestra: ya está en el tablero del carro)
