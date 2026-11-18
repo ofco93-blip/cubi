@@ -7,6 +7,7 @@
 #include <cstring>
 #include <utility>
 #include <string>
+#include <vector>
 using namespace caras;
 // "vista medir": cuánto tarda cada baile por cuadro (con voz y sin voz). En el ESP32 es ~60 veces más lento.
 static int medir() {
@@ -63,7 +64,18 @@ int main(int argc, char **argv) {
   const float FPS = 25, dt = 1 / FPS;
   if (!esBase) { base(REPOSO); for (int r = 1; r < N_REAC; r++) if (que == NOMBRE_REAC[r]) { cuadro(0, dt, Entradas()); reaccion((Reac)r); } }
   if (que == "maps_izq" || que == "maps_der") { mostrarGrados(que == "maps_izq" ? 120 : 40, 4.5f, true); mostrarCalle(que == "maps_izq" ? "Calle 85" : "Carrera 15 con 100"); }   // la flecha con los metros que faltan
-  bool mapaDemo = que.rfind("maps_", 0) == 0 && !sinMapa;   // calles de prueba: una cuadrícula con dos avenidas
+  // MAPA_ARCHIVO=archivo: un mapa de verdad. Cada renglón es "w <tramos>" (como los manda el celular) o "p <x> <y> <rumbo> <metros al giro>" (un aviso por segundo)
+  struct Aviso { float x, y, r; int m; }; std::vector<Aviso> avisos;
+  if (const char *arch = getenv("MAPA_ARCHIVO")) if (FILE *f = fopen(arch, "r")) {
+    static char ren[4096]; bool pri = true;
+    while (fgets(ren, sizeof ren, f)) {
+      ren[strcspn(ren, "\r\n")] = 0;
+      if (ren[0] == 'w') { mapaVias(ren + 2, pri, false); pri = false; }
+      else if (ren[0] == 'p') { Aviso v; if (sscanf(ren + 2, "%f %f %f %d", &v.x, &v.y, &v.r, &v.m) == 4) avisos.push_back(v); }
+    }
+    fclose(f); mapaVias("", false, true);
+  }
+  bool mapaDemo = que.rfind("maps_", 0) == 0 && !sinMapa && avisos.empty();   // calles de prueba: una cuadrícula con dos avenidas
   if (mapaDemo) {
     std::string w; bool pri = true;
     auto h2 = [](int v) { char b[3]; snprintf(b, 3, "%02x", v); return std::string(b); };
@@ -109,7 +121,8 @@ int main(int argc, char **argv) {
       }
     }
     if (que == "confeti" && i == (int)(1.5f * FPS)) cuentaPum();
-    if (mapaDemo) mapaPos(4 * sinf(t), -150 + t * 14, que == "maps_der" ? 25 * t / 4.5f : que == "maps_izq" ? -25 * t / 4.5f : 0);   // va andando
+    if (!avisos.empty() && i % (int)FPS == 0) { const Aviso &v = avisos[std::min(avisos.size() - 1, (size_t)(i / (int)FPS))]; mapaPos(v.x, v.y, v.r); mapaVel(28); mostrarGrados(v.m, 3, true); }   // un aviso por segundo, como el celular
+    if (mapaDemo && i % 25 == 0) mapaPos(4 * sinf(t), -150 + t * 14, que == "maps_der" ? 25 * t / 4.5f : que == "maps_izq" ? -25 * t / 4.5f : 0);   // va andando
     dib::empezar(); if (que == "actualizando") progreso(t, t / seg); else cuadro(t, dt, e); dib::terminar();
     for (int y = 0; y < dib::H; y++) for (int x = 0; x < dib::W; x++) {
       uint16_t p = mem[dib::idx(x, y)]; uint8_t *q = rgb + (y * dib::W + x) * 3;

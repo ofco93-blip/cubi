@@ -1932,22 +1932,22 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
 // ---------------------------------------------------------------- mapa: las calles de alrededor y la ruta (las manda el celular)
 // Las calles llegan en metros desde un punto de origen, de a 3 m (un byte por coordenada: 128 = el origen), y la posición
 // llega aparte cada segundo. Hay dos juegos: uno se dibuja mientras el otro se carga, y al terminar se cambian.
-// Clases: 0 calle, 1 avenida, 2 la ruta.
+// Clases: 0 calle, 1 avenida, 2 la ruta, 3 agua (polígono), 4 parque (polígono), 5 río o quebrada (línea).
 namespace {
-constexpr int MAX_VIAS = 160, MAX_PUNTOS = 900;
+constexpr int MAX_VIAS = 260, MAX_PUNTOS = 2000;
 constexpr float MAPA_M = 3;                                           // metros por unidad
 struct Calles { uint8_t x[MAX_PUNTOS], y[MAX_PUNTOS]; uint16_t ini[MAX_VIAS + 1]; uint8_t clase[MAX_VIAS]; int nv = 0, np = 0; };
 Calles callesA, callesB, *callesHay = &callesA, *callesCarga = &callesB;
-float mapaT = -100, mpx = 0, mpy = 0, mrumbo = 0, mtx = 0, mty = 0, mtr = 0, mapaTU = 0;
+float mapaT = -100, mpx = 0, mpy = 0, mrumbo = 0, mapaTU = 0;
 bool mapaSalta = true;
 int hexv(char c) { return c <= '9' ? c - '0' : (c | 32) - 'a' + 10; }
 }
-// w: tramos separados por punto; cada uno es su clase ('0', '1' o '2') y luego 4 letras hex por punto (x, y)
+// w: tramos separados por punto; cada uno es su clase (una cifra) y luego 4 letras hex por punto (x, y)
 void mapaVias(const char *w, bool primero, bool fin) {
   Calles &c = *callesCarga;
   if (primero) { c.nv = 0; c.np = 0; }
   while (*w && c.nv < MAX_VIAS) {
-    c.clase[c.nv] = lim(*w++ - '0', 0, 2); c.ini[c.nv] = c.np;
+    c.clase[c.nv] = lim(*w++ - '0', 0, 5); c.ini[c.nv] = c.np;
     while (*w && *w != '.') {
       if (!w[1] || !w[2] || !w[3]) { w += strlen(w); break; }
       if (c.np < MAX_PUNTOS) { c.x[c.np] = hexv(w[0]) * 16 + hexv(w[1]); c.y[c.np] = hexv(w[2]) * 16 + hexv(w[3]); c.np++; }
@@ -1959,53 +1959,113 @@ void mapaVias(const char *w, bool primero, bool fin) {
   c.ini[c.nv] = c.np;
   if (fin) { Calles *t = callesHay; callesHay = callesCarga; callesCarga = t; mapaSalta = true; }   // cambió el origen: la posición salta
 }
-// dónde va el carro: metros al este y al norte del origen, y el rumbo en grados (0 = norte, a la derecha crece)
+// ---- el dibujo del mapa: como lo ve una cámara detrás y arriba del carro, mirando hacia abajo y adelante. Las vías son
+// cuadriláteros rellenos que se angostan con la distancia (borde y relleno); el agua y los parques, polígonos.
+namespace {
+struct Cam { float cx, cy, F, alto, atras, c, s, cerca; };
+inline void proy(const Cam &m, float x, float y, float &sx, float &sy, float &k) {   // (a la derecha, adelante) en metros -> pantalla; k = pixeles por metro ahí
+  const float prof = (y + m.atras) * m.c + m.alto * m.s;
+  k = m.F / prof; sx = m.cx + x * k; sy = m.cy - ((y + m.atras) * m.s - m.alto * m.c) * k;
+}
+// una fila de pixeles de xa a xb; los dos extremos se mezclan según cuánto los cubre (borde suave)
+void fila(int y, float xa, float xb, const Col &c, float a) {
+  if (y < 0 || y >= H || xb <= 0 || xa >= W || xb <= xa) return;
+  if (xa < 0) xa = 0;
+  if (xb > W) xb = W;
+  const int i0 = (int)xa, i1 = (int)xb;
+  if (i0 == i1) { dib::mezclar(dib::idx(i0, y), c, (xb - xa) * a); return; }
+  dib::mezclar(dib::idx(i0, y), c, (1 - (xa - i0)) * a);
+  for (int x = i0 + 1; x < i1; x++) dib::mezclar(dib::idx(x, y), c, a);
+  if (i1 < W) dib::mezclar(dib::idx(i1, y), c, (xb - i1) * a);
+}
+void rellenar(const float *px, const float *py, int n, const Col &c, float a) {   // polígono cualquiera, fila por fila
+  float y0 = 1e9f, y1 = -1e9f;
+  for (int i = 0; i < n; i++) { y0 = fminf(y0, py[i]); y1 = fmaxf(y1, py[i]); }
+  const int iy0 = (int)fmaxf(0, ceilf(y0 - 0.5f)), iy1 = (int)fminf(H - 1, floorf(y1 - 0.5f));
+  for (int iy = iy0; iy <= iy1; iy++) {
+    const float yc = iy + 0.5f; float xs[16]; int m = 0;
+    for (int i = 0; i < n && m < 16; i++) {
+      const int j = i + 1 == n ? 0 : i + 1;
+      if ((py[i] <= yc) != (py[j] <= yc)) xs[m++] = px[i] + (yc - py[i]) * (px[j] - px[i]) / (py[j] - py[i]);
+    }
+    for (int i = 1; i < m; i++) { const float v = xs[i]; int j = i; while (j > 0 && xs[j - 1] > v) { xs[j] = xs[j - 1]; j--; } xs[j] = v; }
+    for (int k = 0; k + 1 < m; k += 2) fila(iy, xs[k], xs[k + 1], c, a);
+  }
+}
+void ovalo(float cx, float cy, float rx, float ry, const Col &c, float a) {
+  for (int iy = (int)fmaxf(0, cy - ry); iy <= (int)fminf(H - 1, cy + ry); iy++) {
+    const float d = (iy + 0.5f - cy) / ry;
+    if (d > -1 && d < 1) { const float hw = rx * sqrtf(1 - d * d); fila(iy, cx - hw, cx + hw, c, a); }
+  }
+}
+float fijoX = 0, fijoY = 0, fijoR = 0, fijoT = -100, velX = 0, velY = 0, velR = 0;   // el último aviso del celular y a qué ritmo venía cambiando
+}
+// dónde va el carro: metros al este y al norte del origen, y el rumbo en grados (0 = norte, a la derecha crece).
+// Llega una vez por segundo; con dos avisos seguidos se sabe la velocidad y entre aviso y aviso el robot sigue andando solo.
 void mapaPos(float x, float y, float rumbo) {
-  mtx = x; mty = y; mtr = rumbo;
-  if (mapaSalta || tAhora - mapaT > 8) { mpx = x; mpy = y; mrumbo = rumbo; mapaSalta = false; }
-  mapaT = tAhora;
+  const float dt = tAhora - fijoT;
+  if (mapaSalta || dt > 8) { mpx = x; mpy = y; if (dt > 8) { mrumbo = rumbo; velX = velY = velR = 0; } }   // cambió el origen (la velocidad sigue valiendo) o se había perdido
+  else if (dt > 0.2f) {
+    velX = lim((x - fijoX) / dt, -60, 60); velY = lim((y - fijoY) / dt, -60, 60);
+    velR = lim((fmodf(rumbo - fijoR + 540, 360) - 180) / dt, -70, 70);
+  }
+  fijoX = x; fijoY = y; fijoR = rumbo; fijoT = tAhora; mapaSalta = false; mapaT = tAhora;
 }
 void mapaVista(bool) {}   // ya no se usa (la indicación va siempre en pantalla de tablero); se deja porque la app vieja lo manda
 bool mapaHay() { return tAhora - mapaT < 8 && callesHay->nv > 0; }
 static bool soloMapa() { return esMaps(laReac); }   // la indicación va siempre en pantalla de tablero, sin el muñequito
-// Las calles con el rumbo hacia arriba y el carro en (X, Y0), en pixeles de pantalla; s = pixeles por metro. Se pintan
-// punto a punto (barato). RR > 0: solo dentro del círculo de centro (X, Yc); si no, toda la pantalla.
-// persp: como vista desde atrás del carro (lo de adelante se aleja hacia un horizonte y se adelgaza), con la paleta del tablero.
-static void pintarCalles(float X, float Yc, float Y0, float s, float RR, float a, float grosor, bool persp = false) {
-  const float k = lim((tAhora - mapaTU) * 2.5f, 0, 1);
-  mapaTU = tAhora;
-  mpx += (mtx - mpx) * k; mpy += (mty - mpy) * k;                    // entre un aviso y otro se desliza
-  mrumbo += (fmodf(mtr - mrumbo + 540, 360) - 180) * k;
-  const float h = mrumbo * PI / 180, ch = cosf(h), sh = sinf(h);
-  const float x0 = RR > 0 ? X - RR : 0, x1 = RR > 0 ? X + RR : W - 1, y0 = RR > 0 ? Yc - RR : 0, y1 = RR > 0 ? Yc + RR : H - 1;
+// El mapa con el rumbo hacia arriba y el carro en (CX, yCarro).
+static void pintarMapa(float yCarro, float a) {
+  {                                                                    // el carro sigue andando entre un aviso y otro; al llegar el siguiente se corrige suave
+    const float dtp = lim(tAhora - fijoT, 0, 1.6f), k = 1 - expf(-lim(tAhora - mapaTU, 0, 0.5f) * 8);
+    mapaTU = tAhora;
+    mpx += (fijoX + velX * dtp - mpx) * k; mpy += (fijoY + velY * dtp - mpy) * k;
+    mrumbo += (fmodf(fijoR + velR * dtp - mrumbo + 540, 360) - 180) * k;
+  }
+  enum { BORDE, CALLE, AVENIDA, PARQUE, AGUA, RUTA, RUTAB };
+  static const Col DIA[] = {{213, 217, 223}, {255, 255, 255}, {251, 227, 161}, {198, 231, 192}, {168, 212, 247}, {59, 130, 246}, {29, 95, 209}};
+  static const Col NOCHE[] = {{32, 41, 56}, {50, 62, 82}, {96, 86, 54}, {28, 58, 44}, {20, 50, 79}, {90, 162, 255}, {43, 107, 214}};
+  const Col *P = mapaDeDia ? DIA : NOCHE;
+  // ponytail: escala fija; alejar la cámara con la velocidad cuando el celular mande un pedazo de mapa más grande
+  const float Z = 0.9f;
+  Cam m; m.cx = CX; m.F = fminf(W, H * 2.2f) * 1.05f; m.alto = 150 * Z; m.atras = 150 * Z; m.c = cosf(0.8f); m.s = sinf(0.8f); m.cerca = -120 * Z;
+  m.cy = yCarro + m.F * (m.atras * m.s - m.alto * m.c) / (m.atras * m.c + m.alto * m.s);
+  const float h = mrumbo * PI / 180, ch = cosf(h), sh = sinf(h), LEJOS = 520 * Z;
   const Calles &c = *callesHay;
-  static const Col COLOR[3] = {{105, 125, 175}, {235, 240, 255}, {70, 165, 255}};   // calle, avenida, la ruta (el azul de Cubi)
-  for (int pasada = 0; pasada < 3; pasada++) for (int v = 0; v < c.nv; v++) {      // calles, encima avenidas, encima la ruta
-    if (c.clase[v] != pasada) continue;
-    static const Col TABLERO[3] = {{46, 60, 100}, {86, 106, 156}, {50, 150, 255}};   // calle, avenida, la ruta
-    static const Col TAB_DIA[3] = {{204, 208, 212}, {178, 184, 194}, {52, 140, 250}};   // de día: calles grises sobre el fondo claro
-    const Col col = persp ? (mapaDeDia ? TAB_DIA[pasada] : TABLERO[pasada]) : COLOR[pasada];
-    const int g = (int)(grosor * (pasada == 2 ? 2.2f : pasada == 1 ? 1.5f : 1) + 0.5f);
-    float ax = 0, ay = 0;
+  auto aCarro = [&](int i, float &x, float &y) { const float dx = (c.x[i] - 128) * MAPA_M - mpx, dy = (c.y[i] - 128) * MAPA_M - mpy; x = dx * ch - dy * sh; y = dx * sh + dy * ch; };
+  for (int v = 0; v < c.nv; v++) {                                     // agua y parques: lo que queda detrás de la cámara se recorta
+    if (c.clase[v] != 3 && c.clase[v] != 4) continue;
+    float qx[72], qy[72], k, ax, ay; int n = 0;
+    aCarro(c.ini[v + 1] - 1, ax, ay);
     for (int i = c.ini[v]; i < c.ini[v + 1]; i++) {
-      const float dx = (c.x[i] - 128) * MAPA_M - mpx, dy = (c.y[i] - 128) * MAPA_M - mpy;
-      float bx = X + s * (dx * ch - dy * sh), by = Y0 - s * (dx * sh + dy * ch), lejos = 1;
-      if (persp && by < Y0) { const float d = Y0 - by; lejos = 250 / (250 + d); bx = X + (bx - X) * lejos; by = Y0 - d * lejos; }
-      if (i > c.ini[v] && !(fminf(ax, bx) > x1 || fmaxf(ax, bx) < x0 || fminf(ay, by) > y1 || fmaxf(ay, by) < y0)) {
-        const int n = (int)fmaxf(fabsf(bx - ax), fabsf(by - ay)) + 1;
-        const int gs = persp ? (int)fmaxf(1, g * lejos + 0.5f) : g, g0 = -(gs / 2), g1 = g0 + gs - 1, paso = gs > 3 ? gs / 2 : 1;   // gruesa: no hace falta pintar cada punto
-        for (int j = 0; j <= n; j += paso) {
-          const int qx = (int)(ax + (bx - ax) * j / n), qy = (int)(ay + (by - ay) * j / n);
-          if (qx < x0 - 4 || qx > x1 + 4 || qy < y0 - 4 || qy > y1 + 4) continue;
-          for (int oy = g0; oy <= g1; oy++) for (int ox = g0; ox <= g1; ox++) {
-            const int ex = qx + ox, ey = qy + oy;
-            if (ex < 0 || ex >= W || ey < 0 || ey >= H) continue;
-            if (RR > 0) { const float ddx = ex - X, ddy = ey - Yc; if (ddx * ddx + ddy * ddy >= RR * RR) continue; }
-            dib::mezclar(dib::idx(ex, ey), col, a);
-          }
-        }
-      }
+      float bx, by; aCarro(i, bx, by);
+      const float da = ay - m.cerca, db = by - m.cerca;
+      if ((da >= 0) != (db >= 0) && n < 71) { proy(m, ax + (bx - ax) * da / (da - db), m.cerca, qx[n], qy[n], k); n++; }
+      if (db >= 0 && n < 71) { proy(m, bx, by, qx[n], qy[n], k); n++; }
       ax = bx; ay = by;
+    }
+    if (n >= 3) rellenar(qx, qy, n, P[c.clase[v] == 3 ? AGUA : PARQUE], a);
+  }
+  static const struct { uint8_t clase, color; float ancho; } PASADA[] = {{5, AGUA, 10}, {0, BORDE, 16}, {1, BORDE, 25}, {0, CALLE, 12}, {1, AVENIDA, 20}, {2, RUTAB, 17}, {2, RUTA, 11}};
+  for (const auto &ps : PASADA) for (int v = 0; v < c.nv; v++) {
+    if (c.clase[v] != ps.clase) continue;
+    const float medio = ps.ancho * Z / 2; float ax = 0, ay = 0;
+    for (int i = c.ini[v]; i < c.ini[v + 1]; i++) {
+      float bx, by; aCarro(i, bx, by);
+      float px = ax, py = ay, qx = bx, qy = by;
+      const bool hay = i > c.ini[v] && !(py < m.cerca && qy < m.cerca) && !(py > LEJOS && qy > LEJOS) && !(fminf(fabsf(px), fabsf(qx)) > LEJOS && px * qx > 0);
+      ax = bx; ay = by;
+      if (!hay) continue;
+      if (py < m.cerca) { px += (qx - px) * (m.cerca - py) / (qy - py); py = m.cerca; }
+      if (qy < m.cerca) { qx += (px - qx) * (m.cerca - qy) / (py - qy); qy = m.cerca; }
+      const float L = hypotf(qx - px, qy - py);
+      if (L < 0.01f) continue;
+      const float nx = -(qy - py) / L * medio, ny = (qx - px) / L * medio;
+      float X[4], Y[4], k;
+      proy(m, px + nx, py + ny, X[0], Y[0], k); proy(m, qx + nx, qy + ny, X[1], Y[1], k); proy(m, qx - nx, qy - ny, X[2], Y[2], k); proy(m, px - nx, py - ny, X[3], Y[3], k);
+      rellenar(X, Y, 4, P[ps.color], a);
+      float ex, ey; proy(m, qx, qy, ex, ey, k);                      // la unión con el tramo siguiente, redonda
+      if (medio * k > 1.2f) ovalo(ex, ey, medio * k, medio * k * 0.62f, P[ps.color], a);
     }
   }
 }
@@ -2067,10 +2127,10 @@ static void pantallaMapa(float lado, float u, float a) {
   dib::SinZoom sz;
   ConColor cc;   // el mapa conserva sus colores en las caras blancas
   const bool dia = mapaDeDia;
-  { Pintura f; f.arriba = dia ? Col{240, 242, 240} : Col{12, 22, 52}; f.abajo = dia ? Col{224, 228, 225} : Col{4, 7, 16}; f.y0 = 0; f.y1 = H; f.alfa = a;
+  { Pintura f; f.arriba = f.abajo = dia || !mapaHay() ? (dia ? Col{233, 236, 239} : Col{8, 14, 32}) : Col{22, 29, 41}; f.y0 = 0; f.y1 = H; f.alfa = a;
     figura(0, 0, W, H, f, [](float, float) { return -1.f; }); }
   const float cy = 304;
-  if (mapaHay()) pintarCalles(CX, 0, cy, 1.5f, 0, a, 5, true);
+  if (mapaHay()) pintarMapa(cy, a);
   else {                                                                                                  // sin mapa: una carretera recta con sus rayas corriendo
     for (int s = -1; s <= 1; s += 2) linea(CX + s * 150, H + 10, CX + s * 14, 96, 2.2f, dia ? Col{176, 182, 190} : Col{78, 96, 140}, a);
     for (int i = 0; i < 6; i++) {
@@ -2084,8 +2144,12 @@ static void pantallaMapa(float lado, float u, float a) {
     const Col tinta = dia ? Col{28, 32, 42} : Col{255, 255, 255};
     texto(v, 70, 206, 76, tinta, a); texto("km/h", 70, 250, 19, dia ? Col{96, 104, 118} : Col{170, 184, 214}, a);
   }
-  // la tarjeta de arriba (entra bajando): flecha grande, metros y calle
   const bool hayM = tAhora < gradosHasta && gradosM, ya = hayM && gradosN <= 60;
+  if (hayM && mapaKmh >= 8 && gradosN * 3.6f / mapaKmh < 100) {                                             // a la derecha: en cuántos segundos toca girar, a la velocidad que va
+    char v[8]; snprintf(v, sizeof v, "%d", (int)(gradosN * 3.6f / mapaKmh + 0.5f));
+    texto(v, W - 70, 206, 76, dia ? Col{28, 32, 42} : Col{255, 255, 255}, a); texto("seg", W - 70, 250, 19, dia ? Col{96, 104, 118} : Col{170, 184, 214}, a);
+  }
+  // la tarjeta de arriba (entra bajando): flecha grande, metros y calle
   const float by = 64 - 150 * (1 - tramo(u, 0.05f, 0.5f)), bw = 206, bh = 54;
   figura(CX - bw - 4, by - bh - 4, CX + bw + 4, by + bh + 4, solido(dia ? Col{32, 38, 52} : Col{10, 16, 34}, 0.96f * a), [=](float px, float py) { return dCaja(px, py, CX, by, bw, bh, 26); });
   if (!dia) figura(CX - bw - 4, by - bh - 4, CX + bw + 4, by + bh + 4, solido(Col{60, 100, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCaja(px, py, CX, by, bw, bh, 26)) - 1.3f; });

@@ -627,50 +627,145 @@ public class CubiService extends Service {
         }
     }
 
+    // Embalses, lagunas y ríos anchos: en OpenStreetMap son figuras grandes hechas de muchos pedazos. Se bajan aparte y
+    // solo al alejarse 800 m de la última vez (1,5 km a la redonda), porque pesan; aquí se guardan ya unidas en anillos.
+    private volatile java.util.List<double[][]> aguaGrande = new java.util.ArrayList<>();
+    private double aguaLat = Double.NaN, aguaLon;
+
+    private void bajarAguaGrande(double lat, double lon) throws Exception {
+        String q = "[out:json][timeout:20];relation[natural=water](around:1500," + String.format(Locale.US, "%.5f,%.5f", lat, lon) + ");out geom;";
+        JSONArray els = new JSONObject(bajarTexto("https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(q, "UTF-8"))).getJSONArray("elements");
+        java.util.ArrayList<double[][]> sal = new java.util.ArrayList<>();
+        for (int e = 0; e < els.length(); e++) {
+            JSONArray ms = els.getJSONObject(e).optJSONArray("members");
+            java.util.ArrayList<java.util.ArrayList<double[]>> tr = new java.util.ArrayList<>();
+            for (int i = 0; ms != null && i < ms.length(); i++) {
+                JSONObject m = ms.getJSONObject(i);
+                JSONArray g = m.optJSONArray("geometry");
+                // ponytail: las islas (inner) no se recortan del agua; restarlas si algún día estorban
+                if (g == null || g.length() < 2 || !"outer".equals(m.optString("role"))) continue;
+                java.util.ArrayList<double[]> t = new java.util.ArrayList<>();
+                for (int k = 0; k < g.length(); k++) t.add(new double[]{g.getJSONObject(k).getDouble("lat"), g.getJSONObject(k).getDouble("lon")});
+                tr.add(t);
+            }
+            while (!tr.isEmpty()) {                       // se pegan por las puntas hasta cerrar cada anillo
+                java.util.ArrayList<double[]> a = tr.remove(tr.size() - 1);
+                boolean pego = true;
+                while (pego && !igual(a.get(0), a.get(a.size() - 1))) {
+                    pego = false;
+                    for (int i = 0; i < tr.size() && !pego; i++) {
+                        java.util.ArrayList<double[]> t = tr.get(i);
+                        double[] fin = a.get(a.size() - 1);
+                        if (igual(t.get(0), fin)) a.addAll(t.subList(1, t.size()));
+                        else if (igual(t.get(t.size() - 1), fin)) for (int k = t.size() - 2; k >= 0; k--) a.add(t.get(k));
+                        else continue;
+                        tr.remove(i); pego = true;
+                    }
+                }
+                if (a.size() < 4) continue;
+                double[] la = new double[a.size()], lo = new double[a.size()];
+                for (int i = 0; i < la.length; i++) { la[i] = a.get(i)[0]; lo[i] = a.get(i)[1]; }
+                sal.add(new double[][]{la, lo});
+            }
+        }
+        aguaGrande = sal; aguaLat = lat; aguaLon = lon;
+    }
+    private static boolean igual(double[] a, double[] b) { return a[0] == b[0] && a[1] == b[1]; }
+
+    // una figura cerrada (agua, parque): se recorta al cuadro de 375 m y se escribe con máximo 48 puntos (cabe en un mensaje)
+    static void poligono(double[] la, double[] lo, double lat, double lon, String clase, java.util.ArrayList<String> sale) {
+        double kx = 111320 * Math.cos(Math.toRadians(lat));
+        int n = la.length;
+        double[] x = new double[n], y = new double[n];
+        for (int i = 0; i < n; i++) { x[i] = (lo[i] - lon) * kx; y[i] = (la[i] - lat) * 111320; }
+        for (int lado = 0; lado < 4; lado++) {
+            double[] nx = new double[2 * n + 2], ny = new double[2 * n + 2];
+            int m = 0;
+            for (int i = 0; i < n; i++) {
+                int j = (i + 1) % n;
+                double da = lado == 0 ? x[i] + 375 : lado == 1 ? 375 - x[i] : lado == 2 ? y[i] + 375 : 375 - y[i];
+                double db = lado == 0 ? x[j] + 375 : lado == 1 ? 375 - x[j] : lado == 2 ? y[j] + 375 : 375 - y[j];
+                if (da >= 0) { nx[m] = x[i]; ny[m++] = y[i]; }
+                if ((da >= 0) != (db >= 0)) { double f = da / (da - db); nx[m] = x[i] + (x[j] - x[i]) * f; ny[m++] = y[i] + (y[j] - y[i]) * f; }
+            }
+            x = nx; y = ny; n = m;
+            if (n < 3) return;
+        }
+        int paso = (n + 47) / 48, c = 0, ax = -1, ay = -1;
+        StringBuilder sb = new StringBuilder(clase);
+        for (int i = 0; i < n; i += paso) {
+            int qx = 128 + (int) Math.round(x[i] / 3), qy = 128 + (int) Math.round(y[i] / 3);
+            if (qx == ax && qy == ay) continue;
+            sb.append(String.format("%02x%02x", qx, qy)); c++; ax = qx; ay = qy;
+        }
+        if (c >= 3) sale.add(sb.toString());
+    }
+
     private void bajarCalles(double lat, double lon) {
         try {
-            String q = "[out:json][timeout:10];way[highway~\"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street)(_link)?$\"](around:360,"
-                    + String.format(Locale.US, "%.5f,%.5f", lat, lon) + ");out geom;";
+            if (Double.isNaN(aguaLat) || Math.hypot((lat - aguaLat) * 111320, (lon - aguaLon) * 111320 * Math.cos(Math.toRadians(lat))) > 800)
+                try { bajarAguaGrande(lat, lon); } catch (Exception e) { aguaLat = lat; aguaLon = lon; }   // sin el agua grande igual salen las calles; se reintenta 800 m más adelante
+            String donde = "(around:360," + String.format(Locale.US, "%.5f,%.5f", lat, lon) + ");";
+            String q = "[out:json][timeout:10];(way[highway~\"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street)(_link)?$\"]" + donde
+                    + "way[natural=water]" + donde + "way[waterway~\"^(river|stream|canal)$\"]" + donde + "way[leisure~\"^(park|garden)$\"]" + donde + ");out geom;";
             JSONArray els = new JSONObject(bajarTexto("https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(q, "UTF-8"))).getJSONArray("elements");
-            java.util.ArrayList<String> ruta = new java.util.ArrayList<>(), avenidas = new java.util.ArrayList<>(), calles = new java.util.ArrayList<>();
+            java.util.ArrayList<String> ruta = new java.util.ArrayList<>(), avenidas = new java.util.ArrayList<>(), calles = new java.util.ArrayList<>(), zonas = new java.util.ArrayList<>();
             double[] rla = rutaLat, rlo = rutaLon;
             if (rla != null && rlo != null) tramos(rla, rlo, lat, lon, "2", ruta);
+            for (double[][] a : aguaGrande) poligono(a[0], a[1], lat, lon, "3", zonas);
             for (int e = 0; e < els.length(); e++) {
                 JSONObject w = els.getJSONObject(e);
                 JSONArray g = w.optJSONArray("geometry");
                 if (g == null) continue;
-                String tipo = w.optJSONObject("tags") == null ? "" : w.getJSONObject("tags").optString("highway");
+                JSONObject tags = w.optJSONObject("tags") == null ? new JSONObject() : w.getJSONObject("tags");
+                String tipo = tags.optString("highway");
                 boolean grande = tipo.startsWith("motorway") || tipo.startsWith("trunk") || tipo.startsWith("primary") || tipo.startsWith("secondary");
                 double[] la = new double[g.length()], lo = new double[g.length()];
                 for (int i = 0; i < g.length(); i++) { la[i] = g.getJSONObject(i).getDouble("lat"); lo[i] = g.getJSONObject(i).getDouble("lon"); }
-                tramos(la, lo, lat, lon, grande ? "1" : "0", grande ? avenidas : calles);
+                if (!tipo.isEmpty()) tramos(la, lo, lat, lon, grande ? "1" : "0", grande ? avenidas : calles);
+                else if (tags.has("waterway")) tramos(la, lo, lat, lon, "5", zonas);
+                else if (tags.has("natural")) poligono(la, lo, lat, lon, "3", zonas);
+                else if (tags.has("leisure")) poligono(la, lo, lat, lon, "4", zonas);
             }
-            // Cubi guarda hasta 158 tramos y 890 puntos: primero la ruta, luego las avenidas
-            java.util.ArrayList<String> todas = new java.util.ArrayList<>();
+            // Cubi guarda hasta 260 tramos y 2000 puntos. Las vías van como siempre (158 tramos, 890 puntos: primero la ruta,
+            // luego las avenidas); el agua y los parques van aparte (90 tramos, 1000 puntos) y el Cubi viejo los ignora.
+            java.util.ArrayList<String> todas = new java.util.ArrayList<>(), extra = new java.util.ArrayList<>();
             int puntos = 0;
             for (java.util.ArrayList<String> grupo : java.util.Arrays.asList(ruta, avenidas, calles)) for (String v : grupo) {
                 int np = (v.length() - 1) / 4;
                 if (todas.size() >= 158 || puntos + np > 890) continue;
                 todas.add(v); puntos += np;
             }
-            if (todas.isEmpty()) { mapaEstado = "Mini mapa: no hay calles en el mapa por aquí."; return; }
-            java.util.ArrayList<String> partes = new java.util.ArrayList<>();
-            StringBuilder parte = new StringBuilder();
-            for (String v : todas) {
-                // un tramo muy largo se parte para que quepa en un mensaje (repite el punto del corte)
-                while (v.length() > 197) { partes.add((parte.length() > 0 ? parte + "." : "") + v.substring(0, 197)); parte = new StringBuilder(); v = v.charAt(0) + v.substring(193); }
-                if (parte.length() > 0 && parte.length() + 1 + v.length() > 200) { partes.add(parte.toString()); parte = new StringBuilder(); }
-                if (parte.length() > 0) parte.append('.');
-                parte.append(v);
+            puntos = 0;
+            for (String v : zonas) {
+                int np = (v.length() - 1) / 4;
+                if (extra.size() >= 90 || puntos + np > 1000) continue;
+                extra.add(v); puntos += np;
             }
-            if (parte.length() > 0) partes.add(parte.toString());
-            for (int i = 0; i < partes.size(); i++) {   // de a poquito: Cubi atiende una orden por cuadro
-                boolean fin = i == partes.size() - 1;
-                if (fin) { mapaLat0 = lat; mapaLon0 = lon; mapaListo = true; mapaDx = mapaDy = 0; mapaTramos = todas; }
-                enviar("asis|/mapa?w=" + partes.get(i) + (i == 0 ? "&n=1" : "") + (fin ? "&f=1" : ""));
+            if (todas.isEmpty()) { mapaEstado = "Mini mapa: no hay calles en el mapa por aquí."; return; }
+            java.util.ArrayList<String> mensajes = new java.util.ArrayList<>();
+            int deVias = 0;
+            for (java.util.ArrayList<String> lista : java.util.Arrays.asList(todas, extra)) {
+                StringBuilder parte = new StringBuilder();
+                for (String v : lista) {
+                    // un tramo muy largo se parte para que quepa en un mensaje (repite el punto del corte)
+                    while (v.length() > 197) { mensajes.add((parte.length() > 0 ? parte + "." : "") + v.substring(0, 197)); parte = new StringBuilder(); v = v.charAt(0) + v.substring(193); }
+                    if (parte.length() > 0 && parte.length() + 1 + v.length() > 200) { mensajes.add(parte.toString()); parte = new StringBuilder(); }
+                    if (parte.length() > 0) parte.append('.');
+                    parte.append(v);
+                }
+                if (parte.length() > 0) mensajes.add(parte.toString());
+                if (lista == todas) deVias = mensajes.size();
+            }
+            for (int i = 0; i < mensajes.size(); i++) {   // de a poquito: Cubi atiende una orden por cuadro
+                enviar("asis|/mapa?" + (i < deVias ? "w=" : "g=") + mensajes.get(i) + (i == 0 ? "&n=1" : ""));
                 Thread.sleep(160);
             }
-            mapaEstado = "Mini mapa: " + todas.size() + " tramos de calle" + (ruta.isEmpty() ? "" : ", con la ruta") + ".";
+            // el cierre va en un mensaje de vías (repite un tramo corto) para que también lo entienda el Cubi viejo
+            String cierre = todas.get(0).length() > 197 ? todas.get(0).substring(0, 197) : todas.get(0);
+            mapaLat0 = lat; mapaLon0 = lon; mapaListo = true; mapaDx = mapaDy = 0; mapaTramos = todas;
+            enviar("asis|/mapa?w=" + cierre + "&f=1");
+            mapaEstado = "Mini mapa: " + todas.size() + " tramos de calle" + (ruta.isEmpty() ? "" : ", con la ruta") + (extra.isEmpty() ? "" : ", " + extra.size() + " de agua y parques") + ".";
         } catch (Exception e) {
             mapaEstado = "Mini mapa: no pude bajar las calles (¿hay internet?).";
         } finally {
