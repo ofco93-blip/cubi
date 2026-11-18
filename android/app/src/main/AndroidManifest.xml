@@ -6,6 +6,8 @@
     <!-- Saber si hay internet (sin esto "Hablarle a Cubi" y "Hola Cubi" cerraban la app) -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- Android no se lo concede a una app normal; va declarado igual que en AAAD, cuyo pedido de marca sí se respeta -->
+    <uses-permission android:name="android.permission.INSTALL_PACKAGES" />
     <!-- Bluetooth: Android 12 en adelante -->
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN" android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -77,6 +79,10 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+        <!-- presta el instalador descargado al instalador del celular -->
+        <provider android:name="androidx.core.content.FileProvider" android:authorities="com.cubi.robot.archivos" android:exported="false" android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/rutas" />
+        </provider>
         <!-- Android Auto. Va como app de navegación porque solo esas pueden dibujar libremente; no navega -->
         <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
         <meta-data android:name="androidx.car.app.minCarApiLevel" android:value="1" />

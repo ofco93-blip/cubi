@@ -20,6 +20,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -223,7 +226,21 @@ public class MainActivity extends Activity {
         try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; } catch (Exception e) { return 0; }
     }
 
+    // Android Auto solo muestra en el carro apps que figuren instaladas por Play Store. Se pasa por el instalador del
+    // celular pidiéndole esa marca (lo mismo que hace AAAD); si no se puede, se instala como antes.
     private void instalarApk(byte[] apk) throws Exception {
+        try {
+            File d = new File(getCacheDir(), "apk");
+            d.mkdirs();
+            File f = new File(d, "cubi.apk");
+            try (OutputStream o = new FileOutputStream(f)) { o.write(apk); }
+            Uri u = androidx.core.content.FileProvider.getUriForFile(this, "com.cubi.robot.archivos", f);
+            startActivityForResult(new Intent(Intent.ACTION_INSTALL_PACKAGE).setData(u).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    .putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending").putExtra(Intent.EXTRA_RETURN_RESULT, true), 8);
+            return;
+        } catch (Exception e) {
+            // sigue con el modo de antes
+        }
         PackageInstaller pi = getPackageManager().getPackageInstaller();
         int id = pi.createSession(new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL));
         try (PackageInstaller.Session s = pi.openSession(id)) {
@@ -239,6 +256,12 @@ public class MainActivity extends Activity {
 
     // Android pide confirmar la instalación: se muestra su ventana
     private void instalacion(Intent i) {
+        if (i != null && "cubi.AUTO".equals(i.getAction())) {   // reinstala esta misma versión con la marca, para que salga en Android Auto
+            new Thread(() -> {
+                try (InputStream in = new FileInputStream(getApplicationInfo().sourceDir)) { instalarApk(leer(in)); } catch (Exception e) { js("toast('No pude reinstalar')"); }
+            }).start();
+            return;
+        }
         if (i == null || !"cubi.INSTALADA".equals(i.getAction())) return;
         int st = i.getIntExtra(PackageInstaller.EXTRA_STATUS, -999);
         if (st == PackageInstaller.STATUS_PENDING_USER_ACTION) {
