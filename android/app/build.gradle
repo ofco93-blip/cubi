@@ -60,4 +60,7 @@ dependencies {
     implementation 'net.java.dev.jna:jna:5.13.0@aar'
     // Cubi habla con Claude Haiku
     implementation 'com.anthropic:anthropic-java:2.34.0'
+    // Cubi en la pantalla del carro (Android Auto)
+    implementation 'androidx.car.app:app:1.4.0'
+    implementation 'androidx.car.app:app-projected:1.4.0'
 }

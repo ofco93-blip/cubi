@@ -370,6 +370,8 @@ public class CubiService extends Service {
     }
 
     void enviar(String s) {
+        int oj = s.indexOf("ojos=");   // el color de la cara se guarda para pintarla igual en la pantalla del carro
+        if (oj >= 0 && s.length() >= oj + 11) try { getSharedPreferences("cubi", 0).edit().putInt("ojos", Integer.parseInt(s.substring(oj + 5, oj + 11), 16)).apply(); } catch (NumberFormatException ignored) { }
         if (otaActiva && !s.startsWith("ota|")) return;  // durante la actualización no se manda nada más
         synchronized (cola) {
             if (cola.size() < 20 || otaActiva) cola.add(new Paquete(false, s.getBytes(StandardCharsets.UTF_8)));
@@ -494,7 +496,9 @@ public class CubiService extends Service {
     private volatile double mapaLat0, mapaLon0;
     private volatile boolean mapaListo, mapaCargando, mapaForzar;
     private long mapaPedido;
-    private float mapaRumbo;
+    volatile float mapaRumbo;
+    volatile double mapaDx, mapaDy;                 // dónde va el carro respecto al centro del mapa bajado (m)
+    volatile java.util.List<String> mapaTramos;     // las calles bajadas, para dibujarlas también en la pantalla del carro
     private volatile String mapaEstado = "Mini mapa: esperando el GPS.";
     // la ruta: el destino lo escribe uno en la app; se busca en OpenStreetMap (nominatim) y la ruta la calcula OSRM
     // (router.project-osrm.org, gratis y sin cuenta). No es la ruta de Google: es la de ese servicio.
@@ -593,6 +597,7 @@ public class CubiService extends Service {
         }
         double dy = (lat - mapaLat0) * 111320, dx = (lon - mapaLon0) * 111320 * Math.cos(Math.toRadians(mapaLat0));
         double lejos = Math.hypot(dx, dy);
+        mapaDx = dx; mapaDy = dy;
         if ((!mapaListo || lejos > 130 || mapaForzar) && !mapaCargando && (ahora - mapaPedido > 8000 || mapaForzar)) {
             mapaPedido = ahora; mapaCargando = true; mapaForzar = false;
             new Thread(() -> bajarCalles(lat, lon)).start();
@@ -661,7 +666,7 @@ public class CubiService extends Service {
             if (parte.length() > 0) partes.add(parte.toString());
             for (int i = 0; i < partes.size(); i++) {   // de a poquito: Cubi atiende una orden por cuadro
                 boolean fin = i == partes.size() - 1;
-                if (fin) { mapaLat0 = lat; mapaLon0 = lon; mapaListo = true; }
+                if (fin) { mapaLat0 = lat; mapaLon0 = lon; mapaListo = true; mapaDx = mapaDy = 0; mapaTramos = todas; }
                 enviar("asis|/mapa?w=" + partes.get(i) + (i == 0 ? "&n=1" : "") + (fin ? "&f=1" : ""));
                 Thread.sleep(160);
             }
@@ -1307,7 +1312,12 @@ public class CubiService extends Service {
     boolean navActiva() { return getSharedPreferences("cubi", 0).getBoolean("nav", true); }
     void navOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("nav", si).apply(); if (!si) navUltima = ""; }
     private volatile String navUltima = "", navDecision = "";
-    private long navCuando, flechaCuando;
+    volatile long navCuando;
+    private long flechaCuando;
+    // el último giro, para la pantalla del carro
+    volatile String navDir = "", navCalle = "";
+    volatile int navForma;
+    volatile double navMetros = -1;
     private String flechaAntes = "";
 
     // para la app: por qué salen o no las flechas
@@ -1329,7 +1339,7 @@ public class CubiService extends Service {
         if ((s.contains("llegaste") || s.contains("has llegado") || s.contains("you have arrived") || s.contains("arrived at"))
                 && ahora - llegadaAvisada > 60000) {
             llegadaAvisada = ahora;
-            navDecision = "¡llegamos!";
+            navDecision = "¡llegamos!"; navDir = "llegamos";
             enviar("asis|/r?n=llegamos");
             return;
         }
@@ -1360,6 +1370,13 @@ public class CubiService extends Service {
         }
         String cual = new String[]{"", "curva suave a la ", "curva cerrada a la ", "en U por la ", "glorieta, ", "salida a la "}[forma] + (recto ? "derecho" : dir.equals("maps_izq") ? "izquierda" : "derecha") + (metros >= 0 ? (recto ? " por " : " en ") + Math.round(metros) + " m" : "")
                 + (porTexto ? " (por el texto)" : " (por el dibujo)");
+        // la calle: el texto sin la distancia ni los tiempos, corto para que quepa
+        String calle = DISTANCIA.matcher(t).replaceAll(" ").replaceAll("\\d+\\s*(min|h)\\b", " ").replaceAll("[·•|]", " ").replaceAll("\\s+", " ").trim();
+        Matcher sm = SALIDA.matcher(s);
+        if (glorieta && sm.find())                      // en la glorieta lo que sirve es cuál salida
+            calle = "Salida " + (sm.group(1) != null ? sm.group(1) : sm.group(3) != null ? sm.group(3) : "" + (1 + Arrays.asList("primera", "segunda", "tercera", "cuarta", "quinta").indexOf(sm.group(2))));
+        if (calle.length() > 26) calle = calle.substring(0, 26).trim();
+        navDir = dir; navForma = forma; navMetros = metros; navCalle = calle;
         // como la voz de Maps: cada giro se avisa tres veces y entre aviso y aviso Cubi sigue en lo suyo:
         // con tiempo (800 m), cuando falta poco (300 m) y cuando ya toca (80 m). Derecho, una sola vez.
         String etapa = recto ? "recto" : metros < 0 ? "cerca" : metros <= 80 ? "ya" : metros <= 300 ? "cerca" : "lejos";
@@ -1372,12 +1389,6 @@ public class CubiService extends Service {
         boolean seguido = mapa && ahora - flechaCuando > 1200;
         if (!seguido && (giro.equals(giroAvisado) || ((dir + etapa).equals(flechaAntes) && ahora - flechaCuando < 25000))) return;
         giroAvisado = giro; flechaAntes = dir + etapa; flechaCuando = ahora;
-        // la calle: el texto sin la distancia ni los tiempos, corto para que quepa
-        String calle = DISTANCIA.matcher(t).replaceAll(" ").replaceAll("\\d+\\s*(min|h)\\b", " ").replaceAll("[·•|]", " ").replaceAll("\\s+", " ").trim();
-        Matcher sm = SALIDA.matcher(s);
-        if (glorieta && sm.find())                      // en la glorieta lo que sirve es cuál salida
-            calle = "Salida " + (sm.group(1) != null ? sm.group(1) : sm.group(3) != null ? sm.group(3) : "" + (1 + Arrays.asList("primera", "segunda", "tercera", "cuarta", "quinta").indexOf(sm.group(2))));
-        if (calle.length() > 26) calle = calle.substring(0, 26).trim();
         String q = "";
         try { if (!calle.isEmpty()) q = "&t=" + URLEncoder.encode(calle, "UTF-8").replace("+", "%20"); } catch (Exception ignored) { }
         enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : "") + "&f=" + forma + q + (mapa ? "&q=1" : ""));
@@ -1395,6 +1406,7 @@ public class CubiService extends Service {
     private MediaController reproductor;
     private long reproductorVisto, vozMandada;
     private String cancionId = "";
+    volatile String cancionTitulo = "", cancionArtista = "";
     String cancionTexto = "";              // "Título de Artista", para que Haiku sepa qué suena
     private volatile long[] letraT;        // cuándo empieza cada línea (ms)
     private volatile boolean[] letraVoz;   // si esa línea tiene letra (las vacías son partes sin voz)
@@ -1439,6 +1451,7 @@ public class CubiService extends Service {
             if (titulo != null && !id.equals(cancionId)) {
                 cancionId = id;
                 cancionTexto = titulo + (artista != null ? " de " + artista : "");
+                cancionTitulo = titulo; cancionArtista = artista == null ? "" : artista;
                 letraT = null;
                 ritmoCancion = ""; introPiano = false; ritmoMandado = "";
                 estadoLetra = cancionTexto + ": buscando la letra…";
@@ -1709,7 +1722,7 @@ public class CubiService extends Service {
 
     private long asisDesde;
     private String asisEstado = "";
-    private boolean musicaPlay;  // lo último que se le dijo a Cubi: suena música en el celular
+    volatile boolean musicaPlay;  // lo último que se le dijo a Cubi: suena música en el celular
     private boolean videoMandado;  // lo último que se le dijo: el celular está con un video (reels, Facebook)
 
     // Abre el asistente del celular (Gemini), como "Hey Google". Con la pantalla apagada necesita el permiso
