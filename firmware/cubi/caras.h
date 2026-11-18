@@ -17,6 +17,8 @@ void mapaVias(const char *w, bool primero, bool fin);
 void mapaPos(float x, float y, float rumbo);
 void mapaVista(bool completo);      // true: en la navegación, el mapa completo en vez de Cubi con las flechas
 void mapaDia(bool dia);   // el tablero de Maps: claro de día, oscuro de noche
+void mapaClima(int tipo, int grados);   // el Cubi del clima en la tarjeta: 0 sol, 1 luna, 2 nubes, 3 lluvia, 4 tormenta, 5 nieve (-1 = sin clima)
+void mostrarDestino(int metros, const char *hora);   // a cuánto está el destino (-1 = no se sabe) y la hora de llegada ("" = no se sabe)
 void mapaVel(int kmh);    // la velocidad que muestra el tablero (-1 = no mostrar)
 void mostrarGiro(int forma);        // la forma del giro: 0 normal, 1 curva suave, 2 cerrada, 3 en U, 4 glorieta, 5 salida
 void estiloManos(int e);            // 0 guante gordito, 1 de línea, 2 manopla lisa

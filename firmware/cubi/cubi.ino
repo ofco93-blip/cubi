@@ -1137,6 +1137,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
       if (p.get("q") == "1") caras::reaccion(caras::Reac(i)); else reac(caras::Reac(i));   // q=1: sin sonido (el modo mapa manda muchas)
       caras::mostrarGiro(p.get("f").toInt());
       caras::mostrarCalle(p.get("t").c_str());   // la calle del giro, si viene
+      if (n.startsWith("maps_")) caras::mostrarDestino(p.get("d").length() ? p.get("d").toInt() : -1, p.get("h").c_str());   // a cuánto está el destino y la hora de llegada, si Maps las dio
       if (p.get("m").length()) caras::mostrarGrados(p.get("m").toInt(), fmaxf(caras::duracion(caras::Reac(i)), 4), true);   // la altitud en metros, 4 s para alcanzar a leerla
       return "ok";
     }
@@ -1190,6 +1191,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
   }
   if (ruta == "/clima") {  // el celular cuenta el clima (cada 20 min): reacciona cuando cambia
     int t = p.get("t").toInt(); String e = p.get("e"); bool dia = p.get("d") == "1";
+    caras::mapaClima(e == "tormenta" ? 4 : e == "lluvia" ? 3 : e == "nieve" ? 5 : e == "nubes" || e == "niebla" ? 2 : dia ? 0 : 1, t);   // el Cubi del clima del mapa
     caras::Reac r = caras::NINGUNA;
     if (e == "lluvia" || e == "tormenta") r = caras::LLUVIA;
     else if (e == "nieve" || t <= 12) r = caras::FRIO;

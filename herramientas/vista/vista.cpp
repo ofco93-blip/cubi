@@ -51,6 +51,7 @@ int main(int argc, char **argv) {
   if (que.rfind("mapa_", 0) == 0) { mapaVista(true); que = "maps_" + que.substr(5); }   // mapa_x = la misma indicación con el mapa completo
   auto fin = [&](const char *f) { const size_t n = strlen(f); if (que.size() <= n || que.compare(que.size() - n, n, f)) return false; que.resize(que.size() - n); return true; };
   for (int i = 0; i < 3; i++) if (fin(("_m" + std::to_string(i)).c_str())) estiloManos(i);   // x_m1 = la misma escena con otro estilo de manos
+  { const char *F[] = {"_sol", "_luna", "_nubes", "_lluvia", "_tormenta", "_nieve"}; for (int i = 0; i < 6; i++) if (fin(F[i])) mapaClima(i, 24 - 2 * i); }   // maps_x_lluvia: con el Cubi del clima
   if (fin("_dia")) mapaDia(true);   // maps_x_dia = el tablero en versión día
   if (que.rfind("maps_", 0) == 0) mapaVel(45);
   const bool sinMapa = fin("_solo");   // maps_x_solo = sin el mini mapa
@@ -121,7 +122,7 @@ int main(int argc, char **argv) {
       }
     }
     if (que == "confeti" && i == (int)(1.5f * FPS)) cuentaPum();
-    if (!avisos.empty() && i % (int)FPS == 0) { const Aviso &v = avisos[std::min(avisos.size() - 1, (size_t)(i / (int)FPS))]; mapaPos(v.x, v.y, v.r); mapaVel(28); mostrarGrados(v.m, 3, true); }   // un aviso por segundo, como el celular
+    if (!avisos.empty() && i % (int)FPS == 0) { const Aviso &v = avisos[std::min(avisos.size() - 1, (size_t)(i / (int)FPS))]; mapaPos(v.x, v.y, v.r); mapaVel(28); mostrarGrados(v.m, 3, true); mostrarDestino(4300 - i / (int)FPS * 8, "5:42"); }   // un aviso por segundo, como el celular
     if (mapaDemo && i % 25 == 0) mapaPos(4 * sinf(t), -150 + t * 14, que == "maps_der" ? 25 * t / 4.5f : que == "maps_izq" ? -25 * t / 4.5f : 0);   // va andando
     dib::empezar(); if (que == "actualizando") progreso(t, t / seg); else cuadro(t, dt, e); dib::terminar();
     for (int y = 0; y < dib::H; y++) for (int x = 0; x < dib::W; x++) {

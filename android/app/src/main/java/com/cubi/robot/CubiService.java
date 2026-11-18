@@ -1456,6 +1456,18 @@ public class CubiService extends Service {
         boolean recto = dir.equals("maps_recto"), mapa = navMapa();
         if (recto && forma != 4) forma = 0;
         if (recto) porTexto = rectoTexto && lado != 2;
+        // el resumen del viaje se aparta primero, para no confundir los km al destino con los metros al giro
+        String destino = "";
+        Matcher rs = RESUMEN.matcher(s);
+        if (rs.find()) {
+            double v = Double.parseDouble(rs.group(3).replace(',', '.'));
+            int minutos = (rs.group(1) == null ? 0 : Integer.parseInt(rs.group(1)) * 60) + Integer.parseInt(rs.group(2));
+            String hora = rs.group(5) != null ? rs.group(5)   // si Maps no trae la hora, se calcula con los minutos que faltan
+                    : new java.text.SimpleDateFormat(android.text.format.DateFormat.is24HourFormat(this) ? "H:mm" : "h:mm", Locale.US).format(new java.util.Date(ahora + minutos * 60000L));
+            destino = "&d=" + Math.round(rs.group(4).equals("km") ? v * 1000 : rs.group(4).equals("mi") ? v * 1609 : v) + "&h=" + hora;
+            s = RESUMEN.matcher(s).replaceFirst(" ").trim();
+            t = RESUMEN.matcher(t).replaceFirst(" ").trim();
+        }
         double metros = -1;
         Matcher m = DISTANCIA.matcher(s);
         if (m.find()) {
@@ -1486,9 +1498,11 @@ public class CubiService extends Service {
         giroAvisado = giro; flechaAntes = dir + etapa; flechaCuando = ahora;
         String q = "";
         try { if (!calle.isEmpty()) q = "&t=" + URLEncoder.encode(calle, "UTF-8").replace("+", "%20"); } catch (Exception ignored) { }
-        enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : "") + "&f=" + forma + q + (mapa ? "&q=1" : ""));
+        enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : "") + "&f=" + forma + q + destino + (mapa ? "&q=1" : ""));
     }
 
+    // el resumen del viaje en el aviso de Maps: "25 min · 12 km · 5:42 p. m." (cuánto falta, a cuánto está el destino y la hora de llegada)
+    static final Pattern RESUMEN = Pattern.compile("(?:(\\d+)\\s*h\\s*)?(\\d+)\\s*min\\b[^0-9]{0,8}(\\d+(?:[.,]\\d+)?)\\s*(km|m|mi)\\b(?:[^0-9]{0,24}(\\d{1,2}:\\d{2})(?:\\s*[ap]\\.?\\s?m\\.?)?)?", Pattern.CASE_INSENSITIVE);
     static final Pattern SALIDA = Pattern.compile("(\\d+)\\s*\\.?\\s*[ªaº°]?\\s*salida|(primera|segunda|tercera|cuarta|quinta)\\s+salida|(\\d)(?:st|nd|rd|th)\\s+exit");
     private static boolean tiene(String s, String... p) { for (String x : p) if (s.contains(x)) return true; return false; }
 

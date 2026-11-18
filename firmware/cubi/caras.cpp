@@ -2120,6 +2120,46 @@ static void discoGiro(float dx, float ty, float R, float lado, float u, float a)
     return fminf(fminf(S(-L * 13, 24, -L * 13, -6), S(-L * 13, -6, L * 20, -6)), P(L * 20, -6, L, 0, 13));                            // sube y dobla
   });
 }
+// El clima como un Cubi chiquito: el muñequito ES el clima (un sol, una luna, una nube; con lluvia, rayo o nieve) y tiene
+// los ojos de Cubi. tipo: 0 sol, 1 luna, 2 nubes, 3 lluvia, 4 tormenta, 5 nieve.
+static int climaTipo = -1, climaGrados = 0, destinoM = -1;
+static char llegaTxt[8] = "";
+void mapaClima(int tipo, int grados) { climaTipo = tipo; climaGrados = grados; }
+void mostrarDestino(int metros, const char *hora) { destinoM = metros; snprintf(llegaTxt, sizeof llegaTxt, "%s", hora ? hora : ""); }
+static void cubiClima(float cx, float cy, float r, float a) {
+  const int tipo = climaTipo;
+  cy += 1.5f * sinf(tAhora * 2);
+  const bool nube = tipo >= 2;
+  const float ny = cy - (tipo >= 3 ? 0.18f * r : 0);                   // con lluvia, rayo o nieve la nube sube un poco
+  if (tipo == 0) for (int i = 0; i < 8; i++) {                         // los rayos del sol, girando despacio
+    const float g = tAhora * 0.5f + i * PI / 4;
+    linea(cx + cosf(g) * r * 0.82f, cy + sinf(g) * r * 0.82f, cx + cosf(g) * r * 1.12f, cy + sinf(g) * r * 1.12f, r * 0.11f, Col{255, 196, 40}, a);
+  }
+  const Col cuerpo = tipo == 0 ? Col{255, 208, 64} : tipo == 1 ? Col{236, 236, 214} : tipo == 3 ? Col{176, 196, 226} : tipo == 4 ? Col{128, 142, 172} : Col{238, 243, 252};
+  figura(cx - r * 1.2f, ny - r * 1.2f, cx + r * 1.2f, ny + r * 1.2f, solido(cuerpo, a), [=](float px, float py) {
+    if (tipo == 0) return dCirculo(px, py, cx, cy, r * 0.66f);
+    if (tipo == 1) return fmaxf(dCirculo(px, py, cx, cy, r * 0.78f), -dCirculo(px, py, cx + r * 0.42f, cy - r * 0.3f, r * 0.62f));   // luna: un disco con un mordisco
+    return fminf(fminf(dCirculo(px, py, cx - r * 0.42f, ny + r * 0.1f, r * 0.42f), dCirculo(px, py, cx + r * 0.05f, ny - r * 0.2f, r * 0.55f)),
+                 fminf(dCirculo(px, py, cx + r * 0.52f, ny + r * 0.14f, r * 0.38f), dCaja(px, py, cx + r * 0.05f, ny + r * 0.3f, r * 0.5f, r * 0.2f, r * 0.18f)));
+  });
+  if (tipo == 3 || tipo == 5) for (int i = 0; i < 3; i++) {            // gotas que caen (o copos, más lentos y redondos)
+    const float p = fmodf(tAhora * (tipo == 3 ? 1.6f : 0.7f) + i * 0.37f, 1), gx = cx + (i - 1) * r * 0.42f, gy = ny + r * (0.62f + 0.5f * p), al = a * (1 - p * 0.8f);
+    if (tipo == 3) linea(gx, gy, gx - r * 0.08f, gy + r * 0.2f, r * 0.1f, Col{120, 190, 255}, al);
+    else figura(gx - 4, gy - 4, gx + 4, gy + 4, solido(BLANCO, al), [=](float px, float py) { return dCirculo(px, py, gx, gy, r * 0.09f); });
+  }
+  if (tipo == 4 && fmodf(tAhora, 2.4f) < 1.5f) {                       // el rayo
+    const Col am{255, 214, 70};
+    linea(cx + r * 0.1f, ny + r * 0.55f, cx - r * 0.12f, ny + r * 0.9f, r * 0.12f, am, a); linea(cx - r * 0.12f, ny + r * 0.9f, cx + r * 0.14f, ny + r * 0.9f, r * 0.1f, am, a);
+    linea(cx + r * 0.14f, ny + r * 0.9f, cx - r * 0.06f, ny + r * 1.22f, r * 0.1f, am, a);
+  }
+  // los ojos de Cubi (cápsulas), oscuros sobre el cuerpo claro; parpadean, y la luna los tiene entrecerrados
+  const float fase = fmodf(tAhora, 4.2f), abre = (fase > 4.05f ? 0.15f : 1) * (tipo == 1 ? 0.35f : 1);
+  const float ex = nube ? cx + r * 0.05f : tipo == 1 ? cx - r * 0.22f : cx, ey = nube ? ny + r * 0.08f : cy + r * 0.02f, sep = r * (tipo == 1 ? 0.2f : 0.24f);
+  const Col ojo = tipo == 0 ? Col{120, 70, 10} : tipo == 4 ? Col{255, 255, 255} : Col{40, 52, 84};
+  for (int l = -1; l <= 1; l += 2)
+    figura(ex + l * sep - r * 0.2f, ey - r * 0.3f, ex + l * sep + r * 0.2f, ey + r * 0.3f, solido(ojo, a), [=](float px, float py) { return dCaja(px, py, ex + l * sep, ey, r * 0.085f, r * 0.19f * abre, r * 0.085f); });
+}
+
 // La indicación de Maps con la estética del tablero del carro (sin el muñequito): el mapa ampliado y en perspectiva en toda
 // la pantalla (claro de día, oscuro de noche), el carro al centro, la velocidad grande a la izquierda y arriba la tarjeta
 // oscura con la flecha grande, los metros y la calle. Sin calles del celular se ve una carretera que avanza.
@@ -2139,9 +2179,21 @@ static void pantallaMapa(float lado, float u, float a) {
     }
   }
   carrito(CX, cy, 1.7f, a);
+  if (destinoM >= 0 || llegaTxt[0]) {                                                                     // a la izquierda: a cuánto está el destino y a qué hora se llega
+    const Col tinta = dia ? Col{28, 32, 42} : Col{255, 255, 255}, gris = dia ? Col{96, 104, 118} : Col{170, 184, 214};
+    const float y0 = destinoM >= 0 ? 158 : 236, y1 = llegaTxt[0] ? 292 : 234;                                // una tarjeta detrás, para que se lea encima del mapa
+    figura(8, y0 - 4, 118, y1 + 4, solido(dia ? Col{255, 255, 255} : Col{12, 16, 26}, 0.88f * a), [=](float px, float py) { return dCaja(px, py, 62, (y0 + y1) / 2, 50, (y1 - y0) / 2, 18); });
+    if (destinoM >= 0) {
+      char v[12];
+      if (destinoM >= 10000) snprintf(v, sizeof v, "%d", (destinoM + 500) / 1000); else if (destinoM >= 1000) snprintf(v, sizeof v, "%d,%d", destinoM / 1000, destinoM % 1000 / 100); else snprintf(v, sizeof v, "%d", destinoM);
+      texto(v, 62, 188, 52, tinta, a); texto(destinoM >= 1000 ? "km" : "m", 62, 220, 18, gris, a);
+    }
+    if (llegaTxt[0]) { texto("llegas", 62, 250, 15, gris, a); texto(llegaTxt, 62, 274, 30, tinta, a); }
+  }
   const bool hayM = tAhora < gradosHasta && gradosM, ya = hayM && gradosN <= 60;
   if (hayM && mapaKmh >= 8 && gradosN * 3.6f / mapaKmh < 100) {                                             // a la derecha: en cuántos segundos toca girar, a la velocidad que va (la velocidad no se muestra: ya está en el tablero del carro)
     char v[8]; snprintf(v, sizeof v, "%d", (int)(gradosN * 3.6f / mapaKmh + 0.5f));
+    figura(W - 118, 154, W - 8, 254, solido(dia ? Col{255, 255, 255} : Col{12, 16, 26}, 0.88f * a), [=](float px, float py) { return dCaja(px, py, W - 62, 204, 50, 46, 18); });
     texto(v, W - 62, 196, 64, dia ? Col{28, 32, 42} : Col{255, 255, 255}, a); texto("seg", W - 62, 234, 19, dia ? Col{96, 104, 118} : Col{170, 184, 214}, a);
   }
   // la tarjeta de arriba (entra bajando): flecha grande, metros y calle
@@ -2149,13 +2201,21 @@ static void pantallaMapa(float lado, float u, float a) {
   figura(CX - bw - 4, by - bh - 4, CX + bw + 4, by + bh + 4, solido(dia ? Col{32, 38, 52} : Col{10, 16, 34}, 0.96f * a), [=](float px, float py) { return dCaja(px, py, CX, by, bw, bh, 26); });
   if (!dia) figura(CX - bw - 4, by - bh - 4, CX + bw + 4, by + bh + 4, solido(Col{60, 100, 190}, 0.9f * a), [=](float px, float py) { return fabsf(dCaja(px, py, CX, by, bw, bh, 26)) - 1.3f; });
   discoGiro(CX - bw + 62, by, 46 + (ya ? 4 * fabsf(sinf(tAhora * 7)) : 0), lado, u, a);
-  const float xt = CX + 58;
+  const bool conClima = climaTipo >= 0;
+  const float xt = CX + (conClima ? 34 : 58);
   if (hayM) {
     char b[16];
     if (gradosN >= 1000) snprintf(b, sizeof b, "%d,%d km", gradosN / 1000, gradosN % 1000 / 100); else snprintf(b, sizeof b, "%d m", gradosN);
     texto(b, xt, calleTxt[0] ? by - 14 : by, 52, BLANCO, a);
   }
-  if (calleTxt[0]) { char corta[22]; snprintf(corta, sizeof corta, "%.19s", calleTxt); texto(corta, xt, hayM ? by + 28 : by, 22, Col{176, 196, 236}, a); }
+  if (calleTxt[0]) { char corta[22]; snprintf(corta, sizeof corta, conClima ? "%.15s" : "%.19s", calleTxt); texto(corta, xt, hayM ? by + 28 : by, 22, Col{176, 196, 236}, a); }
+  if (conClima) {                                                                                        // al final de la tarjeta: el Cubi del clima y los grados
+    cubiClima(CX + bw - 40, by - 9, 24, a);
+    char g[8]; snprintf(g, sizeof g, "%d", climaGrados);
+    const float gx = CX + bw - 44, gy = by + 33, an = anchoTexto(g, 19);
+    texto(g, gx, gy, 19, Col{176, 196, 236}, a);
+    figura(gx + an / 2, gy - 14, gx + an / 2 + 10, gy - 4, solido(Col{176, 196, 236}, a), [=](float px, float py) { return fabsf(dCirculo(px, py, gx + an / 2 + 5, gy - 9, 2.4f)) - 0.9f; });
+  }
   if (hayM) {                                                                                            // abajo: la barrita que se llena al acercarse al giro
     const float lleno = 1 - lim(gradosN / 300.f, 0, 1), bw2 = 150, yb = H - 12;
     figura(CX - bw2 - 4, yb - 6, CX + bw2 + 4, yb + 6, solido(dia ? Col{196, 202, 210} : Col{40, 52, 84}, a), [=](float px, float py) { return dCaja(px, py, CX, yb, bw2, 3, 3); });
