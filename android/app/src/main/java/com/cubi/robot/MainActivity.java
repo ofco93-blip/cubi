@@ -256,7 +256,8 @@ public class MainActivity extends Activity {
 
     // Android pide confirmar la instalación: se muestra su ventana
     private void instalacion(Intent i) {
-        if (i != null && "cubi.AUTO".equals(i.getAction())) {   // reinstala esta misma versión con la marca, para que salga en Android Auto
+        if (i != null && "cubi.AUTO".equals(i.getAction())) {
+            i.setAction("");   // una sola vez: sin esto la ventana de instalar salía repetida   // reinstala esta misma versión con la marca, para que salga en Android Auto
             new Thread(() -> {
                 try (InputStream in = new FileInputStream(getApplicationInfo().sourceDir)) { instalarApk(leer(in)); } catch (Exception e) { js("toast('No pude reinstalar')"); }
             }).start();
