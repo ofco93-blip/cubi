@@ -136,10 +136,11 @@ public class CubiCarro extends CarAppService {
                 // sin ruta: la hora y, si hay GPS, la velocidad
                 java.util.Calendar cal = java.util.Calendar.getInstance();
                 float cy = (y0 + y1 - pie) / 2;
-                texto(c, String.format(Locale.US, "%d:%02d", cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE)), x0 + w / 2, cy + 6 * u, 30 * u, TINTA, true, Paint.Align.CENTER, w);
+                texto(c, String.format(Locale.US, "%d:%02d", cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE)), x0 + w / 2, cy + 4 * u, 28 * u, TINTA, true, Paint.Align.CENTER, w);
+                if (s != null && s.kmh >= 3) texto(c, Math.round(s.kmh) + " km/h", x0 + w / 2, cy + 17 * u, 7 * u, GRIS, false, Paint.Align.CENTER, w);
                 if (s == null) texto(c, "Abre la app de Cubi en el celular", x0 + w / 2, cy + 20 * u, 5.5f * u, GRIS, false, Paint.Align.CENTER, w - 8 * u);
             }
-            if (s != null && s.kmh >= 0 && (nav || s.kmh >= 3)) {
+            if (nav && s.kmh >= 0) {
                 float vx = x1 - 5 * u, vy = musica ? y1 - pie - 10 * u : y1 - 12 * u;
                 texto(c, String.valueOf(Math.round(s.kmh)), vx, vy, 14 * u, TINTA, true, Paint.Align.RIGHT, 40 * u);
                 texto(c, "KM/H", vx, vy + 6 * u, 4 * u, GRIS, false, Paint.Align.RIGHT, 40 * u);
