@@ -2139,15 +2139,10 @@ static void pantallaMapa(float lado, float u, float a) {
     }
   }
   carrito(CX, cy, 1.7f, a);
-  if (mapaKmh >= 0) {                                                                                     // la velocidad, grande, a la izquierda (como en el tablero)
-    char v[8]; snprintf(v, sizeof v, "%d", mapaKmh);
-    const Col tinta = dia ? Col{28, 32, 42} : Col{255, 255, 255};
-    texto(v, 70, 206, 76, tinta, a); texto("km/h", 70, 250, 19, dia ? Col{96, 104, 118} : Col{170, 184, 214}, a);
-  }
   const bool hayM = tAhora < gradosHasta && gradosM, ya = hayM && gradosN <= 60;
-  if (hayM && mapaKmh >= 8 && gradosN * 3.6f / mapaKmh < 100) {                                             // a la derecha: en cuántos segundos toca girar, a la velocidad que va
+  if (hayM && mapaKmh >= 8 && gradosN * 3.6f / mapaKmh < 100) {                                             // a la derecha: en cuántos segundos toca girar, a la velocidad que va (la velocidad no se muestra: ya está en el tablero del carro)
     char v[8]; snprintf(v, sizeof v, "%d", (int)(gradosN * 3.6f / mapaKmh + 0.5f));
-    texto(v, W - 70, 206, 76, dia ? Col{28, 32, 42} : Col{255, 255, 255}, a); texto("seg", W - 70, 250, 19, dia ? Col{96, 104, 118} : Col{170, 184, 214}, a);
+    texto(v, W - 62, 196, 64, dia ? Col{28, 32, 42} : Col{255, 255, 255}, a); texto("seg", W - 62, 234, 19, dia ? Col{96, 104, 118} : Col{170, 184, 214}, a);
   }
   // la tarjeta de arriba (entra bajando): flecha grande, metros y calle
   const float by = 64 - 150 * (1 - tramo(u, 0.05f, 0.5f)), bw = 206, bh = 54;
