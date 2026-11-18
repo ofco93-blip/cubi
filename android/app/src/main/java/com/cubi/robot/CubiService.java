@@ -1407,6 +1407,7 @@ public class CubiService extends Service {
     private long reproductorVisto, vozMandada;
     private String cancionId = "";
     volatile String cancionTitulo = "", cancionArtista = "";
+    volatile android.graphics.Bitmap cancionCaratula;
     String cancionTexto = "";              // "Título de Artista", para que Haiku sepa qué suena
     private volatile long[] letraT;        // cuándo empieza cada línea (ms)
     private volatile boolean[] letraVoz;   // si esa línea tiene letra (las vacías son partes sin voz)
@@ -1417,6 +1418,23 @@ public class CubiService extends Service {
     volatile String estadoLetra = "";      // lo que pasa con la letra, para verlo en la app
     private final Runnable seguirLetraR = this::seguirLetra;
     static final Pattern LINEA = Pattern.compile("\\[(\\d+):(\\d+(?:\\.\\d+)?)\\](.*)");
+
+    // los botones de música de la pantalla del carro: -1 anterior, 0 pausa o seguir, 1 siguiente
+    void musicaTecla(int cual) {
+        if (!puedeTocarMusica()) return;
+        try {
+            MediaController c = reproductor;
+            if (c == null) {
+                List<MediaController> l = getSystemService(MediaSessionManager.class).getActiveSessions(new ComponentName(this, Oyente.class));
+                if (l.isEmpty()) return;
+                c = l.get(0);
+            }
+            MediaController.TransportControls t = c.getTransportControls();
+            if (cual < 0) t.skipToPrevious(); else if (cual > 0) t.skipToNext();
+            else if (c.getPlaybackState() != null && c.getPlaybackState().getState() == PlaybackState.STATE_PLAYING) t.pause(); else t.play();
+        } catch (SecurityException ignored) {
+        }
+    }
 
     private MediaController buscarReproductor() {
         if (!puedeTocarMusica()) return null;
@@ -1446,6 +1464,8 @@ public class CubiService extends Service {
         PlaybackState st = c == null ? null : c.getPlaybackState();
         if (m == null || st == null) estadoLetra = "No veo qué canción suena (¿Spotify o YouTube Music en play?)";
         if (m != null && st != null) {
+            android.graphics.Bitmap car = m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART);
+            cancionCaratula = car != null ? car : m.getBitmap(MediaMetadata.METADATA_KEY_ART);
             String titulo = m.getString(MediaMetadata.METADATA_KEY_TITLE), artista = m.getString(MediaMetadata.METADATA_KEY_ARTIST);
             String id = artista + "|" + titulo;
             if (titulo != null && !id.equals(cancionId)) {

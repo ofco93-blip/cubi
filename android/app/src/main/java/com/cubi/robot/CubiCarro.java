@@ -24,9 +24,11 @@ import androidx.car.app.SurfaceCallback;
 import androidx.car.app.SurfaceContainer;
 import androidx.car.app.model.Action;
 import androidx.car.app.model.ActionStrip;
+import androidx.car.app.model.CarIcon;
 import androidx.car.app.model.Template;
 import androidx.car.app.navigation.model.NavigationTemplate;
 import androidx.car.app.validation.HostValidator;
+import androidx.core.graphics.drawable.IconCompat;
 
 import java.util.List;
 import java.util.Locale;
@@ -50,6 +52,7 @@ public class CubiCarro extends CarAppService {
         private final Lienzo lienzo = new Lienzo();
         private Surface sup;
         private int ancho, alto;
+        private boolean sonaba;
         private final Runnable cuadro = new Runnable() {
             @Override public void run() { pintar(); if (sup != null) h.postDelayed(this, 50); }
         };
@@ -62,9 +65,16 @@ public class CubiCarro extends CarAppService {
 
         @NonNull @Override public Template onGetTemplate() {
             boolean sola = prefs.getBoolean("carroSola", false);
-            return new NavigationTemplate.Builder().setActionStrip(new ActionStrip.Builder().addAction(new Action.Builder()
+            return new NavigationTemplate.Builder().setActionStrip(new ActionStrip.Builder()
+                    .addAction(tecla(R.drawable.carro_antes, -1)).addAction(tecla(sonaba ? R.drawable.carro_pausa : R.drawable.carro_play, 0)).addAction(tecla(R.drawable.carro_sigue, 1))
+                    .addAction(new Action.Builder()
                     .setTitle(sola ? "Con mapa" : "Solo carita")
                     .setOnClickListener(() -> { prefs.edit().putBoolean("carroSola", !sola).apply(); invalidate(); }).build()).build()).build();
+        }
+
+        private Action tecla(int icono, int cual) {
+            return new Action.Builder().setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), icono)).build())
+                    .setOnClickListener(() -> { if (CubiService.yo != null) CubiService.yo.musicaTecla(cual); }).build();
         }
 
         @Override public void onSurfaceAvailable(@NonNull SurfaceContainer s) {
@@ -75,6 +85,8 @@ public class CubiCarro extends CarAppService {
         @Override public void onSurfaceDestroyed(@NonNull SurfaceContainer s) { sup = null; h.removeCallbacks(cuadro); }
 
         private void pintar() {
+            boolean suena = CubiService.yo != null && CubiService.yo.musicaPlay;
+            if (suena != sonaba) { sonaba = suena; invalidate(); }   // el botón cambia entre pausa y seguir
             Surface s = sup;
             if (s == null || !s.isValid()) return;
             Canvas c;
@@ -101,27 +113,27 @@ public class CubiCarro extends CarAppService {
         void dibujar(Canvas c, Rect a, CubiService s, boolean sola, int ojos) {
             long ahora = System.currentTimeMillis();
             c.drawColor(0xff000000);
-            boolean musica = s != null && s.musicaPlay && !s.cancionTitulo.isEmpty();
+            boolean musica = s != null && !s.cancionTitulo.isEmpty(), suena = musica && s.musicaPlay;
             String cancion = !musica ? "" : "♪ " + s.cancionTitulo + (s.cancionArtista.isEmpty() ? "" : " · " + s.cancionArtista);
             boolean nav = s != null && !s.navDir.isEmpty() && ahora - s.navCuando < 120000;
             boolean aLoAncho = a.width() >= a.height() * 1.5f;
             float u = Math.min(a.height(), a.width() * (aLoAncho ? 0.5f : 1f)) / 100f;
             if (sola) {
-                cara(c, a.centerX(), a.centerY() - (musica ? 5 * u : 0), 60 * u, ojos, musica, ahora);
+                cara(c, a.centerX(), a.centerY() - (musica ? 5 * u : 0), 60 * u, ojos, suena, ahora);
                 if (musica) texto(c, cancion, a.centerX(), a.bottom - 9 * u, 5.5f * u, GRIS, false, Paint.Align.CENTER, a.width() - 12 * u);
                 return;
             }
             // la carita a un lado (arriba si la pantalla es angosta) y el panel con lo demás
             float corte = aLoAncho ? a.left + a.width() * 0.38f : a.top + a.height() * 0.36f, m = 3 * u;
-            if (aLoAncho) { cara(c, (a.left + corte) / 2, a.centerY(), 46 * u, ojos, musica, ahora); r.set(corte, a.top + m, a.right - m, a.bottom - m); }
-            else { cara(c, a.centerX(), (a.top + corte) / 2, Math.min(40 * u, (corte - a.top) * 1.1f), ojos, musica, ahora); r.set(a.left + m, corte, a.right - m, a.bottom - m); }
+            if (aLoAncho) { cara(c, (a.left + corte) / 2, a.centerY(), 46 * u, ojos, suena, ahora); r.set(corte, a.top + m, a.right - m, a.bottom - m); }
+            else { cara(c, a.centerX(), (a.top + corte) / 2, Math.min(40 * u, (corte - a.top) * 1.1f), ojos, suena, ahora); r.set(a.left + m, corte, a.right - m, a.bottom - m); }
             float x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom, w = x1 - x0;
             recorte.rewind(); recorte.addRoundRect(r, 5 * u, 5 * u, Path.Direction.CW);
             c.save(); c.clipPath(recorte);
             p.setStyle(Paint.Style.FILL); p.setColor(PANEL); c.drawRect(r, p);
             boolean conMapa = nav && s.mapaTramos != null && s.navMapa();
             if (conMapa) mapa(c, s, x0 + w / 2, y0 + (y1 - y0) * 0.62f, w / 300f, u);
-            float pie = musica ? 15 * u : 0;
+            float pie = musica ? 22 * u : 0;
             if (nav) {
                 // el giro: sobre el mapa va en una tarjeta arriba a la izquierda; sin mapa, grande y al centro
                 boolean llego = s.navDir.equals("llegamos");
@@ -147,7 +159,16 @@ public class CubiCarro extends CarAppService {
             }
             if (musica) {
                 p.setColor(0xe605070c); c.drawRect(x0, y1 - pie, x1, y1, p);
-                texto(c, cancion, x0 + 5 * u, y1 - pie / 2 + 2.2f * u, 6 * u, TINTA, false, Paint.Align.LEFT, w - 10 * u);
+                float tx = x0 + 5 * u;
+                android.graphics.Bitmap car = s.cancionCaratula;
+                if (car != null && !car.isRecycled()) {
+                    r.set(x0 + 3 * u, y1 - pie + 3 * u, x0 + pie - 3 * u, y1 - 3 * u);
+                    recorte.rewind(); recorte.addRoundRect(r, 2 * u, 2 * u, Path.Direction.CW);
+                    c.save(); c.clipPath(recorte); p.setColor(0xffffffff); p.setFilterBitmap(true); c.drawBitmap(car, null, r, p); c.restore();
+                    tx = x0 + pie + u;
+                }
+                texto(c, s.cancionTitulo, tx, y1 - pie / 2 - 0.5f * u, 6.5f * u, suena ? TINTA : GRIS, true, Paint.Align.LEFT, x1 - 4 * u - tx);
+                texto(c, s.cancionArtista, tx, y1 - pie / 2 + 6.5f * u, 5 * u, GRIS, false, Paint.Align.LEFT, x1 - 4 * u - tx);
             }
             c.restore();
         }
