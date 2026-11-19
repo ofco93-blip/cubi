@@ -351,7 +351,7 @@ public class CubiCarro extends CarAppService {
                         c.drawText(l, tx, ty, tp); ty += tam * 1.1f;
                     }
                     tp.setTextSize(tam * 0.5f); tp.setAlpha(215);
-                    c.drawText(TextUtils.ellipsize(sv.cancionArtista + (sv.letraAhora.isEmpty() ? "" : " · " + sv.cancionTitulo), tp, tw, TextUtils.TruncateAt.END).toString(), tx, ty - tam * 0.3f, tp); tp.setAlpha(255);
+                    c.drawText(TextUtils.ellipsize(sv.cancionArtista, tp, tw, TextUtils.TruncateAt.END).toString(), tx, ty - tam * 0.3f, tp); tp.setAlpha(255);
                 } else if (!horaGrande) {                             // sin música y sin silueta: la hora, grande, al lado
                     tp.setTextSize(100); tp.setTextSize(Math.min(alto * (ancho ? 0.42f : 0.12f), 100 * tw / tp.measureText(hora)));
                     c.drawText(hora, tx, ancho ? y0 + vh * 0.5f + tp.getTextSize() * 0.36f : ty + tp.getTextSize() * 0.4f, tp);
@@ -364,7 +364,17 @@ public class CubiCarro extends CarAppService {
                 String clima = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaGrados + "°  " + sv.climaEstado;
                 // sin música la hora ya va en grande: aquí solo el clima, para que el reloj no salga dos veces
                 texto(c, horaGrande || (conTexto && !musicaZ) ? clima : clima.isEmpty() ? hora : hora + "  ·  " + clima, x0 + caja * 0.5f, y1 - caja * 0.36f, caja * 0.4f, TINTA, true, Paint.Align.LEFT, w * 0.5f);
-                if (musicaZ && sv != null) texto(c, "♪ " + sv.cancionTitulo, x1 - caja * 0.5f, y1 - caja * 0.36f, caja * 0.36f, 0xffd8dde6, false, Paint.Align.RIGHT, w * 0.42f);
+                if (musicaZ && sv != null) {                          // a la derecha: la carátula, chiquita, y el nombre de la canción
+                    float xr = x1 - caja * 0.5f, l = caja - 4 * mg;
+                    android.graphics.Bitmap car = sv.cancionCaratula;
+                    if (car != null && !car.isRecycled()) {
+                        gr.set(xr - l, y1 - caja + 2 * mg, xr, y1 - 2 * mg); gp.rewind(); gp.addRoundRect(gr, l * 0.22f, l * 0.22f, Path.Direction.CW);
+                        c.save(); c.clipPath(gp); p.setColor(0xffffffff); p.setFilterBitmap(true); c.drawBitmap(car, null, gr, p); c.restore();
+                        xr -= l + caja * 0.2f;
+                    }
+                    // el nombre solo va aquí si arriba no está ya en grande (arriba va la letra, o no hay texto)
+                    if (!conTexto || !sv.letraAhora.isEmpty()) texto(c, sv.cancionTitulo, xr, y1 - caja * 0.36f, caja * 0.36f, 0xffd8dde6, false, Paint.Align.RIGHT, w * 0.42f);
+                }
             }
             c.restore();
         }
