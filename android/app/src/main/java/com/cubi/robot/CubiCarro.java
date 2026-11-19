@@ -265,16 +265,19 @@ public class CubiCarro extends CarAppService {
                 gato(c, (x0 + x1) / 2, y1 - s * 1.1f, s, ahora, modo, y1, LETRA_Z[tm]);
                 c.restore(); return;
             }
-            float sc = Math.max(w / b.getWidth(), vh / b.getHeight()), dw = b.getWidth() * sc, dh = b.getHeight() * sc;
-            c.save(); c.clipRect(x0, y0, x1, y0 + vh); c.translate(x0 + dw, y0 + vh - dh); c.scale(-sc, sc);
-            p.setFilterBitmap(true); p.setColor(0xffffffff); c.drawBitmap(b, 0, 0, p); c.restore();
+            // el clip se ajusta al alto (ella entera, sin cortarle la cabeza) y queda pegado a la izquierda; lo que sobra a la
+            // derecha se rellena estirando la orilla del clip, que es puro fondo
+            float sc = vh / b.getHeight(), dw = b.getWidth() * sc, libre = x0 + dw * 0.62f;   // libre: donde termina ella y empieza el fondo vacío
+            c.save(); c.clipRect(x0, y0, x1, y0 + vh); p.setFilterBitmap(true); p.setColor(0xffffffff);
+            if (dw < w) { gr.set(x0 + dw - 1, y0, x1, y0 + vh); c.drawBitmap(b, new Rect(0, 0, 2, b.getHeight()), gr, p); }
+            c.translate(x0 + dw, y0); c.scale(-sc, sc); c.drawBitmap(b, 0, 0, p); c.restore();
             if (grande) {
                 tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(0xffffffff); tp.setShadowLayer(alto * 0.02f, 0, alto * 0.006f, 0x66000000);
-                boolean ancho = w > alto * 1.3f;
-                float tx = ancho ? x0 + w * 0.72f : (x0 + x1) / 2, tw = ancho ? w * 0.5f : w * 0.9f, ty = ancho ? y0 + vh * 0.4f : y0 + vh * 0.16f;
+                boolean ancho = x1 - libre > w * 0.3f;               // hay campo a la derecha de ella: el texto va ahí; si no, arriba y más chico
+                float tx = ancho ? (libre + x1) / 2 : (x0 + x1) / 2, tw = ancho ? (x1 - libre) * 0.9f : w * 0.9f, ty = ancho ? y0 + vh * 0.4f : y0 + vh * 0.1f;
                 if (musicaZ && sv != null) {                          // el renglón de la letra que va (o el nombre de la canción) y debajo el artista
                     String letra = (sv.letraAhora.isEmpty() ? sv.cancionTitulo : sv.letraAhora).toUpperCase(Locale.ROOT), l1 = letra, l2 = "";
-                    float tam = alto * (ancho ? 0.13f : 0.09f);
+                    float tam = alto * (ancho ? 0.13f : 0.065f);
                     tp.setTextSize(tam);
                     if (tp.measureText(letra) > tw) {                 // largo: en dos pisos, partido en el espacio más cercano a la mitad
                         int corte = -1;
@@ -289,7 +292,7 @@ public class CubiCarro extends CarAppService {
                     tp.setTextSize(tam * 0.5f); tp.setAlpha(215);
                     c.drawText(TextUtils.ellipsize(sv.cancionArtista + (sv.letraAhora.isEmpty() ? "" : " · " + sv.cancionTitulo), tp, tw, TextUtils.TruncateAt.END).toString(), tx, ty - tam * 0.3f, tp); tp.setAlpha(255);
                 } else {                                              // sin música: la hora, grande
-                    tp.setTextSize(100); tp.setTextSize(Math.min(alto * (ancho ? 0.42f : 0.2f), 100 * tw / tp.measureText(hora)));
+                    tp.setTextSize(100); tp.setTextSize(Math.min(alto * (ancho ? 0.42f : 0.12f), 100 * tw / tp.measureText(hora)));
                     c.drawText(hora, tx, ancho ? y0 + vh * 0.5f + tp.getTextSize() * 0.36f : ty + tp.getTextSize() * 0.4f, tp);
                 }
                 tp.clearShadowLayer();
