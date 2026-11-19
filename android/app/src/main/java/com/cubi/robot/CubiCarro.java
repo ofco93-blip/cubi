@@ -92,7 +92,7 @@ public class CubiCarro extends CarAppService {
             Surface s = sup;
             if (s == null || !s.isValid()) return;
             CubiService sv = CubiService.yo;                       // le avisa al servicio que la pantalla del carro está a la vista (para el mapa)
-            if (sv != null) { if (sv.carroMapa()) sv.carroViendo = System.currentTimeMillis(); else sv.carroEntra(); }
+            if (sv != null) { if (sv.carroMapa()) sv.carroViendo = System.currentTimeMillis(); else sv.carroEntra(); sv.navRefrescar(); }
             Canvas c;
             try { c = s.lockHardwareCanvas(); } catch (Exception e) { return; }
             try {
@@ -549,43 +549,70 @@ public class CubiCarro extends CarAppService {
         // el mapa gira con él. Entre una posición del GPS y la siguiente (llega una por segundo) se estima el avance con
         // la velocidad, y el giro se suaviza, para que se mueva parejo. Con Zelda (fundido) va translúcido y se desvanece
         // hacia arriba sobre el fondo.
+        // En cada cuadro los trazos se pasan a puntos de pantalla (girados y centrados en el carro) y se recorta lo que
+        // queda detrás del carro ANTES de inclinar: la inclinación no sabe qué hacer con lo de atrás y lo pintaba como cuñas.
+        private float mcos, msin, mk, mpx, mpy, mlim;
+        private float[] rutaM; private double[] rutaDe; private CubiService.MapaCarro rutaDatos;
+        private void trazo(float[] v, Path q, boolean cerrado) {
+            int n = v.length / 2;
+            if (n < 2) return;
+            boolean hay = false;                                         // ya hay un punto puesto en este pedazo
+            float ax = 0, ay = 0; boolean ad = false;
+            for (int i = 0, fin = cerrado ? n + 1 : n; i < fin; i++) {
+                int j = (i % n) * 2;
+                float sx = mk * (v[j] - mpx), sy = -mk * (v[j + 1] - mpy), x = sx * mcos - sy * msin, y = sx * msin + sy * mcos;
+                boolean d = y <= mlim;
+                if (i > 0 && d != ad) {                                  // cruza la línea de corte: el punto justo en la línea
+                    float t = (mlim - ay) / (y - ay), ix = ax + (x - ax) * t;
+                    if (hay) q.lineTo(ix, mlim); else { q.moveTo(ix, mlim); hay = true; }
+                    if (!d && !cerrado) hay = false;                     // una línea que sale se corta ahí; una figura sigue por el borde
+                }
+                if (d && !(cerrado && i == n)) { if (hay) q.lineTo(x, y); else { q.moveTo(x, y); hay = true; } }
+                ax = x; ay = y; ad = d;
+            }
+            if (cerrado && hay) q.close();
+        }
         private void mapa(Canvas c, CubiService s, float x0, float y0, float x1, float y1, float u) {
             CubiService.MapaCarro d = s.carroDatos;
-            if (d != datosDe) {                                          // llegó un mapa nuevo: se arman los trazos (en metros)
-                datosDe = d;
-                for (Path q : calles) q.rewind();
-                for (Path q : zonasP) q.rewind();
-                for (int i = 0; i < d.lineas.length; i++) {
-                    int cl = d.clase[i];
-                    Path q = cl <= 2 ? calles[cl] : zonasP[Math.min(2, cl - 3)];
-                    float[] v = d.lineas[i];
-                    for (int j = 0; j + 1 < v.length; j += 2) { if (j == 0) q.moveTo(v[0], v[1]); else q.lineTo(v[j], v[j + 1]); }
-                    if (cl == 3 || cl == 4) q.close();
-                }
-            }
             float w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + h * 0.66f, k = w / 400f;
             float rumbo = s.mapaRumbo;
             if (Float.isNaN(rumboS)) rumboS = rumbo;
             rumboS = (rumboS + (((rumbo - rumboS + 540) % 360) - 180) * 0.12f + 360) % 360;
             float dt = Math.max(0, Math.min(1.5f, (System.currentTimeMillis() - s.mapaCuando) / 1000f));
-            double ra = Math.toRadians(rumbo);
-            float px = (float) ((s.posLon - d.lon0) * 111320 * Math.cos(Math.toRadians(d.lat0)) + Math.sin(ra) * s.mapaVel * dt), py = (float) ((s.posLat - d.lat0) * 111320 + Math.cos(ra) * s.mapaVel * dt);
-            if (fundido) { c.saveLayer(x0, y0, x1, y1, null); p.setStyle(Paint.Style.FILL); p.setColor(VELO); c.drawRect(x0, y0, x1, y1, p); } else c.save();
-            c.save(); c.translate(cx, cy);
+            double ra = Math.toRadians(rumbo), kx = 111320 * Math.cos(Math.toRadians(d.lat0));
             // un rectángulo del suelo (ancho a, b hacia adelante, e hacia atrás) se pinta como trapecio: angosto y alto lo lejano
             float a = w * 0.6f, b = h * 1.7f, e = h * 0.3f;
+            mk = k; mlim = e; mcos = (float) Math.cos(Math.toRadians(-rumboS)); msin = (float) Math.sin(Math.toRadians(-rumboS));
+            mpx = (float) ((s.posLon - d.lon0) * kx + Math.sin(ra) * s.mapaVel * dt); mpy = (float) ((s.posLat - d.lat0) * 111320 + Math.cos(ra) * s.mapaVel * dt);
+            for (Path q : calles) q.rewind();
+            for (Path q : zonasP) q.rewind();
+            for (int i = 0; i < d.lineas.length; i++) {
+                int cl = d.clase[i];
+                trazo(d.lineas[i], cl <= 2 ? calles[cl] : zonasP[Math.min(2, cl - 3)], cl == 3 || cl == 4);
+            }
+            // la ruta propia (la del destino escrito en la app), en metros desde el mismo punto que el mapa
+            double[] rla = s.rutaLat, rlo = s.rutaLon;
+            if (rla == null || rlo == null) rutaM = null;
+            else if (rla != rutaDe || d != rutaDatos || rutaM == null) {
+                rutaDe = rla; rutaDatos = d; rutaM = new float[Math.min(rla.length, rlo.length) * 2];
+                for (int i = 0; i * 2 < rutaM.length; i++) { rutaM[2 * i] = (float) ((rlo[i] - d.lon0) * kx); rutaM[2 * i + 1] = (float) ((rla[i] - d.lat0) * 111320); }
+            }
+            if (rutaM != null) trazo(rutaM, calles[2], false);
+            if (fundido) { c.saveLayer(x0, y0, x1, y1, null); p.setStyle(Paint.Style.FILL); p.setColor(VELO); c.drawRect(x0, y0, x1, y1, p); } else c.save();
+            c.save(); c.translate(cx, cy);
             inclina.setPolyToPoly(new float[]{-a, -b, a, -b, a, e, -a, e}, 0, new float[]{-a * 0.42f, -h * 0.74f, a * 0.42f, -h * 0.74f, a * 1.35f, h * 0.24f, -a * 1.35f, h * 0.24f}, 0, 4);
-            c.concat(inclina); c.clipRect(-a * 4, -b * 5, a * 4, e);       // nada de lo que queda detrás del carro (ahí la inclinación se rompe)
-            c.rotate(-rumboS); c.scale(k, -k); c.translate(-px, -py);
+            c.concat(inclina);
             p.setStyle(Paint.Style.FILL);
             p.setColor(fundido ? 0x662a62c8 : 0xff1d3a66); c.drawPath(zonasP[0], p);
             p.setColor(fundido ? 0x6648b46c : 0xff16382c); c.drawPath(zonasP[1], p);
             p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND);
-            p.setColor(fundido ? 0x882a62c8 : 0xff1d3a66); p.setStrokeWidth(8); c.drawPath(zonasP[2], p);
-            // fundido: calles blancas translúcidas y la ruta blanca, que se leen sobre cualquier color de fondo
-            p.setColor(fundido ? 0x55ffffff : 0xff26344f); p.setStrokeWidth(6); c.drawPath(calles[0], p);
-            p.setColor(fundido ? 0x80ffffff : 0xff34466a); p.setStrokeWidth(10); c.drawPath(calles[1], p);
-            p.setColor(fundido ? 0xffffffff : AZUL); p.setStrokeWidth(7); c.drawPath(calles[2], p);
+            p.setColor(fundido ? 0x882a62c8 : 0xff1d3a66); p.setStrokeWidth(8 * k); c.drawPath(zonasP[2], p);
+            // fundido: calles blancas translúcidas, que se leen sobre cualquier color de fondo
+            p.setColor(fundido ? 0x55ffffff : 0xff26344f); p.setStrokeWidth(6 * k); c.drawPath(calles[0], p);
+            p.setColor(fundido ? 0x80ffffff : 0xff34466a); p.setStrokeWidth(10 * k); c.drawPath(calles[1], p);
+            // la ruta: azul con borde blanco
+            p.setColor(0xffffffff); p.setStrokeWidth(11 * k); c.drawPath(calles[2], p);
+            p.setColor(0xff2f7bff); p.setStrokeWidth(7 * k); c.drawPath(calles[2], p);
             c.restore(); p.setStyle(Paint.Style.FILL);
             // el carro: una flecha
             p.setColor(0x40000000); c.drawCircle(cx, cy, 8 * u, p);

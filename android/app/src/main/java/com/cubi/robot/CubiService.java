@@ -520,7 +520,7 @@ public class CubiService extends Service {
     // (router.project-osrm.org, gratis y sin cuenta). No es la ruta de Google: es la de ese servicio.
     private volatile double destLat = Double.NaN, destLon;
     private volatile String destNombre = "", rutaEstado = "";
-    private volatile double[] rutaLat, rutaLon;
+    volatile double[] rutaLat, rutaLon;
     private volatile boolean rutaCalculando, destBuscando;
     private long rutaPedida, destIntento;
 
@@ -614,8 +614,6 @@ public class CubiService extends Service {
                 ls.add(aMetros(la, lo, lat, lon, kx));
                 cs.add((byte) (!tipo.isEmpty() ? (grande ? 1 : 0) : tags.has("waterway") ? 5 : tags.has("natural") ? 3 : 4));
             }
-            double[] rla = rutaLat, rlo = rutaLon;
-            if (rla != null && rlo != null) { ls.add(aMetros(rla, rlo, lat, lon, kx)); cs.add((byte) 2); }
             if (ls.isEmpty()) { carroEstado = "Mapa: no hay calles en el mapa por aquí."; return; }
             MapaCarro d = new MapaCarro();
             d.lat0 = lat; d.lon0 = lon; d.lineas = ls.toArray(new float[0][]); d.clase = new byte[cs.size()];
@@ -864,6 +862,7 @@ public class CubiService extends Service {
 
     private void posicion(Location l) {
         long ahora = System.currentTimeMillis();
+        navRefrescar();
         mapaGps(l);
         if (l.hasSpeed()) kmh = l.getSpeed() * 3.6f;
         altura(l);
@@ -1497,6 +1496,16 @@ public class CubiService extends Service {
     void navOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("nav", si).apply(); if (!si) navUltima = ""; }
     private volatile String navUltima = "", navDecision = "";
     volatile long navCuando;
+    private long navMirada;
+    // Maps y Waze solo avisan cuando cambia la indicación: parado, o en un tramo largo, pasan minutos sin aviso. Mientras
+    // su aviso de navegación siga en el celular, la ruta se da por viva (se mira cada 10 s).
+    void navRefrescar() {
+        long ahora = System.currentTimeMillis();
+        if (navDir.isEmpty() || ahora - navMirada < 10000) return;
+        navMirada = ahora;
+        if (ahora - navCuando > 30000 && Oyente.rutaViva()) navCuando = ahora;
+    }
+    double[] destinoPunto() { return Double.isNaN(destLat) ? null : new double[]{destLat, destLon}; }
     private long flechaCuando;
     // el último giro, para la pantalla del carro
     volatile String navDir = "", navCalle = "";

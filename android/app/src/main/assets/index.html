@@ -284,6 +284,8 @@ section[hidden] { display: none; }
     </details>
     <input type="text" id="destino" placeholder="Destino (ej: Centro Comercial Andino, Bogotá)" autocomplete="off">
     <div class="grid2"><button class="btn" id="trazar">Trazar ruta</button><button class="btn" id="quitarRuta">Quitar ruta</button></div>
+    <button class="btn" id="irMaps" style="width:100%;margin-top:10px">Ir con Google Maps a ese destino</button>
+    <p class="note">Google Maps no deja ver su línea azul desde otras apps. Para que el camino salga pintado en Cubi y en la pantalla del carro, escribe aquí el destino y toca “Trazar ruta”; luego “Ir con Google Maps” abre la navegación hacia ese mismo punto.</p>
     <p class="note">La ruta la calcula un servicio libre (OSRM), no Google: puede no ser la misma que te da Maps. Para buscar el destino y trazarla, el celular manda el destino y tu posición a nominatim.openstreetmap.org y router.project-osrm.org.</p>
   </div>
 </section>
@@ -552,6 +554,7 @@ if (window.Android && Android.navActiva) setTimeout(() => { $('navModo').value =
 setInterval(navAhora, 3000);
 $('navCompleto').onchange = e => Android.navCompletoCubi(e.target.checked);
 $('trazar').onclick = () => { if (window.Android) { Android.destinoCubi($('destino').value); navAhora(); } };
+$('irMaps').onclick = () => { if (window.Android && Android.irMaps) Android.irMaps(); };
 $('quitarRuta').onclick = () => { $('destino').value = ''; if (window.Android) { Android.destinoCubi(''); navAhora(); } };
 if (window.Android && Android.navCompleto) setTimeout(() => { $('navCompleto').checked = Android.navCompleto(); $('destino').value = Android.destinoTexto(); }, 500);
 // la mascota de la pantalla del carro: las mismas opciones que se cambian desde Android Auto

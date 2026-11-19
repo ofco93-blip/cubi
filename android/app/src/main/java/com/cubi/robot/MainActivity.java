@@ -535,6 +535,16 @@ public class MainActivity extends Activity {
             if (CubiService.yo != null) CubiService.yo.navOn(si);
         }
 
+        // abre Google Maps navegando al mismo punto del destino escrito en Cubi, para que la ruta de Cubi y la de Maps vayan al mismo sitio
+        @JavascriptInterface
+        public void irMaps() {
+            double[] d = CubiService.yo == null ? null : CubiService.yo.destinoPunto();
+            if (d == null) { js("toast('Primero escribe el destino y toca Trazar ruta')"); return; }
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(String.format(java.util.Locale.US, "google.navigation:q=%.6f,%.6f", d[0], d[1]))).setPackage("com.google.android.apps.maps"));
+            } catch (Exception e) { js("toast('No pude abrir Google Maps')"); }
+        }
+
         // la mascota de la pantalla del carro (las lee CubiCarro en cada cuadro): personaje, fondo y vista
         @JavascriptInterface
         public int carroOpcion(String k) {

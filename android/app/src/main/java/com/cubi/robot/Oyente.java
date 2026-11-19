@@ -14,6 +14,23 @@ import android.service.notification.StatusBarNotification;
 // llegó uno, para la reacción. Lo demás se ignora.
 public class Oyente extends NotificationListenerService {
     private static long mapsCuando;                 // el último aviso de Google Maps
+    private static Oyente yo;
+
+    @Override public void onListenerConnected() { yo = this; }
+    @Override public void onListenerDisconnected() { yo = null; }
+
+    // ¿sigue en el celular el aviso fijo de navegación de Google Maps o de Waze?
+    static boolean rutaViva() {
+        Oyente o = yo;
+        if (o == null) return false;
+        try {
+            for (StatusBarNotification n : o.getActiveNotifications()) {
+                String app = n.getPackageName();
+                if ((app.equals("com.google.android.apps.maps") || app.equals("com.waze")) && n.isOngoing()) return true;
+            }
+        } catch (Exception e) { }
+        return false;
+    }
 
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
