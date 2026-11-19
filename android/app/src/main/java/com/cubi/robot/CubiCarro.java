@@ -318,9 +318,9 @@ public class CubiCarro extends CarAppService {
                 tp.setTypeface(Typeface.DEFAULT_BOLD); tp.clearShadowLayer(); tp.setColor(0xffffffff); tp.setAlpha(musicaZ ? 150 : 255);
                 if (anchoZ) {                                          // a lo ancho: arranca un poco metida detrás de ella
                     float tam = vh * (musicaZ ? 0.34f : 0.5f); tp.setTextSize(tam);
-                    float th = tp.measureText(hora), cabe = (x1 - libre) * 1.02f;
+                    float th = tp.measureText(hora), cabe = (x1 - libre) * 1.1f;
                     if (th > cabe) { tam *= cabe / th; tp.setTextSize(tam); th = cabe; }
-                    tp.setTextAlign(Paint.Align.LEFT); c.drawText(hora, libre - th * 0.12f, y0 + vh * (musicaZ ? 0.27f : 0.5f) + tam * 0.36f, tp);
+                    tp.setTextAlign(Paint.Align.LEFT); c.drawText(hora, libre - th * 0.2f, y0 + vh * (musicaZ ? 0.27f : 0.5f) + tam * 0.36f, tp);
                 } else {                                               // angosta: arriba, con las orejas tapando la parte de abajo
                     tp.setTextSize(100); tp.setTextSize(Math.min(vh * 0.26f, 100 * w * 0.9f / tp.measureText(hora)));
                     tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, (x0 + x1) / 2, y0 + vh * 0.27f, tp);
