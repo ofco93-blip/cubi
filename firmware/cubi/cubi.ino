@@ -1178,6 +1178,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
   }
   if (ruta == "/pum") { despertar(millis()); caras::cuentaPum(); sonar(S_CUENTA); return "ok"; }   // 3, 2, 1, ¡pum! y risa
   if (ruta == "/musica") {  // el celular avisa play o pausa (con play baila de una) y, por la letra, si el artista canta
+    if (p.has("let")) caras::mostrarLetra(p.get("let").c_str());
     if (p.has("tit")) caras::mostrarCancion(p.get("tit").c_str(), p.get("art").c_str());
     if (p.has("play")) { celPlay = p.get("play") == "1"; if (!celPlay) { estilo = NADA; celVozHasta = 0; } }
     if (p.has("voz")) { celVoz = p.get("voz") == "1"; celVozHasta = millis() + 6000; }

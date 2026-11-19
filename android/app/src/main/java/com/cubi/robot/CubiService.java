@@ -1527,6 +1527,7 @@ public class CubiService extends Service {
     String cancionTexto = "";              // "Título de Artista", para que Haiku sepa qué suena
     private volatile long[] letraT;        // cuándo empieza cada línea (ms)
     private volatile boolean[] letraVoz;   // si esa línea tiene letra (las vacías son partes sin voz)
+    private volatile String[] letraTxt;    // el texto de cada línea, para mostrarlo en la pantalla de música de la gata
     private volatile String[] letraSil;    // una vocal por sílaba de cada línea: la boca de Cubi las va diciendo
     private volatile boolean[] letraCoro;  // la línea se repite en la canción: es del coro
     private int vozEnviada = -1, lineaEnviada = -1;
@@ -1614,6 +1615,10 @@ public class CubiService extends Service {
                 int s = i >= 0 && v[i] && !sil[i].isEmpty() && pos + 150 - t[i] < d ? 1 : 0;   // al terminar la línea cierra la boca
                 if (s == 1 && i != lineaEnviada) {   // línea nueva: sus sílabas, para que la boca vaya con la letra
                     enviar("asis|/musica?voz=1&s=" + sil[i] + "&d=" + d + "&o=" + (pos + 150 - t[i]) + "&c=" + (coro[i] ? 1 : 0));
+                    String[] tx = letraTxt;
+                    if (tx != null && i < tx.length) try {   // el renglón que empieza, para la pantalla de la gata (el Cubi viejo lo ignora)
+                        enviar("letra|/musica?let=" + URLEncoder.encode(tx[i].length() > 64 ? tx[i].substring(0, 64) : tx[i], "UTF-8").replace("+", "%20"));
+                    } catch (Exception ignored) { }
                     lineaEnviada = i; vozEnviada = 1; vozMandada = ahora;
                 } else if (s != vozEnviada || ahora - vozMandada > 4000) { enviar("asis|/musica?voz=" + s); vozEnviada = s; vozMandada = ahora; }
                 if (s == 0) lineaEnviada = -1;
@@ -1754,6 +1759,7 @@ public class CubiService extends Service {
                 }
                 letraCoro = coro;
                 letraSil = sil;
+                letraTxt = xs.toArray(new String[0]);
                 letraVoz = v;
                 letraT = t;
             } catch (Exception e) {  // sin internet o sin letra: Cubi sigue con lo que oye

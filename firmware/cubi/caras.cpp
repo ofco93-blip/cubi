@@ -1,6 +1,8 @@
 // el dibujo es casi todo cuentas con decimales: más rápido que el -Os de Arduino
 #pragma GCC optimize("O3", "fast-math")
 #include "caras.h"
+#include <stdlib.h>
+#include <string.h>
 
 namespace caras {
 using namespace dib;
@@ -2773,7 +2775,7 @@ Reac reaccionActual() { return laReac; }
 // ponytail: las reacciones todavía salen con la cara de Cubi (fondo negro); pasarlas al gato de a una
 namespace {
 int relojMin = -1; float relojT = 0;
-char cancionTit[28] = "", cancionArt[24] = "";
+char cancionTit[28] = "", cancionArt[24] = "", letraTxt[72] = "";   // lo que suena y el renglón de la letra que va
 struct Gt { float cx, cy, s, c, n; };                                // dónde está, qué tan grande y cuánto se ladea
 // cómo baila en este cuadro: cuánto salta, cuánto se corre de lado, cuánto se ladea y qué hace la mano libre
 // (0 marca el ritmo en el aire, 1 descansa en el borde, 2 arriba saludando, 3 abajo siguiendo el golpe)
@@ -2791,85 +2793,141 @@ template <class F> void pieza(const Gt &q, float x0, float y0, float x1, float y
 }
 }
 void reloj(int minutos) { relojMin = minutos; relojT = tAhora; }
-void mostrarCancion(const char *t, const char *a) { snprintf(cancionTit, sizeof cancionTit, "%s", t ? t : ""); snprintf(cancionArt, sizeof cancionArt, "%s", a ? a : ""); }
-// boca: 0..1 qué tan abierta; golpe: 0..1 el golpe de la música (salta y mueve la cola); emo: 0..1 sostiene una nota larga; tinta: el color de las zetas
-static void gato(float cx, float cy, float s, float giro, bool duerme, bool canta, float boca, float golpe, float emo, const Baile &b, const Col &tinta) {
-  s *= b.zoom; cx += b.lado * s;
-  const Col N{242, 140, 40}, O{217, 111, 20}, C{255, 227, 189}, T{58, 34, 18}, ROSA{236, 127, 134};
-  const float t = tAhora, g = giro + b.ladeo + (canta ? 0 : 0.025f * sinf(t * 0.9f));
-  const Gt q{cx, cy + s * (-b.salto + (canta ? 0 : 0.04f * sinf(t * 1.6f))), s, cosf(g), sinf(g)};
-  const float cola = (duerme ? 0.08f : canta ? 0.4f : 0.25f) * sinf(t * (canta ? 5.4f : duerme ? 0.6f : 1.3f));
-  float tx[5], ty[5];                                                // la cola: una curva hecha de cuatro tramos
-  for (int i = 0; i < 5; i++) {
-    const float u = i / 4.f, v = 1 - u;
-    tx[i] = v * v * v * 0.7f + 3 * v * v * u * 1.5f + 3 * v * u * u * (1.55f + cola) + u * u * u * (1.2f + cola);
-    ty[i] = v * v * v * 1.5f + 3 * v * v * u * 1.4f + 3 * v * u * u * 0.5f + u * u * u * 0.05f;
-  }
-  const float tic = !duerme && fmodf(t, 9.3f) < 0.22f ? 0.08f : 0;   // de vez en cuando sacude una oreja
-  auto silueta = [=](float x, float y) {                             // cola, cuerpo, cabeza, orejas y el pelo de los cachetes
+void mostrarCancion(const char *t, const char *a) { snprintf(cancionTit, sizeof cancionTit, "%s", t ? t : ""); snprintf(cancionArt, sizeof cancionArt, "%s", a ? a : ""); letraTxt[0] = 0; }
+void mostrarLetra(const char *l) { snprintf(letraTxt, sizeof letraTxt, "%s", l ? l : ""); }
+// Para que vaya fluida en el robot: el fondo (color, letras, hora) se pinta solo cuando cambia y se guarda; el cuerpo de
+// la gata se pinta una sola vez y se guarda como una calcomanía con su transparencia. En cada cuadro se copia el fondo,
+// se pega la calcomanía donde va y solo se dibuja en vivo lo que cambia: ojos, boca, manos, micrófono y zetas.
+// ponytail: la calcomanía no se ladea ni mueve la cola (el ladeo del baile se vuelve un paso de lado); si hace falta, guardar dos o tres poses
+namespace {
+constexpr int SW = 332, SH = 332;                                    // el tamaño de la calcomanía
+constexpr float GS = 92, SOX = 1.38f, SOY = 1.15f;                   // el tamaño de la gata y dónde queda su centro dentro de la calcomanía
+uint16_t *gFondo = nullptr, *gSpr = nullptr; uint8_t *gAlfa = nullptr;
+long gClave = -1; bool gVenia = false;
+void *gMem(size_t n) {
+#ifdef ESP32
+  return ps_malloc(n);                                               // en la memoria grande (PSRAM)
+#else
+  return malloc(n);
+#endif
+}
+// lo que no cambia de la gata: silueta con su sombra, punta de la cola, pecho, orejas, rayas, hocico, nariz y bigotes
+void gatoCuerpo(const Gt &q) {
+  const Col N{242, 140, 40}, O{217, 111, 20}, C{255, 227, 189}, ROSA{236, 127, 134};
+  auto silueta = [](float x, float y) {
     float d = fminf(dElipse(x, y, 0, 1.25f, 1.08f, 1.0f), dElipse(x, y, 0, 0, 0.86f, 0.7f));
-    for (int i = 0; i < 4; i++) d = fminf(d, dSegmento(x, y, tx[i], ty[i], tx[i + 1], ty[i + 1], 0.21f));
+    static const float TX[5] = {0.7f, 1.27f, 1.47f, 1.37f, 1.2f}, TY[5] = {1.5f, 1.32f, 1.0f, 0.55f, 0.05f};   // la cola
+    for (int i = 0; i < 4; i++) d = fminf(d, dSegmento(x, y, TX[i], TY[i], TX[i + 1], TY[i + 1], 0.21f));
     for (int l = -1; l <= 1; l += 2) {
-      d = fminf(d, dTriangulo(x, y, l * 0.78f, -0.28f, l * 0.66f + (l > 0 ? tic : 0), -1.0f, l * 0.18f, -0.58f));
+      d = fminf(d, dTriangulo(x, y, l * 0.78f, -0.28f, l * 0.66f, -1.0f, l * 0.18f, -0.58f));
       d = fminf(d, fminf(dTriangulo(x, y, l * 0.72f, -0.05f, l * 1.08f, 0.12f, l * 0.8f, 0.2f), dTriangulo(x, y, l * 0.8f, 0.2f, l * 1.04f, 0.42f, l * 0.66f, 0.45f)));
     }
     return d;
   };
-  Gt som = q; som.cx += 0.06f * s; som.cy += 0.08f * s;                // la sombra lo separa de los números
-  pieza(som, -1.3f, -1.1f, 2.1f, 2.4f, Col{0, 0, 0}, 0.2f, silueta);
-  pieza(q, -1.3f, -1.1f, 2.1f, 2.4f, N, 1, silueta);
-  pieza(q, 0.9f + cola, -0.2f, 1.5f + cola, 0.35f, C, 1, [=](float x, float y) { return dCirculo(x, y, 1.2f + cola, 0.08f, 0.2f); });   // la punta de la cola
-  pieza(q, -0.65f, 0.45f, 0.65f, 1.95f, C, 1, [](float x, float y) { return dElipse(x, y, 0, 1.2f, 0.6f, 0.7f); });                       // el pecho
+  Gt som = q; som.cx += 0.06f * q.s; som.cy += 0.08f * q.s;            // la sombra la separa de los números
+  pieza(som, -1.3f, -1.1f, 2.0f, 2.4f, Col{0, 0, 0}, 0.2f, silueta);
+  pieza(q, -1.3f, -1.1f, 2.0f, 2.4f, N, 1, silueta);
+  pieza(q, 0.9f, -0.2f, 1.5f, 0.35f, C, 1, [](float x, float y) { return dCirculo(x, y, 1.2f, 0.08f, 0.2f); });
+  pieza(q, -0.65f, 0.45f, 0.65f, 1.95f, C, 1, [](float x, float y) { return dElipse(x, y, 0, 1.2f, 0.6f, 0.7f); });
   for (int l = -1; l <= 1; l += 2) pieza(q, l > 0 ? 0.3f : -0.7f, -0.85f, l > 0 ? 0.7f : -0.3f, -0.3f, Col{247, 184, 160}, 1, [=](float x, float y) { return dTriangulo(x, y, l * 0.66f, -0.34f, l * 0.62f, -0.8f, l * 0.34f, -0.54f); });
-  pieza(q, -0.3f, -0.7f, 0.3f, -0.2f, O, 1, [](float x, float y) {                                                                         // las rayas de la frente
+  pieza(q, -0.3f, -0.7f, 0.3f, -0.2f, O, 1, [](float x, float y) {
     return fminf(dSegmento(x, y, 0, -0.62f, 0, -0.36f, 0.045f), fminf(dSegmento(x, y, -0.2f, -0.62f, -0.16f, -0.3f, 0.045f), dSegmento(x, y, 0.2f, -0.62f, 0.16f, -0.3f, 0.045f)));
   });
-  pieza(q, -0.45f, -0.05f, 0.45f, 0.58f, C, 1, [](float x, float y) { return dElipse(x, y, 0, 0.26f, 0.4f, 0.28f); });                    // el hocico
+  pieza(q, -0.45f, -0.05f, 0.45f, 0.58f, C, 1, [](float x, float y) { return dElipse(x, y, 0, 0.26f, 0.4f, 0.28f); });
   pieza(q, -0.12f, 0.08f, 0.12f, 0.26f, ROSA, 1, [](float x, float y) { return dTriangulo(x, y, -0.09f, 0.12f, 0.09f, 0.12f, 0, 0.23f); });
-  if (boca > 0.05f) {                                                                                                                     // canta o habla: la boca abierta, con lengua
+  for (int l = -1; l <= 1; l += 2) pieza(q, l > 0 ? 0.3f : -1.0f, 0.02f, l > 0 ? 1.0f : -0.3f, 0.42f, BLANCO, 0.85f, [=](float x, float y) {
+    return fminf(dSegmento(x, y, l * 0.34f, 0.236f, l * 0.98f, 0.08f, 0.0125f), dSegmento(x, y, l * 0.34f, 0.292f, l * 0.98f, 0.36f, 0.0125f));
+  });
+}
+// La calcomanía: se pinta el cuerpo dos veces, sobre negro y sobre blanco. Lo de negro es el color (ya mezclado con su
+// transparencia) y la diferencia entre los dos dice qué tan transparente es cada punto.
+void gatoCalco() {
+  uint16_t *tmp = (uint16_t *)gMem(dib::RW * dib::RH * 2), *fb0 = dib::fb;
+  if (!tmp) return;
+  const Gt q{SOX * GS, SOY * GS, GS, 1, 0};
+  dib::fb = tmp;
+  for (int pasada = 0; pasada < 2; pasada++) {
+    memset(tmp, pasada ? 0xFF : 0, dib::RW * dib::RH * 2);
+    gatoCuerpo(q);
+    for (int j = 0; j < SH; j++) for (int i = 0; i < SW; i++) {
+      const uint16_t v = tmp[dib::idx(i, j)];
+      if (!pasada) gSpr[j * SW + i] = v;
+      else gAlfa[j * SW + i] = (uint8_t)lim(255 - (((v >> 5) & 63) - ((gSpr[j * SW + i] >> 5) & 63)) * 255 / 63, 0, 255);
+    }
+  }
+  dib::fb = fb0; free(tmp);
+}
+// pega la calcomanía con el centro de la gata en (cx, cy), agrandada z veces
+void gatoPegar(float cx, float cy, float z) {
+  const int x0 = (int)(cx - SOX * GS * z), y0 = (int)(cy - SOY * GS * z);
+  const int ax = x0 < 0 ? 0 : x0, ay = y0 < 0 ? 0 : y0, bx = (int)fminf(W, x0 + SW * z), by = (int)fminf(H, y0 + SH * z);
+  if (ax >= bx || ay >= by) return;
+  dib::marcar(ax, ay, bx, by);
+  const float iz = 1 / z;
+  for (int y = ay; y < by; y++) {
+    int sj = (int)((y - y0) * iz); if (sj >= SH) sj = SH - 1;
+    const uint16_t *fs = gSpr + sj * SW; const uint8_t *fa = gAlfa + sj * SW;
+    for (int x = ax; x < bx; x++) {
+      int si = (int)((x - x0) * iz); if (si >= SW) si = SW - 1;
+      const int a = fa[si];
+      if (!a) continue;
+      const uint32_t i = dib::idx(x, y);
+      if (a >= 250) { dib::fb[i] = fs[si]; continue; }
+      const uint16_t d = dib::fb[i], c = fs[si]; const int k = 255 - a;   // el color ya viene mezclado: solo se le suma lo que deja ver del fondo
+      int r = ((c >> 11) & 31) + ((((d >> 11) & 31) * k) >> 8), g = ((c >> 5) & 63) + ((((d >> 5) & 63) * k) >> 8), b = (c & 31) + (((d & 31) * k) >> 8);
+      if (r > 31) r = 31; if (g > 63) g = 63; if (b > 31) b = 31;
+      dib::fb[i] = (uint16_t)(r << 11 | g << 5 | b);
+    }
+  }
+}
+}
+// boca: 0..1 qué tan abierta; golpe: 0..1 el golpe de la música; emo: 0..1 sostiene una nota larga; tinta: el color de las zetas
+static void gato(float cx, float cy, bool duerme, bool canta, float boca, float golpe, float emo, const Baile &b, const Col &tinta) {
+  const Col O{217, 111, 20}, C{255, 227, 189}, T{58, 34, 18}, ROSA{236, 127, 134};
+  const float t = tAhora, s = GS * b.zoom;
+  cx += (b.lado + b.ladeo * 1.3f) * s;
+  const Gt q{cx, cy + s * (-b.salto + (canta ? 0 : 0.03f * sinf(t * 1.6f))), s, 1, 0};
+  if (gSpr && gAlfa) gatoPegar(q.cx, q.cy, b.zoom); else gatoCuerpo(q);   // sin memoria para la calcomanía se dibuja entera (lento)
+  if (boca > 0.05f) {                                                // canta, habla o bosteza: la boca abierta, con lengua
     pieza(q, -0.18f, 0.28f, 0.18f, 0.58f, Col{90, 30, 34}, 1, [=](float x, float y) { return dElipse(x, y, 0, 0.37f, 0.13f, 0.04f + 0.13f * boca); });
     if (boca > 0.3f) pieza(q, -0.12f, 0.36f, 0.12f, 0.58f, ROSA, 1, [=](float x, float y) { return dElipse(x, y, 0, 0.4f + 0.08f * boca, 0.08f, 0.05f * boca); });
   } else pieza(q, -0.18f, 0.2f, 0.18f, 0.42f, T, 1, [](float x, float y) {
     return fminf(fminf(dSegmento(x, y, 0, 0.23f, 0, 0.3f, 0.02f), dSegmento(x, y, -0.14f, 0.3f, -0.07f, 0.355f, 0.02f)),
                  fminf(fminf(dSegmento(x, y, -0.07f, 0.355f, 0, 0.3f, 0.02f), dSegmento(x, y, 0, 0.3f, 0.07f, 0.355f, 0.02f)), dSegmento(x, y, 0.07f, 0.355f, 0.14f, 0.3f, 0.02f)));
   });
-  for (int l = -1; l <= 1; l += 2) pieza(q, l > 0 ? 0.3f : -1.0f, 0.1f, l > 0 ? 1.0f : -0.3f, 0.45f, BLANCO, 0.85f, [=](float x, float y) {   // los bigotes
-    return fminf(dSegmento(x, y, l * 0.34f, 0.236f, l * 0.98f, 0.08f, 0.0125f), dSegmento(x, y, l * 0.34f, 0.292f, l * 0.98f, 0.36f, 0.0125f));
-  });
   // parpadea cada 6 o 7 segundos; cada tanto hace el parpadeo lento de los gatos (ojos entrecerrados un rato) y mira a los lados
   const float abre = b.ojos == 1 ? 1.22f : (fmodf(t, 6.7f) > 6.56f ? 0.12f : 1) * (!canta && fmodf(t, 23) > 20.5f ? 0.45f : 1), mx = canta ? 0 : 0.05f * lim(sinf(t * 0.45f) * 3, -1, 1);
   const bool feliz = canta && (boca > 0.75f || emo > 0.5f);
-  for (int l = -1; l <= 1; l += 2) {                                 // los ojos: cápsulas verdes con la pupila de gato; dormido o cantando duro, cerrados
+  for (int l = -1; l <= 1; l += 2) {                                 // los ojos: cápsulas verdes con la pupila de gato
     const float ex = l * 0.34f + mx;
     if (b.ojos == 2) {                                               // apretados: > <
       pieza(q, ex - 0.2f, -0.3f, ex + 0.2f, 0.1f, T, 1, [=](float x, float y) { return fminf(dSegmento(x, y, ex + l * 0.11f, -0.22f, ex - l * 0.09f, -0.1f, 0.035f), dSegmento(x, y, ex - l * 0.09f, -0.1f, ex + l * 0.11f, 0.02f, 0.035f)); });
       continue;
     }
-    if (duerme || feliz) {
+    if (duerme || feliz) {                                           // cerrados: dormida hacia abajo, contenta hacia arriba
       const float ey = duerme ? -0.16f : -0.02f;
       pieza(q, ex - 0.2f, ey - 0.2f, ex + 0.2f, ey + 0.2f, T, 1, [=](float x, float y) { return (duerme ? y < ey + 0.03f : y > ey - 0.03f) ? 1.f : fabsf(hypotf(x - ex, y - ey) - 0.13f) - 0.03f; });
       continue;
     }
-    pieza(q, ex - 0.14f, -0.32f, ex + 0.14f, 0.12f, Col{53, 184, 95}, 1, [=](float x, float y) { return dCaja(x, y, ex, -0.1f, 0.12f, 0.2f * abre, fminf(0.12f, 0.2f * abre)); });
-    pieza(q, ex - 0.06f, -0.27f, ex + 0.06f, 0.07f, Col{18, 48, 28}, 1, [=](float x, float y) { return dCaja(x, y, ex, -0.1f, 0.04f, 0.15f * abre, fminf(0.04f, 0.15f * abre)); });
+    pieza(q, ex - 0.14f, -0.36f, ex + 0.14f, 0.16f, Col{53, 184, 95}, 1, [=](float x, float y) { return dCaja(x, y, ex, -0.1f, 0.12f, 0.2f * abre, fminf(0.12f, 0.2f * abre)); });
+    pieza(q, ex - 0.06f, -0.3f, ex + 0.06f, 0.1f, Col{18, 48, 28}, 1, [=](float x, float y) { return dCaja(x, y, ex, -0.1f, 0.04f, 0.15f * abre, fminf(0.04f, 0.15f * abre)); });
     if (abre > 0.5f) pieza(q, ex, -0.26f, ex + 0.1f, -0.14f, BLANCO, 1, [=](float x, float y) { return dCirculo(x, y, ex + 0.05f, -0.2f, 0.04f); });
   }
-  // Las patas son manos de caricatura. Sin música se apoyan en el borde de la pantalla (está asomado). Cantando, la
+  // Las patas son manos de caricatura. Sin música se apoyan en el borde de la pantalla (está asomada). Cantando, la
   // derecha agarra el micrófono a un lado y la izquierda marca el ritmo en el aire; en las notas largas (emo) trae el
   // micrófono al frente y lo agarra con las dos.
-  const Gt q0{cx, q.cy, s, 1, 0};
   const float k = lim(emo * 1.6f, 0, 1);
   const float hx = 0.38f * (1 - k), hy = 0.63f + 0.05f * k, bx = 0.82f * (1 - k), by = 1.32f;   // la cabeza y la base del micrófono
   if (canta) {
-    pieza(q0, -0.2f, 0.5f, 1.0f, 1.5f, Col{44, 48, 62}, 1, [=](float x, float y) { return dSegmento(x, y, bx, by, hx + (bx - hx) * 0.18f, hy + (by - hy) * 0.18f, 0.07f); });
-    pieza(q0, hx - 0.2f, hy - 0.2f, hx + 0.2f, hy + 0.2f, Col{206, 212, 226}, 1, [=](float x, float y) { return dCirculo(x, y, hx, hy, 0.17f); });
-    pieza(q0, hx - 0.2f, hy - 0.2f, hx + 0.2f, hy + 0.2f, Col{120, 128, 150}, 1, [=](float x, float y) { return fminf(dSegmento(x, y, hx - 0.14f, hy - 0.03f, hx + 0.14f, hy + 0.03f, 0.012f), dSegmento(x, y, hx - 0.05f, hy - 0.15f, hx + 0.05f, hy + 0.15f, 0.012f)); });
+    pieza(q, -0.2f, 0.5f, 1.0f, 1.5f, Col{44, 48, 62}, 1, [=](float x, float y) { return dSegmento(x, y, bx, by, hx + (bx - hx) * 0.18f, hy + (by - hy) * 0.18f, 0.07f); });
+    pieza(q, hx - 0.2f, hy - 0.2f, hx + 0.2f, hy + 0.2f, Col{206, 212, 226}, 1, [=](float x, float y) { return dCirculo(x, y, hx, hy, 0.17f); });
+    pieza(q, hx - 0.2f, hy - 0.2f, hx + 0.2f, hy + 0.2f, Col{120, 128, 150}, 1, [=](float x, float y) { return fminf(dSegmento(x, y, hx - 0.14f, hy - 0.03f, hx + 0.14f, hy + 0.03f, 0.012f), dSegmento(x, y, hx - 0.05f, hy - 0.15f, hx + 0.05f, hy + 0.15f, 0.012f)); });
   }
   for (int l = -1; l <= 1; l += 2) {
-    float mx2, my2;                                                  // dónde va esta mano, en las medidas del gato
+    float mx2, my2;                                                  // dónde va esta mano, en las medidas de la gata
     if (!canta) { mx2 = l * 0.74f; my2 = (H - 0.13f * s - q.cy) / s; }
     else if (l > 0) { mx2 = 0.72f + (0.15f - 0.72f) * k; my2 = 1.14f + (1.06f - 1.14f) * k; }
-    else {                                                         // la mano libre: va de un gesto a otro sin saltos
+    else {                                                           // la mano libre: va de un gesto a otro sin saltos
       static float lx = -1.02f, ly = 0.5f;
       const float ax = b.gesto == 1 ? -0.74f : b.gesto == 2 ? -1.0f + 0.13f * sinf(t * 6) : b.gesto == 3 ? -0.86f : -1.02f;
       const float ay = b.gesto == 1 ? (H - 0.13f * s - q.cy) / s : b.gesto == 2 ? -0.2f : b.gesto == 3 ? 0.95f - 0.16f * golpe : 0.5f - 0.32f * golpe;
@@ -2882,8 +2940,8 @@ static void gato(float cx, float cy, float s, float giro, bool duerme, bool cant
     pieza(qp, -0.14f, -0.05f, 0.14f, 0.18f, O, 1, [](float x, float y) { return fminf(dSegmento(x, y, -0.09f, -0.02f, -0.09f, 0.14f, 0.018f), dSegmento(x, y, 0.09f, -0.02f, 0.09f, 0.14f, 0.018f)); });
   }
   if (duerme) for (int i = 0; i < 3; i++) {                          // las zetas suben desde la cabeza y se desvanecen
-    const float p = fmodf(t * 0.28f + i / 3.f, 1);
-    texto("z", cx + s * (0.75f + 0.5f * p), cy - s * (0.7f + 1.0f * p), s * (0.5f + 0.5f * p), tinta, sinf(p * PI));
+    const float pz = fmodf(t * 0.28f + i / 3.f, 1);
+    texto("z", cx + s * (0.75f + 0.5f * pz), cy - s * (0.7f + 1.0f * pz), s * (0.5f + 0.5f * pz), tinta, sinf(pz * PI));
   }
 }
 // u: segundos desde que empezó la reacción del carro (giro, hueco, acelerón, frenazo, arranque), o -1 si no hay
@@ -2912,14 +2970,49 @@ static void cuadroGato(float t, const Entradas &e, float u) {
       default: rb.salto = 0.12f * fabsf(sinf(u * 8)) * env; break;                                          // el arranque: un brinquito
     }
   }
-  figura(0, 0, W, H, solido(musica ? mezcla(FONDO[tm], BLANCO, 0.1f * golpe) : FONDO[tm]), [](float, float) { return -1.f; });   // con música el fondo late
+  // el fondo (color, letras, hora o canción) solo se pinta cuando cambia; si no, se copia el guardado
+  char tit[28]; int n = 0; long suma = 0;
+  for (const char *c = cancionTit; *c && n < 27; c++) { tit[n++] = (*c >= 'a' && *c <= 'z') ? *c - 32 : *c; suma = suma * 31 + *c; }
+  tit[n] = 0;
+  for (const char *c = letraTxt; *c; c++) suma = suma * 31 + *c;
+  if (!gFondo) {
+    gFondo = (uint16_t *)gMem(dib::RW * dib::RH * 2); gSpr = (uint16_t *)gMem(SW * SH * 2); gAlfa = (uint8_t *)gMem(SW * SH);
+    if (gSpr && gAlfa) gatoCalco();
+  }
+  const long clave = tm * 4000L + (musica ? 2000 + (suma & 1023) : hh < 0 ? 1999 : hh * 60 + mm);
+  if (clave != gClave || !gFondo) {
+    figura(0, 0, W, H, solido(FONDO[tm]), [](float, float) { return -1.f; });
+    if (musica) {
+      if (letraTxt[0]) {                                           // con letra: el nombre arriba, chico, y el renglón que va, en grande (en dos pisos si es largo)
+        texto(tit, CX, 22, anchoTexto(tit, 30) > W * 0.9f ? 22 : 30, TENUE[tm]);
+        char l1[72], l2[72] = ""; int m = 0;
+        for (const char *c = letraTxt; *c && m < 71; c++) l1[m++] = (*c >= 'a' && *c <= 'z') ? *c - 32 : *c;
+        l1[m] = 0;
+        if (anchoTexto(l1, 44) > W * 0.94f) {                      // se parte en el espacio más cercano a la mitad
+          int corte = -1;
+          for (int i = 0; i < m; i++) if (l1[i] == ' ' && (corte < 0 || abs(i - m / 2) < abs(corte - m / 2))) corte = i;
+          if (corte > 0) { snprintf(l2, sizeof l2, "%s", l1 + corte + 1); l1[corte] = 0; }
+        }
+        auto renglon = [&](const char *r, float y) { float tam = 56; while (tam > 22 && anchoTexto(r, tam) > W * 0.94f) tam -= 2; texto(r, CX, y, tam, LETRA[tm]); };
+        if (l2[0]) { renglon(l1, 68); renglon(l2, 122); } else renglon(l1, 92);
+      } else {
+      float tam = 84;
+      while (tam > 30 && anchoTexto(tit, tam) > W * 0.92f) tam -= 4;
+      texto(tit, CX, 62, tam, LETRA[tm]); texto(cancionArt, CX, 62 + tam * 0.6f + 12, 30, TENUE[tm]);
+      }
+    } else {
+      texto("CUBI", 150, 296, 230, TENUE[tm]);
+      if (hh >= 0) {                                                 // la hora, a todo lo ancho; la gata va por delante
+        char b[8]; snprintf(b, sizeof b, "%d:%02d", hh % 12 ? hh % 12 : 12, mm);
+        float tam = 210;
+        while (anchoTexto(b, tam) > W * 0.96f) tam -= 4;
+        texto(b, CX, 108, tam, LETRA[tm]);
+      }
+    }
+    if (gFondo) { memcpy(gFondo, dib::fb, dib::RW * dib::RH * 2); gClave = clave; }
+  } else memcpy(dib::fb, gFondo, dib::RW * dib::RH * 2);
+  gVenia = true;
   if (musica) {
-    char tit[28]; int n = 0;
-    for (const char *c = cancionTit; *c && n < 27; c++) tit[n++] = (*c >= 'a' && *c <= 'z') ? *c - 32 : *c;
-    tit[n] = 0;
-    float tam = 84;
-    while (tam > 30 && anchoTexto(tit, tam) > W * 0.92f) tam -= 4;
-    texto(tit, CX, 62, tam * (1 + 0.04f * golpe), LETRA[tm]); texto(cancionArt, CX, 62 + tam * 0.6f + 12, 30, TENUE[tm]);
     // El baile cambia cada 8 golpes: salta, se mece, cabecea con la mano arriba, da pasos de lado. En las partes suaves
     // se mueve menos y en las fuertes (el coro) más, con la mano arriba.
     static int golpes = 0; static float pulsoAntes = 0;
@@ -2935,19 +3028,12 @@ static void cuadroGato(float t, const Entradas &e, float u) {
     }
     if (e.nivel > 0.8f) b.gesto = 2;
     b.salto += rb.salto; b.lado += rb.lado; b.ladeo += rb.ladeo; b.zoom = rb.zoom; b.ojos = rb.ojos;
-    gato(CX, 262, 92, 0, false, true, e.canta ? e.boca : 0, golpe, e.emocion, b, LETRA[tm]);
+    gato(CX, 262, false, true, e.canta ? e.boca : 0, golpe, e.emocion, b, LETRA[tm]);
   } else {
-    texto("CUBI", 150, 296, 230, TENUE[tm]);
-    if (hh >= 0) {                                                   // la hora, a todo lo ancho; el gato va por delante
-      char b[8]; snprintf(b, sizeof b, "%d:%02d", hh % 12 ? hh % 12 : 12, mm);
-      float tam = 210;
-      while (anchoTexto(b, tam) > W * 0.96f) tam -= 4;
-      texto(b, CX, 108, tam, LETRA[tm]);
-    }
     // en reposo duerme; cada rato se despierta: bosteza con los ojos cerrados, mira la hora unos segundos y se vuelve a dormir
     const float f = fmodf(t, 34);
     const bool atento = habla || laBase == ESCUCHA || laBase == PIENSA, bosteza = !atento && f > 27 && f < 28.4f;
-    gato(312, 262, 92, -0.08f, !atento && f < 28.4f && u < 0, false, habla ? e.boca : bosteza && u < 0 ? sinf((f - 27) / 1.4f * PI) : 0, 0, 0, rb, LETRA[tm]);   // con una reacción del carro se despierta
+    gato(312, 262, !atento && f < 28.4f && u < 0, false, habla ? e.boca : bosteza && u < 0 ? sinf((f - 27) / 1.4f * PI) : 0, 0, 0, rb, LETRA[tm]);   // con una reacción del carro se despierta
   }
 }
 
@@ -2970,6 +3056,9 @@ void cuadro(float t, float dt, const Entradas &e0) {
   // el gato se dibuja aparte, también cuando el carro gira, coge un hueco, acelera, frena o arranca; las demás reacciones, por ahora, con la cara de Cubi
   const bool delCarro = laReac == GIRO_IZQ || laReac == GIRO_DER || laReac == BACHE || laReac == ACELERON || laReac == FRENAZO || laReac == ARRANQUE;
   if (elPaquete == GATO && (laReac == NINGUNA || delCarro)) { cuadroGato(t, e, delCarro ? t - reacDesde : -1); dib::zoom = 1; dib::blanco = false; return; }
+  if (gVenia) {   // venía la gata (fondo de color en toda la pantalla): se borra todo y se manda la pantalla entera
+    gVenia = false; gClave = -1; memset(dib::fb, 0, dib::RW * dib::RH * 2); dib::marcar(0, 0, W, H); dib::todo();
+  }
   float vel;
   float u = t - reacDesde;
   if (reacExtra > 0 && u > 1.5f) u = fmaxf(1.5f, u - reacExtra);   // mantenida: se queda quieta en pantalla el tiempo extra

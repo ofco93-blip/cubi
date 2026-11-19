@@ -109,6 +109,7 @@ int main(int argc, char **argv) {
       if (e.canta && fmodf(t, 4) > 1.2f && fmodf(t, 4) < 2.2f) { e.boca = 0.45f + 0.55f * fabsf(sinf(t * 6)); e.ancho = 0.45f; e.voz = 1; e.emocion = 1; }   // un "¡aaah!" sostenido (las dos manos en el micrófono)
       e.nivel = 0.5f + 0.4f * fabsf(sinf(t * 1.7f));
       if (guion) {
+        mostrarLetra(t < 1 ? "" : t < 9 ? "este es un renglón de ejemplo" : t < 13 ? "y este otro, más largo, se parte en dos pisos" : t < 24 ? "aquí va el coro" : "oooh");   // un renglón de la letra, de mentiras
         const float lat = 0.04f * fabsf(sinf(t * 11));   // el nivel real tiembla un poco
         e.voz = 0.5f; e.emocion = 0; e.canta = false; e.boca = 0; e.nivel = 0;
         auto canta = [&](float cada, float calla, float b0, float b1) { e.canta = fmodf(t, cada) < cada - calla; e.boca = e.canta ? b0 + (b1 - b0) * fabsf(sinf(t * 5.3f)) : 0; };
