@@ -239,7 +239,8 @@ public class CubiCarro extends CarAppService {
         // Los clips de Zelda en 3D: cuadros sueltos en assets/zelda/<clip>/NN.jpg (48 por clip, 12 por segundo).
         android.content.res.AssetManager assets;
         private final android.graphics.Matrix mz = new android.graphics.Matrix();
-        String falla;                                                 // el último error al dibujar, si hubo
+        static final String[] QUIETA = {"quieta"}, BAILES = {"cabeceo", "pata", "cabeceo", "baile"}, RAP = {"rapcabeza", "rapmano", "rapcabeza"};
+        String falla;                                               // el último error al dibujar, si hubo
         private android.graphics.Bitmap cuadroZ;
         private String cuadroDe = "";
         private android.graphics.Bitmap cuadro(String clip, int i) {
@@ -266,11 +267,17 @@ public class CubiCarro extends CarAppService {
             String hora = (h % 12 == 0 ? 12 : h % 12) + ":" + String.format(Locale.US, "%02d", cal.get(java.util.Calendar.MINUTE));
             float w = x1 - x0, alto = y1 - y0, caja = grande ? Math.max(alto * 0.14f, 28) : 0, vh = alto - caja;
             boolean musicaZ = modo == 2;
-            // con rap o urbano, el clip de gafas y gorra; si no, el de bailar. Sin música va a media velocidad.
-            String clip = musicaZ && sv != null && "urbano".equals(sv.ritmoCancion) ? "rap" : "baila";
-            final int n = 96;                                         // 4 s a 24 cuadros por segundo
-            int k = (int) ((ahora * (musicaZ ? 24 : 12) / 1000) % (2 * n - 2));
-            android.graphics.Bitmap b = assets == null ? null : cuadro(clip, k < n ? k : 2 * n - 2 - k);
+            // Varios bucles que se encadenan. Todos terminan en la misma postura (patas apoyadas), así que cada uno se pasa
+            // del final hacia atrás y de vuelta (6 s) y al volver al final se cambia por otro sin que se note el corte.
+            // Sin música, la quieta; con rap o urbano, los de gafas y gorra; si no, cabeceo, una pata arriba o baile.
+            // ponytail: el bucle se escoge al azar por canción, no por la parte de la canción; y si la música arranca o
+            // para a mitad de un bucle, ese cambio sí salta. Seguir el ritmo de verdad pide el tempo de la canción.
+            String[] lista = !musicaZ ? QUIETA : sv != null && "urbano".equals(sv.ritmoCancion) ? RAP : BAILES;
+            final int n = 76, vuelta = 2 * n - 2;                     // 76 cuadros a 24 por segundo
+            long cuadros = ahora * 24 / 1000;
+            int j = (int) (cuadros % vuelta), semilla = (int) (cuadros / vuelta) * 7919 + (sv == null ? 0 : sv.cancionTitulo.hashCode());
+            String clip = lista[(semilla & 0x7fffffff) % lista.length];
+            android.graphics.Bitmap b = assets == null ? null : cuadro(clip, n - 1 - (j < n ? j : vuelta - j));
             // grande: el fondo del clip llena toda la pantalla, como un fondo animado (los botones quedan encima); si no, su cuadro redondeado
             c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); if (!grande || b == null) c.clipPath(gp);
             if (b == null) {                                         // sin clips: la Zelda dibujada de antes
