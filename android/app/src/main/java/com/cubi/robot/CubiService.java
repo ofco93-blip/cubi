@@ -494,7 +494,7 @@ public class CubiService extends Service {
         if (!gpsActivo() || checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return;
         oyeGps = this::posicion;
         // cada 5 s y sin distancia mínima: parado también tiene que avisar, si no nunca sabría que ya llegamos
-        try { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, navMapa() ? 1000 : 5000, 0, oyeGps, Looper.getMainLooper()); }
+        try { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, navMapa() || carroMapa() ? 1000 : 5000, 0, oyeGps, Looper.getMainLooper()); }
         catch (Exception e) { oyeGps = null; }
     }
 
@@ -506,11 +506,16 @@ public class CubiService extends Service {
     private long mapaPedido;
     volatile float mapaRumbo;
     volatile double mapaDx, mapaDy;                 // dónde va el carro respecto al centro del mapa bajado (m)
+    // La pantalla del carro también usa el mapa: mientras esté a la vista (avisa en cada cuadro) se bajan las calles aunque
+    // el robot no esté en modo mapa. ponytail: al cerrarla, el GPS sigue a 1 s hasta el próximo cambio de ajuste del GPS.
+    volatile long carroViendo;
+    boolean carroMapa() { return System.currentTimeMillis() - carroViendo < 6000; }
+    void carroEntra() { carroViendo = System.currentTimeMillis(); gps(); }
     volatile java.util.List<String> mapaZonas;      // el agua, los parques y los ríos, para la pantalla del carro
     volatile long mapaCuando;                       // cuándo llegó la última posición y a qué velocidad (m/s): el carro estima el avance entre una y otra
     volatile float mapaVel;
     volatile java.util.List<String> mapaTramos;     // las calles bajadas, para dibujarlas también en la pantalla del carro
-    private volatile String mapaEstado = "Mini mapa: esperando el GPS.";
+    volatile String mapaEstado = "Mini mapa: esperando el GPS.";
     // la ruta: el destino lo escribe uno en la app; se busca en OpenStreetMap (nominatim) y la ruta la calcula OSRM
     // (router.project-osrm.org, gratis y sin cuenta). No es la ruta de Google: es la de ese servicio.
     private volatile double destLat = Double.NaN, destLon;
@@ -594,7 +599,7 @@ public class CubiService extends Service {
 
     private void mapaGps(Location l) {
         long ahora = System.currentTimeMillis();
-        if (!navMapa() || !navActiva()) return;
+        if (!(navMapa() || carroMapa()) || !navActiva()) return;
         // el destino guardado se vuelve a buscar al arrancar (una vez por minuto si falla)
         if (Double.isNaN(destLat) && !destinoTexto().isEmpty() && !destBuscando && ahora - destIntento > 60000) destino(destinoTexto());
         boolean hayDestino = !Double.isNaN(destLat);
@@ -614,7 +619,7 @@ public class CubiService extends Service {
             new Thread(() -> bajarCalles(lat, lon)).start();
         }
         // la posición solo se manda con una ruta andando en Maps o Waze: mientras llegue, Cubi deja el mapa fijo
-        if (mapaListo && lejos < 375 && ahora - navCuando < 120000)
+        if (navMapa() && mapaListo && lejos < 375 && ahora - navCuando < 120000)
             enviar(String.format(Locale.US, "asis|/mapa?x=%d&y=%d&r=%d&v=%d&k=%d&d=%d", Math.round(dx), Math.round(dy), Math.round(mapaRumbo), navCompleto() ? 1 : 0,
                     kmh < 0 ? -1 : Math.round(kmh), esDeDia() ? 1 : 0));
     }
@@ -768,14 +773,15 @@ public class CubiService extends Service {
                 if (parte.length() > 0) mensajes.add(parte.toString());
                 if (lista == todas) deVias = mensajes.size();
             }
-            for (int i = 0; i < mensajes.size(); i++) {   // de a poquito: Cubi atiende una orden por cuadro
+            boolean alRobot = navMapa();                  // el robot solo recibe el mapa si está en ese modo; la pantalla del carro lo usa siempre
+            for (int i = 0; alRobot && i < mensajes.size(); i++) {   // de a poquito: Cubi atiende una orden por cuadro
                 enviar("asis|/mapa?" + (i < deVias ? "w=" : "g=") + mensajes.get(i) + (i == 0 ? "&n=1" : ""));
                 Thread.sleep(160);
             }
             // el cierre va en un mensaje de vías (repite un tramo corto) para que también lo entienda el Cubi viejo
             String cierre = todas.get(0).length() > 197 ? todas.get(0).substring(0, 197) : todas.get(0);
             mapaLat0 = lat; mapaLon0 = lon; mapaListo = true; mapaDx = mapaDy = 0; mapaZonas = extra; mapaTramos = todas;
-            enviar("asis|/mapa?w=" + cierre + "&f=1");
+            if (alRobot) enviar("asis|/mapa?w=" + cierre + "&f=1");
             mapaEstado = "Mini mapa: " + todas.size() + " tramos de calle" + (ruta.isEmpty() ? "" : ", con la ruta") + (extra.isEmpty() ? "" : ", " + extra.size() + " de agua y parques") + ".";
         } catch (Exception e) {
             mapaEstado = "Mini mapa: no pude bajar las calles (¿hay internet?).";

@@ -91,6 +91,8 @@ public class CubiCarro extends CarAppService {
             if (suena != sonaba) { sonaba = suena; invalidate(); }   // el botón cambia entre pausa y seguir
             Surface s = sup;
             if (s == null || !s.isValid()) return;
+            CubiService sv = CubiService.yo;                       // le avisa al servicio que la pantalla del carro está a la vista (para el mapa)
+            if (sv != null) { if (sv.carroMapa()) sv.carroViendo = System.currentTimeMillis(); else sv.carroEntra(); }
             Canvas c;
             try { c = s.lockHardwareCanvas(); } catch (Exception e) { return; }
             try {
@@ -194,7 +196,7 @@ public class CubiCarro extends CarAppService {
             float x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom, w = x1 - x0;
             recorte.rewind(); recorte.addRoundRect(r, 5 * u, 5 * u, Path.Direction.CW);
             c.save(); c.clipPath(recorte);
-            boolean conMapa = nav && s.mapaTramos != null && s.navMapa();
+            boolean conMapa = nav && s.mapaTramos != null;
             p.setStyle(Paint.Style.FILL); p.setColor(fundido ? VELO : PANEL); if (!(fundido && conMapa)) c.drawRect(r, p);   // fundido y con mapa: el velo lo pone el mapa, desvanecido
             if (conMapa) mapa(c, s, x0, y0, x1, y1, u);
             float pie = franja ? 22 * u : 0;
@@ -219,6 +221,8 @@ public class CubiCarro extends CarAppService {
                 if (s != null && s.kmh >= 3) texto(c, Math.round(s.kmh) + " km/h", x0 + w / 2, cy + 17 * u, 7 * u, GRIS, false, Paint.Align.CENTER, w);
                 if (s == null) texto(c, "Abre la app de Cubi en el celular", x0 + w / 2, cy + 20 * u, 5.5f * u, GRIS, false, Paint.Align.CENTER, w - 8 * u);
             }
+            if (nav && !conMapa)                                         // sin mapa: por qué (sin GPS, bajando las calles, sin internet…)
+                texto(c, s.gpsActivo() ? s.mapaEstado.replace("Mini mapa: ", "Mapa: ") : "Para ver el mapa, prende “Usar el GPS” en la app de Cubi", x0 + w / 2, y1 - 17 * u, 4.5f * u, fundido ? 0xe6ffffff : GRIS, false, Paint.Align.CENTER, w - 8 * u);
             if (nav && fundido && aLoAncho) {
                 String d = s.navDestM < 0 ? "" : metros(s.navDestM) + (s.navLlega.isEmpty() ? " al destino" : "  ·  llegamos " + s.navLlega);
                 boolean haySeg = s.navMetros >= 0 && s.kmh >= 8 && s.navMetros * 3.6 / s.kmh < 100;
