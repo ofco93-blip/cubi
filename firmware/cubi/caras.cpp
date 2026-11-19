@@ -2788,8 +2788,8 @@ template <class F> void pieza(const Gt &q, float x0, float y0, float x1, float y
 }
 void reloj(int minutos) { relojMin = minutos; relojT = tAhora; }
 void mostrarCancion(const char *t, const char *a) { snprintf(cancionTit, sizeof cancionTit, "%s", t ? t : ""); snprintf(cancionArt, sizeof cancionArt, "%s", a ? a : ""); }
-// boca: 0..1 qué tan abierta; golpe: 0..1 el golpe de la música (salta y mueve la cola); tinta: el color de las zetas
-static void gato(float cx, float cy, float s, float giro, bool duerme, bool canta, float boca, float golpe, const Col &tinta) {
+// boca: 0..1 qué tan abierta; golpe: 0..1 el golpe de la música (salta y mueve la cola); emo: 0..1 sostiene una nota larga; tinta: el color de las zetas
+static void gato(float cx, float cy, float s, float giro, bool duerme, bool canta, float boca, float golpe, float emo, const Col &tinta) {
   const Col N{242, 140, 40}, O{217, 111, 20}, C{255, 227, 189}, T{58, 34, 18}, ROSA{236, 127, 134};
   const float t = tAhora, g = giro + (canta ? 0.07f * sinf(t * 3.4f) : 0.025f * sinf(t * 0.9f));
   const Gt q{cx, cy + s * (canta ? -0.1f * golpe : 0.04f * sinf(t * 1.6f)), s, cosf(g), sinf(g)};
@@ -2833,7 +2833,7 @@ static void gato(float cx, float cy, float s, float giro, bool duerme, bool cant
   });
   // parpadea cada 6 o 7 segundos; cada tanto hace el parpadeo lento de los gatos (ojos entrecerrados un rato) y mira a los lados
   const float abre = (fmodf(t, 6.7f) > 6.56f ? 0.12f : 1) * (!canta && fmodf(t, 23) > 20.5f ? 0.45f : 1), mx = canta ? 0 : 0.05f * lim(sinf(t * 0.45f) * 3, -1, 1);
-  const bool feliz = canta && boca > 0.75f;
+  const bool feliz = canta && (boca > 0.75f || emo > 0.5f);
   for (int l = -1; l <= 1; l += 2) {                                 // los ojos: cápsulas verdes con la pupila de gato; dormido o cantando duro, cerrados
     const float ex = l * 0.34f + mx;
     if (duerme || feliz) {
@@ -2845,15 +2845,24 @@ static void gato(float cx, float cy, float s, float giro, bool duerme, bool cant
     pieza(q, ex - 0.06f, -0.27f, ex + 0.06f, 0.07f, Col{18, 48, 28}, 1, [=](float x, float y) { return dCaja(x, y, ex, -0.1f, 0.04f, 0.15f * abre, fminf(0.04f, 0.15f * abre)); });
     if (abre > 0.5f) pieza(q, ex, -0.26f, ex + 0.1f, -0.14f, BLANCO, 1, [=](float x, float y) { return dCirculo(x, y, ex + 0.05f, -0.2f, 0.04f); });
   }
-  const Gt q0{cx, q.cy, s, 1, 0};                                    // lo que no se ladea: el micrófono y las manitos
-  if (canta) {                                                       // el micrófono, agarrado con la mano derecha
-    pieza(q0, 0.3f, 0.6f, 0.95f, 1.45f, Col{44, 48, 62}, 1, [](float x, float y) { return dSegmento(x, y, 0.82f, 1.32f, 0.46f, 0.76f, 0.07f); });
-    pieza(q0, 0.15f, 0.4f, 0.6f, 0.85f, Col{206, 212, 226}, 1, [](float x, float y) { return dCirculo(x, y, 0.38f, 0.63f, 0.17f); });
-    pieza(q0, 0.2f, 0.45f, 0.56f, 0.8f, Col{120, 128, 150}, 1, [](float x, float y) { return fminf(dSegmento(x, y, 0.24f, 0.6f, 0.52f, 0.66f, 0.012f), dSegmento(x, y, 0.33f, 0.48f, 0.43f, 0.78f, 0.012f)); });
+  // Las patas son manos de caricatura. Sin música se apoyan en el borde de la pantalla (está asomado). Cantando, la
+  // derecha agarra el micrófono a un lado y la izquierda marca el ritmo en el aire; en las notas largas (emo) trae el
+  // micrófono al frente y lo agarra con las dos.
+  const Gt q0{cx, q.cy, s, 1, 0};
+  const float k = lim(emo * 1.6f, 0, 1);
+  const float hx = 0.38f * (1 - k), hy = 0.63f + 0.05f * k, bx = 0.82f * (1 - k), by = 1.32f;   // la cabeza y la base del micrófono
+  if (canta) {
+    pieza(q0, -0.2f, 0.5f, 1.0f, 1.5f, Col{44, 48, 62}, 1, [=](float x, float y) { return dSegmento(x, y, bx, by, hx + (bx - hx) * 0.18f, hy + (by - hy) * 0.18f, 0.07f); });
+    pieza(q0, hx - 0.2f, hy - 0.2f, hx + 0.2f, hy + 0.2f, Col{206, 212, 226}, 1, [=](float x, float y) { return dCirculo(x, y, hx, hy, 0.17f); });
+    pieza(q0, hx - 0.2f, hy - 0.2f, hx + 0.2f, hy + 0.2f, Col{120, 128, 150}, 1, [=](float x, float y) { return fminf(dSegmento(x, y, hx - 0.14f, hy - 0.03f, hx + 0.14f, hy + 0.03f, 0.012f), dSegmento(x, y, hx - 0.05f, hy - 0.15f, hx + 0.05f, hy + 0.15f, 0.012f)); });
   }
-  for (int l = -1; l <= 1; l += 2) {                                 // las manitos, separadas del pecho: apoyadas en el borde de la pantalla (o en el micrófono)
-    const bool mic = canta && l > 0;
-    const Gt qp{mic ? cx + 0.72f * s : cx + l * 0.74f * s, mic ? q.cy + 1.14f * s : H - 0.13f * s, s, 1, 0};
+  for (int l = -1; l <= 1; l += 2) {
+    float mx2, my2;                                                  // dónde va esta mano, en las medidas del gato
+    if (!canta) { mx2 = l * 0.74f; my2 = (H - 0.13f * s - q.cy) / s; }
+    else if (l > 0) { mx2 = 0.72f + (0.15f - 0.72f) * k; my2 = 1.14f + (1.06f - 1.14f) * k; }
+    else { const float ax = -1.02f, ay = 0.5f - 0.32f * golpe; mx2 = ax + (-0.15f - ax) * k; my2 = ay + (1.0f - ay) * k; }
+    const Gt qp{cx + mx2 * s, q.cy + my2 * s, s, 1, 0};
+    pieza(qp, -0.34f, -0.29f, 0.34f, 0.29f, O, 1, [](float x, float y) { return dElipse(x, y, 0, 0, 0.31f, 0.26f); });   // el borde: se distingue sobre el pecho
     pieza(qp, -0.3f, -0.25f, 0.3f, 0.25f, C, 1, [](float x, float y) { return dElipse(x, y, 0, 0, 0.27f, 0.22f); });
     pieza(qp, -0.14f, -0.05f, 0.14f, 0.18f, O, 1, [](float x, float y) { return fminf(dSegmento(x, y, -0.09f, -0.02f, -0.09f, 0.14f, 0.018f), dSegmento(x, y, 0.09f, -0.02f, 0.09f, 0.14f, 0.018f)); });
   }
@@ -2883,7 +2892,7 @@ static void cuadroGato(float t, const Entradas &e) {
     float tam = 84;
     while (tam > 30 && anchoTexto(tit, tam) > W * 0.92f) tam -= 4;
     texto(tit, CX, 62, tam * (1 + 0.04f * golpe), LETRA[tm]); texto(cancionArt, CX, 62 + tam * 0.6f + 12, 30, TENUE[tm]);
-    gato(CX, 262, 92, 0, false, true, e.canta ? e.boca : 0, golpe, LETRA[tm]);
+    gato(CX, 262, 92, 0, false, true, e.canta ? e.boca : 0, golpe, e.emocion, LETRA[tm]);
   } else {
     texto("CUBI", 150, 296, 230, TENUE[tm]);
     if (hh >= 0) {                                                   // la hora, a todo lo ancho; el gato va por delante
@@ -2895,7 +2904,7 @@ static void cuadroGato(float t, const Entradas &e) {
     // en reposo duerme; cada rato se despierta: bosteza con los ojos cerrados, mira la hora unos segundos y se vuelve a dormir
     const float f = fmodf(t, 34);
     const bool atento = habla || laBase == ESCUCHA || laBase == PIENSA, bosteza = !atento && f > 27 && f < 28.4f;
-    gato(312, 262, 92, -0.08f, !atento && f < 28.4f, false, habla ? e.boca : bosteza ? sinf((f - 27) / 1.4f * PI) : 0, 0, LETRA[tm]);
+    gato(312, 262, 92, -0.08f, !atento && f < 28.4f, false, habla ? e.boca : bosteza ? sinf((f - 27) / 1.4f * PI) : 0, 0, 0, LETRA[tm]);
   }
 }
 
