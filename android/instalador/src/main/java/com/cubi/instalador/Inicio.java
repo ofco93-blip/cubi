@@ -95,8 +95,11 @@ public class Inicio extends Activity {
                 if (total > 0 && van != total) throw new Exception("la descarga quedó incompleta");
                 decir("Listo. Toca Instalar (o Actualizar) en la ventana de Android.\n\nDespués abre Android Auto: Fermata sale en la lista de apps.", 100);
                 Uri u = androidx.core.content.FileProvider.getUriForFile(this, "com.cubi.instalador.archivos", f);
-                startActivity(new Intent(Intent.ACTION_INSTALL_PACKAGE).setData(u).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        .putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending"));
+                // Igual que Cubi al instalarse a sí mismo, que es lo comprobado: "para resultado", así el instalador de Android
+                // sabe qué app lo llamó; con startActivity a secas no lo sabe y no respeta la marca.
+                Intent ins = new Intent(Intent.ACTION_INSTALL_PACKAGE).setData(u).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        .putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending").putExtra(Intent.EXTRA_RETURN_RESULT, true);
+                runOnUiThread(() -> startActivityForResult(ins, 8));
             } catch (Exception e) {
                 decir("No se pudo: " + e.getMessage() + "\n\nRevisa el internet y toca Instalar otra vez.", -1);
             }
