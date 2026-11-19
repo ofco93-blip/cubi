@@ -1503,7 +1503,7 @@ public class CubiService extends Service {
         long ahora = System.currentTimeMillis();
         if (navDir.isEmpty() || ahora - navMirada < 10000) return;
         navMirada = ahora;
-        if (ahora - navCuando > 30000 && Oyente.rutaViva()) navCuando = ahora;
+        if (ahora - navCuando > 30000 && com.cubi.robot.Oyente.rutaViva()) navCuando = ahora;   // con el nombre completo: aquí adentro hay otra cosa llamada Oyente
     }
     double[] destinoPunto() { return Double.isNaN(destLat) ? null : new double[]{destLat, destLon}; }
     private long flechaCuando;
