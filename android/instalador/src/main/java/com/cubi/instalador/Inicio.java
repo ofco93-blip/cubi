@@ -12,10 +12,7 @@ import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -23,10 +20,11 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-// Un botón: baja la última versión de Fermata Auto de su página oficial y la instala con la marca de Play Store,
+// Un botón: baja Fermata Auto con el nombre de paquete cambiado (el oficial, Android Auto no lo muestra; esta copia es
+// la 2.0.2 tal como la deja AAAD, guardada en las versiones de Cubi) y la instala con la marca de Play Store,
 // para que Android Auto la muestre sin más aplicaciones ni pasos.
 public class Inicio extends Activity {
-    static final String VERSIONES = "https://api.github.com/repos/AndreyPavlenko/Fermata/releases/latest";
+    static final String APK = "https://github.com/ofco93-blip/cubi/releases/download/fermata-aa/fermata-auto-renombrado.apk";
     TextView estado;
     ProgressBar barra;
     Button boton;
@@ -44,7 +42,7 @@ public class Inicio extends Activity {
         titulo.setTextSize(26);
         titulo.setGravity(Gravity.CENTER);
         estado = new TextView(this);
-        estado.setText("Baja Fermata Auto de su página oficial y lo instala de forma que Android Auto lo muestre.\n\nSon unos 150 MB: mejor con wifi.");
+        estado.setText("Baja Fermata Auto y lo instala de forma que Android Auto lo muestre.\n\nSon unos 150 MB: mejor con wifi.");
         estado.setTextSize(16);
         estado.setGravity(Gravity.CENTER);
         estado.setPadding(0, m * 2 / 3, 0, m);
@@ -56,7 +54,7 @@ public class Inicio extends Activity {
         boton.setTextSize(18);
         boton.setOnClickListener(v -> empezar());
         TextView pie = new TextView(this);
-        pie.setText("Fermata Auto es de Andrey Pavlenko (github.com/AndreyPavlenko/Fermata). Esta app no lo modifica: solo lo descarga y lo instala.");
+        pie.setText("Fermata Auto es de Andrey Pavlenko (github.com/AndreyPavlenko/Fermata). Se instala la versión 2.0.2 con el nombre interno cambiado, que es la que Android Auto muestra.");
         pie.setTextSize(12);
         pie.setGravity(Gravity.CENTER);
         pie.setPadding(0, m, 0, 0);
@@ -78,13 +76,11 @@ public class Inicio extends Activity {
         boton.setEnabled(false);
         new Thread(() -> {
             try {
-                decir("Buscando la última versión…", 0);
-                JSONObject v = new JSONObject(new String(leer(abrir(VERSIONES)), "UTF-8"));
-                String url = elegir(v.getJSONArray("assets"));
+                decir("Conectando…", 0);
                 File dir = new File(getCacheDir(), "apk");
                 dir.mkdirs();
                 File f = new File(dir, "fermata.apk");
-                HttpURLConnection c = abrir(url);
+                HttpURLConnection c = abrir(APK);
                 long total = c.getContentLengthLong(), van = 0;
                 try (InputStream in = c.getInputStream(); OutputStream o = new FileOutputStream(f)) {
                     byte[] buf = new byte[1 << 16];
@@ -93,7 +89,7 @@ public class Inicio extends Activity {
                         o.write(buf, 0, n);
                         van += n;
                         int p = total > 0 ? (int) (van * 100 / total) : 0;
-                        if (p != antes) decir("Descargando Fermata " + v.optString("tag_name") + "… " + p + " %", antes = p);
+                        if (p != antes) decir("Descargando Fermata… " + p + " %", antes = p);
                     }
                 }
                 if (total > 0 && van != total) throw new Exception("la descarga quedó incompleta");
@@ -108,19 +104,6 @@ public class Inicio extends Activity {
         }).start();
     }
 
-    // el APK de Fermata Auto para celulares (arm64); si cambian los nombres, el primero que sea de Auto
-    static String elegir(JSONArray a) throws Exception {
-        String otro = null;
-        for (int i = 0; i < a.length(); i++) {
-            String n = a.getJSONObject(i).getString("name"), u = a.getJSONObject(i).getString("browser_download_url");
-            if (!n.endsWith(".apk") || !n.contains("auto")) continue;
-            if (n.contains("arm64")) return u;
-            if (otro == null) otro = u;
-        }
-        if (otro == null) throw new Exception("la versión no trae el APK de Fermata Auto");
-        return otro;
-    }
-
     static HttpURLConnection abrir(String url) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
         c.setInstanceFollowRedirects(true);
@@ -128,15 +111,6 @@ public class Inicio extends Activity {
         c.setReadTimeout(30000);
         if (c.getResponseCode() != 200) throw new Exception("el servidor respondió " + c.getResponseCode());
         return c;
-    }
-
-    static byte[] leer(HttpURLConnection c) throws Exception {
-        try (InputStream in = c.getInputStream()) {
-            ByteArrayOutputStream o = new ByteArrayOutputStream();
-            byte[] buf = new byte[8192];
-            for (int n; (n = in.read(buf)) > 0; ) o.write(buf, 0, n);
-            return o.toByteArray();
-        }
     }
 
     // p: avance de 0 a 100; -1 esconde la barra
