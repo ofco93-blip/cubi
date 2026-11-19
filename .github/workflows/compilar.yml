@@ -57,6 +57,7 @@ jobs:
             out/cubi.ino.partitions.bin
             out/boot_app0.bin
             FermataAA.apk
+            Cubi.apk
           retention-days: 7
 
       - uses: softprops/action-gh-release@v2
