@@ -1178,6 +1178,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
   }
   if (ruta == "/pum") { despertar(millis()); caras::cuentaPum(); sonar(S_CUENTA); return "ok"; }   // 3, 2, 1, ¡pum! y risa
   if (ruta == "/musica") {  // el celular avisa play o pausa (con play baila de una) y, por la letra, si el artista canta
+    if (p.has("tit")) caras::mostrarCancion(p.get("tit").c_str(), p.get("art").c_str());
     if (p.has("play")) { celPlay = p.get("play") == "1"; if (!celPlay) { estilo = NADA; celVozHasta = 0; } }
     if (p.has("voz")) { celVoz = p.get("voz") == "1"; celVozHasta = millis() + 6000; }
     if (p.has("s")) {   // empezó una línea: s = sus vocales, d = cuánto dura cantarla, o = cuánto lleva, c = es del coro
@@ -1222,6 +1223,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
   if (ruta == "/ajuste") {
     if (p.has("vol")) { volumen = constrain(p.get("vol").toInt(), 0, 100); if (es) es8311_voice_volume_set(es, volumen, NULL); sonar(S_WHATSAPP); }
     if (p.has("son")) sonidoOn = p.get("son") == "1";
+    if (p.has("reloj")) caras::reloj(p.get("reloj").toInt());
     if (p.has("carro")) apagarConCarro = p.get("carro") == "1";
     if (p.has("lab")) labios = p.get("lab") == "1";
     if (p.has("bm")) bocaMic = p.get("bm") == "1";

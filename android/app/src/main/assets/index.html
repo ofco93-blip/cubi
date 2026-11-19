@@ -69,6 +69,9 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 [data-paq="8"] .eyes i { width: .67em; height: .67em; border-radius: .33em .33em .17em .17em; }
 [data-paq="9"] .eyes i { background: none; border: .07em solid var(--cara); }
 [data-paq="10"] .eyes i { height: .5em; border-radius: 50%; }
+[data-paq="11"] .eyes i { background: #35b85f; box-shadow: none; }
+.paq[data-paq="11"] .eyes, #pantalla[data-paq="11"] { background: #f28c28; border-radius: 34px; }
+.paq[data-paq="11"] .eyes { border-radius: 14px; padding: .1em .3em; }
 .pantalla { justify-self: center; width: 216px; height: 176px; border-radius: 34px; background: #000; border: 1px solid var(--line); display: grid; place-content: center;
   box-shadow: 0 0 44px -6px color-mix(in srgb, var(--cara) 34%, transparent); transition: box-shadow .3s; }
 .pantalla .eyes { font-size: 84px; }
@@ -145,6 +148,7 @@ section[hidden] { display: none; }
       <button class="paq" data-paq="8"><span class="eyes"><i></i><i></i></span><b>Pancho</b><small>Ojos de pan y guantes</small></button>
       <button class="paq" data-paq="9"><span class="eyes"><i></i><i></i></span><b>Lino</b><small>Todo en línea</small></button>
       <button class="paq" data-paq="10"><span class="eyes"><i></i><i></i></span><b>Mochi</b><small>Ojitos chiquitos</small></button>
+      <button class="paq" data-paq="11"><span class="eyes"><i></i><i></i></span><b>Gato</b><small>Naranja, con la hora y micrófono</small></button>
     </div>
     <div class="row"><span>Color</span></div>
     <div class="colores" id="colores"><input type="color" id="ojos" value="#ffffff" aria-label="Otro color"></div>

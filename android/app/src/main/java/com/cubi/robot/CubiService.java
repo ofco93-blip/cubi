@@ -312,6 +312,7 @@ public class CubiService extends Service {
                 }
                 avisar("conectado");
                 ui.post(CubiService.this::clima);
+                ui.post(CubiService.this::mandarHora);
                 ui.post(() -> { musicaPlay = false; videoMandado = false; enviar("musica|/musica?video=0"); revisarAsistente(); });  // al reconectar le cuenta si hay música
                 siguiente();
             }
@@ -436,8 +437,12 @@ public class CubiService extends Service {
 
     private final Runnable climaCada = this::clima;
     private long climaCuando;
+    // la hora, para el reloj del gato: el robot no tiene reloj propio, sigue contando desde lo que le diga el celular
+    void mandarHora() { Calendar c = Calendar.getInstance(); enviar("reloj|/ajuste?reloj=" + (c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE))); }
+
     void clima() {
         ui.removeCallbacks(climaCada);
+        mandarHora();
         if (!climaActivo()) return;
         climaCuando = System.currentTimeMillis();
         ui.postDelayed(climaCada, 20 * 60000);
@@ -1581,6 +1586,11 @@ public class CubiService extends Service {
                 cancionId = id;
                 cancionTexto = titulo + (artista != null ? " de " + artista : "");
                 cancionTitulo = titulo; cancionArtista = artista == null ? "" : artista;
+                try {   // el nombre de la canción, para la pantalla de música del gato (sin lo que va entre paréntesis)
+                    String tc = titulo.replaceAll("\\s*[\\(\\[].*$", "").replaceAll("\\s+-\\s+.*$", ""), ar = cancionArtista.split(",")[0];
+                    enviar("cancion|/musica?tit=" + URLEncoder.encode(tc.length() > 26 ? tc.substring(0, 26) : tc, "UTF-8").replace("+", "%20")
+                            + "&art=" + URLEncoder.encode(ar.length() > 22 ? ar.substring(0, 22) : ar, "UTF-8").replace("+", "%20"));
+                } catch (Exception ignored) { }
                 letraT = null;
                 ritmoCancion = ""; introPiano = false; ritmoMandado = "";
                 estadoLetra = cancionTexto + ": buscando la letra…";

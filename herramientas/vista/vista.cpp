@@ -48,6 +48,7 @@ int main(int argc, char **argv) {
   if (que.rfind("mini_", 0) == 0) { paquete(MINIMALISTA); que = que.substr(5); }
   for (auto pq : {std::make_pair("novas_", NOVA_S), std::make_pair("kiras_", KIRA_S), std::make_pair("colores_", ATARDECER), std::make_pair("ovalo_", OVALO), std::make_pair("neon_", NEON), std::make_pair("simple_", SIMPLE), std::make_pair("pancho_", CARICATURA), std::make_pair("lino_", TRAZO), std::make_pair("mochi_", BOLITA)})   // las caras nuevas, igual que mini_
     if (que.rfind(pq.first, 0) == 0) { paquete(pq.second); que = que.substr(strlen(pq.first)); }   // mini_x = la misma cara en el paquete minimalista
+  if (que.rfind("gato_", 0) == 0) { paquete(GATO); reloj(7 * 60 + 7); mostrarCancion("Dynamite", "Taio Cruz"); que = que.substr(5); }   // gato_x = la misma escena con el gato
   if (que.rfind("mapa_", 0) == 0) { mapaVista(true); que = "maps_" + que.substr(5); }   // mapa_x = la misma indicación con el mapa completo
   auto fin = [&](const char *f) { const size_t n = strlen(f); if (que.size() <= n || que.compare(que.size() - n, n, f)) return false; que.resize(que.size() - n); return true; };
   for (int i = 0; i < 3; i++) if (fin(("_m" + std::to_string(i)).c_str())) estiloManos(i);   // x_m1 = la misma escena con otro estilo de manos

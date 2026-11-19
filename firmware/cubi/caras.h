@@ -19,6 +19,8 @@ void mapaVista(bool completo);      // true: en la navegación, el mapa completo
 void mapaDia(bool dia);   // el tablero de Maps: claro de día, oscuro de noche
 void mapaClima(int tipo, int grados);   // el Cubi del clima en la tarjeta: 0 sol, 1 luna, 2 nubes, 3 lluvia, 4 tormenta, 5 nieve (-1 = sin clima)
 void mostrarDestino(int metros, const char *hora);   // a cuánto está el destino (-1 = no se sabe) y la hora de llegada ("" = no se sabe)
+void reloj(int minutos);                              // la hora del celular (minutos desde la medianoche); el robot sigue contando solo
+void mostrarCancion(const char *titulo, const char *artista);   // lo que suena, para la pantalla de música del gato
 void mapaVel(int kmh);    // la velocidad que muestra el tablero (-1 = no mostrar)
 void mostrarGiro(int forma);        // la forma del giro: 0 normal, 1 curva suave, 2 cerrada, 3 en U, 4 glorieta, 5 salida
 void estiloManos(int e);            // 0 guante gordito, 1 de línea, 2 manopla lisa
@@ -46,7 +48,7 @@ struct Entradas {
 
 // paquetes de caras (se escogen desde la app)
 // NOVA_S y KIRA_S (antes anime y peluche) son Nova y Kira sólidas, sin rayitas; las de solo ojos no tienen boca
-enum Paquete : uint8_t { CUBI_AZUL, MINIMALISTA, NOVA_S, KIRA_S, ATARDECER, OVALO, NEON, SIMPLE, CARICATURA, TRAZO, BOLITA, N_PAQ };   // se usan MINIMALISTA y las tres últimas
+enum Paquete : uint8_t { CUBI_AZUL, MINIMALISTA, NOVA_S, KIRA_S, ATARDECER, OVALO, NEON, SIMPLE, CARICATURA, TRAZO, BOLITA, GATO, N_PAQ };   // se usan MINIMALISTA y las tres últimas
 extern const char *NOMBRE_PAQ[N_PAQ];
 void paquete(uint8_t p);
 uint8_t paqueteAhora();             // la cara que quedó puesta (una vieja cae en la minimalista)
