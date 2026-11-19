@@ -322,7 +322,7 @@ public class CubiCarro extends CarAppService {
             int[] tinte = null; boolean alReves = false;
             // El clima: lluvia, calor o frío. Reacciona en los dos bucles siguientes a que cambie, y luego uno de cada seis.
             String est = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaEstado.toLowerCase(Locale.ROOT);
-            String cc = est.isEmpty() && (sv == null || sv.climaGrados == Integer.MIN_VALUE) ? null : est.contains("lluv") || est.contains("llov") || est.contains("torment") ? "lluvia" : sv.climaGrados >= 28 ? "calor" : sv.climaGrados <= 13 ? "frio" : null;
+            String cc = est.isEmpty() && (sv == null || sv.climaGrados == Integer.MIN_VALUE) ? null : est.contains("lluv") || est.contains("llov") || est.contains("torment") ? "lluvia" : sv.climaGrados >= 28 ? "calor" : sv.climaGrados <= 18 ? "frio" : null;
             if (cc == null) climaDe = "";
             else if (!cc.equals(climaDe)) { climaDe = cc; climaCiclo = ciclo + 1; }
             if (cc != null && (ciclo == climaCiclo || ciclo == climaCiclo + 1 || ciclo % 6 == 5)) { clip = cc; tinte = cc.equals("calor") ? CALOR : cc.equals("frio") ? FRIO : LLUVIA; }
@@ -351,6 +351,28 @@ public class CubiCarro extends CarAppService {
             if (lleno) c.drawPaint(p); else c.drawRect(x0, y0, x1, y1, p);
             p.setShader(null); p.setColor(c2);
             if (lleno) c.drawRect(-1e5f, repisa, 1e5f, 1e5f, p); else c.drawRect(x0, repisa, x1, y1, p);
+            // el clima al fondo, por detrás de ella: suave siempre que llueva o haga sol, y más fuerte durante su reacción
+            if (lleno) {
+                float fx0 = 0, fx1 = Math.max(x1, c.getWidth()), fy0 = 0;
+                boolean llueve = "lluvia".equals(cc), sol = "calor".equals(cc) || est.contains("sol") || est.contains("despej");
+                if (sol) {                                             // un sol grande asomado arriba a la derecha, con rayos que giran
+                    float sx = fx1 - vh * 0.16f, sy = fy0 + vh * 0.1f, sr = vh * 0.26f; int a = (int) (70 + 130 * ft);
+                    p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeWidth(vh * 0.022f); p.setColor(0xffffc94d); p.setAlpha(a);
+                    double g0 = (ahora % 40000) / 40000.0 * Math.PI * 2;
+                    for (int i = 0; i < 12; i++) { double g = g0 + i * Math.PI / 6; c.drawLine(sx + (float) Math.cos(g) * sr * 1.25f, sy + (float) Math.sin(g) * sr * 1.25f, sx + (float) Math.cos(g) * sr * 1.6f, sy + (float) Math.sin(g) * sr * 1.6f, p); }
+                    p.setStyle(Paint.Style.FILL); p.setColor(0xffffc94d); p.setAlpha(a); c.drawCircle(sx, sy, sr, p); p.setAlpha(255);
+                }
+                if (llueve) {                                          // rayitas que caen inclinadas, cada una a su paso
+                    p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeWidth(Math.max(2, vh * 0.006f)); p.setColor(0xffbfe0ff); p.setAlpha((int) (70 + 120 * ft));
+                    float largo = vh * 0.07f, ancho = fx1 - fx0 + vh * 0.3f;
+                    for (int i = 0; i < 70; i++) {
+                        float u1 = (i * 0.6180339f) % 1f, u2 = (i * 0.7548777f) % 1f, vel = 0.9f + u2 * 0.7f;
+                        float yy = ((ahora % 100000) / 1000f * vel + u2 * 3f) % 1.25f * (repisa - fy0 + largo) + fy0 - largo, xx = fx0 + u1 * ancho - (yy - fy0) * 0.18f;
+                        if (yy + largo < repisa) c.drawLine(xx, yy, xx - largo * 0.18f, yy + largo, p);
+                    }
+                    p.setAlpha(255); p.setStyle(Paint.Style.FILL);
+                }
+            }
             if (b == null || mascZ == null) {                         // sin clips: la Zelda dibujada de antes
                 float t = Math.min(w, alto) * 0.26f;
                 gato(c, (x0 + x1) / 2, y1 - t * 1.1f, t, ahora, modo, y1, 0xffffffff);
