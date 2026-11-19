@@ -96,8 +96,12 @@ public class CubiCarro extends CarAppService {
             try {
                 Rect a = zona.isEmpty() ? new Rect(0, 0, ancho, alto) : zona;
                 lienzo.dibujar(c, a, firme, CubiService.yo, prefs.getInt("carroVista", prefs.getBoolean("carroSola", false) ? 1 : 0), prefs.getInt("ojos", 0xffffff), prefs.getBoolean("carroZelda", true), prefs.getInt("carroFondo", -1));
+            } catch (Throwable t) {
+                // un error al dibujar no puede tumbar la app: se apagan los clips (queda la Zelda dibujada) y el error
+                // sale en letra pequeña en la pantalla del carro, para poder verlo
+                lienzo.assets = null; lienzo.falla = String.valueOf(t);
             } finally {
-                s.unlockCanvasAndPost(c);
+                try { s.unlockCanvasAndPost(c); } catch (Throwable t) { }
             }
         }
     }
@@ -139,6 +143,10 @@ public class CubiCarro extends CarAppService {
         void dibujar(Canvas c, Rect a, Rect firme, CubiService s, int vista, int ojos, boolean zelda, int fondo) {
             long ahora = System.currentTimeMillis();
             c.drawColor(0xff000000);
+            dibujarTodo(c, a, firme, s, vista, ojos, zelda, fondo, ahora);
+            if (falla != null) texto(c, falla, a.left + 12, a.bottom - 10, 14, GRIS, false, Paint.Align.LEFT, a.width() - 24);
+        }
+        private void dibujarTodo(Canvas c, Rect a, Rect firme, CubiService s, int vista, int ojos, boolean zelda, int fondo, long ahora) {
             boolean musica = s != null && !s.cancionTitulo.isEmpty(), suena = musica && s.musicaPlay;
             String cancion = !musica ? "" : "♪ " + s.cancionTitulo + (s.cancionArtista.isEmpty() ? "" : " · " + s.cancionArtista);
             boolean nav = s != null && !s.navDir.isEmpty() && ahora - s.navCuando < 120000;
@@ -231,15 +239,20 @@ public class CubiCarro extends CarAppService {
         // Los clips de Zelda en 3D: cuadros sueltos en assets/zelda/<clip>/NN.jpg (48 por clip, 12 por segundo).
         android.content.res.AssetManager assets;
         private final android.graphics.Matrix mz = new android.graphics.Matrix();
+        String falla;                                                 // el último error al dibujar, si hubo
         private android.graphics.Bitmap cuadroZ;
         private String cuadroDe = "";
         private android.graphics.Bitmap cuadro(String clip, int i) {
             String clave = clip + i;
             if (clave.equals(cuadroDe) && cuadroZ != null) return cuadroZ;
+            // se decodifica siempre sobre el mismo bitmap: sin esto cada cuadro pedía 3,7 MB nuevos, 12 veces por segundo
+            android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
+            o.inMutable = true; o.inBitmap = cuadroZ;
             try (java.io.InputStream in = assets.open(String.format(Locale.US, "zelda/%s/%02d.jpg", clip, i + 1))) {
-                android.graphics.Bitmap b = android.graphics.BitmapFactory.decodeStream(in);
+                android.graphics.Bitmap b = android.graphics.BitmapFactory.decodeStream(in, null, o);
                 if (b != null) { cuadroZ = b; cuadroDe = clave; }
-            } catch (Exception e) {
+            } catch (Throwable e) {
+                cuadroZ = null; cuadroDe = ""; falla = String.valueOf(e);   // el siguiente intento pide un bitmap nuevo
                 return null;
             }
             return cuadroZ;
