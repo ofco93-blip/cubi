@@ -468,6 +468,7 @@ public class CubiService extends Service {
                 String e = cod <= 1 ? "despejado" : cod <= 3 ? "nubes" : cod <= 48 ? "niebla" : cod <= 67 ? "lluvia"
                     : cod <= 77 ? "nieve" : cod <= 82 ? "lluvia" : cod <= 86 ? "nieve" : "tormenta";
                 climaOrden = "/clima?t=" + t + "&e=" + e + "&d=" + dia;
+                climaGrados = t; climaEstado = e;
                 enviar("clima|" + climaOrden);
                 climaTexto = "Ahora: " + e + ", " + t + " grados" + (llueve < 0 ? "" : ". Probabilidad de lluvia en las próximas 6 horas: " + llueve + " por ciento");
                 js("climaTexto(" + JSONObject.quote(climaTexto) + ")");
@@ -1667,7 +1668,9 @@ public class CubiService extends Service {
         public Boolean empiezaPiano;
     }
 
-    private volatile String ritmoCancion = "";   // el instrumento de la canción (por su género)
+    volatile int climaGrados = Integer.MIN_VALUE;   // el clima de ahora, para la cajita de la pantalla del carro
+    volatile String climaEstado = "";
+    volatile String ritmoCancion = "";   // el instrumento de la canción (por su género)
     private volatile boolean introPiano;         // la canción empieza solo con piano
     private String ritmoMandado = "";
 

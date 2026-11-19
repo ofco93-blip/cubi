@@ -63,6 +63,7 @@ public class CubiCarro extends CarAppService {
         Pantalla(CarContext c) {
             super(c);
             prefs = c.getSharedPreferences("cubi", 0);
+            lienzo.assets = c.getAssets();
             c.getCarService(AppManager.class).setSurfaceCallback(this);
         }
 
@@ -227,38 +228,77 @@ public class CubiCarro extends CarAppService {
         static final int[] FONDO_Z = {0xff35c3e8, 0xfff0457e, 0xff27c48f, 0xff8b6cf0, 0xff262262}, LETRA_Z = {0xffffd23f, 0xffffffff, 0xff0f3d33, 0xfffff3b0, 0xff9a95ff};
         private final Path gp = new Path();
         private final RectF gr = new RectF();
+        // Los clips de Zelda en 3D: cuadros sueltos en assets/zelda/<clip>/NN.jpg (48 por clip, 12 por segundo).
+        android.content.res.AssetManager assets;
+        private android.graphics.Bitmap cuadroZ;
+        private String cuadroDe = "";
+        private android.graphics.Bitmap cuadro(String clip, int i) {
+            String clave = clip + i;
+            if (clave.equals(cuadroDe) && cuadroZ != null) return cuadroZ;
+            try (java.io.InputStream in = assets.open(String.format(Locale.US, "zelda/%s/%02d.jpg", clip, i + 1))) {
+                android.graphics.Bitmap b = android.graphics.BitmapFactory.decodeStream(in);
+                if (b != null) { cuadroZ = b; cuadroDe = clave; }
+            } catch (Exception e) {
+                return null;
+            }
+            return cuadroZ;
+        }
+        // Zelda en su cuadro. El clip va en bucle de ida y vuelta (no se nota el corte) y en espejo: ella a la izquierda y
+        // a la derecha el texto (la hora; con música, el renglón de la letra y el artista). Abajo, donde apoya las patas,
+        // una cajita con la hora y el clima. grande: con texto y cajita; si no, solo ella.
         private void zelda(Canvas c, float x0, float y0, float x1, float y1, float radio, long ahora, int modo, int fondo, CubiService sv, boolean grande) {
             java.util.Calendar cal = java.util.Calendar.getInstance();
-            int h = cal.get(java.util.Calendar.HOUR_OF_DAY), tm = fondo >= 0 ? fondo : modo == 2 ? 1 : h >= 19 || h < 6 ? 4 : 0;
-            float w = x1 - x0, alto = y1 - y0, s = Math.min(w, alto) * (grande ? 0.24f : 0.3f);
+            int h = cal.get(java.util.Calendar.HOUR_OF_DAY);
+            String hora = (h % 12 == 0 ? 12 : h % 12) + ":" + String.format(Locale.US, "%02d", cal.get(java.util.Calendar.MINUTE));
+            float w = x1 - x0, alto = y1 - y0, caja = grande ? Math.max(alto * 0.14f, 28) : 0, vh = alto - caja;
+            boolean musicaZ = modo == 2;
+            // con rap o urbano, el clip de gafas y gorra; si no, el de bailar. Sin música va a media velocidad.
+            String clip = musicaZ && sv != null && "urbano".equals(sv.ritmoCancion) ? "rap" : "baila";
+            final int n = 48;
+            int k = (int) ((ahora * (musicaZ ? 12 : 6) / 1000) % (2 * n - 2));
+            android.graphics.Bitmap b = assets == null ? null : cuadro(clip, k < n ? k : 2 * n - 2 - k);
             c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); c.clipPath(gp);
-            p.setStyle(Paint.Style.FILL); p.setColor(FONDO_Z[tm]); c.drawRect(gr, p);
-            tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(LETRA_Z[tm]);
-            boolean alLado = grande && w > alto * 1.5f;               // pantalla ancha: el texto a la izquierda y ella a la derecha
-            float tx = alLado ? x0 + w * 0.33f : (x0 + x1) / 2, tw = alLado ? w * 0.58f : w * 0.9f;
-            if (grande && modo == 2 && sv != null) {                  // con música: el renglón de la letra que va (o el nombre de la canción), en grande
-                String letra = sv.letraAhora.isEmpty() ? sv.cancionTitulo : sv.letraAhora, abajo = sv.letraAhora.isEmpty() ? sv.cancionArtista : sv.cancionTitulo;
-                letra = letra.toUpperCase(Locale.ROOT);
-                String l1 = letra, l2 = "";
-                tp.setTextSize(alto * 0.16f);
-                if (tp.measureText(letra) > tw) {                     // largo: en dos pisos, partido en el espacio más cercano a la mitad
-                    int corte = -1;
-                    for (int i = letra.indexOf(' '); i >= 0; i = letra.indexOf(' ', i + 1)) if (corte < 0 || Math.abs(i - letra.length() / 2) < Math.abs(corte - letra.length() / 2)) corte = i;
-                    if (corte > 0) { l1 = letra.substring(0, corte); l2 = letra.substring(corte + 1); }
-                }
-                float yy = y0 + alto * (alLado ? 0.36f : 0.2f);
-                for (String l : new String[]{l1, l2}) {
-                    if (l.isEmpty()) continue;
-                    tp.setTextSize(alto * 0.16f); tp.setTextSize(Math.min(alto * 0.16f, alto * 0.16f * tw / Math.max(1, tp.measureText(l))));
-                    c.drawText(l, tx, yy, tp); yy += alto * 0.17f;
-                }
-                tp.setAlpha(170); tp.setTextSize(alto * 0.07f); c.drawText(TextUtils.ellipsize(abajo, tp, tw, TextUtils.TruncateAt.END).toString(), tx, yy - alto * 0.04f, tp); tp.setAlpha(255);
-            } else if (grande) {                                      // sin música: la hora enorme, y ella por delante
-                String hora = (h % 12 == 0 ? 12 : h % 12) + ":" + String.format(Locale.US, "%02d", cal.get(java.util.Calendar.MINUTE));
-                tp.setTextSize(100); tp.setTextSize(Math.min(alto * (alLado ? 0.62f : 0.46f), 100 * tw / tp.measureText(hora)));
-                c.drawText(hora, tx, alLado ? y0 + alto * 0.5f + tp.getTextSize() * 0.36f : y0 + alto * 0.08f + tp.getTextSize() * 0.8f, tp);
+            if (b == null) {                                          // sin clips: la Zelda dibujada de antes
+                int tm = fondo >= 0 ? fondo : musicaZ ? 1 : h >= 19 || h < 6 ? 4 : 0;
+                p.setStyle(Paint.Style.FILL); p.setColor(FONDO_Z[tm]); c.drawRect(gr, p);
+                float s = Math.min(w, alto) * 0.26f;
+                gato(c, (x0 + x1) / 2, y1 - s * 1.1f, s, ahora, modo, y1, LETRA_Z[tm]);
+                c.restore(); return;
             }
-            gato(c, alLado ? x0 + w * 0.76f : (x0 + x1) / 2 + (grande && modo != 2 ? w * 0.12f : 0), y1 - s * 1.1f, s, ahora, modo, y1, LETRA_Z[tm]);
+            float sc = Math.max(w / b.getWidth(), vh / b.getHeight()), dw = b.getWidth() * sc, dh = b.getHeight() * sc;
+            c.save(); c.clipRect(x0, y0, x1, y0 + vh); c.translate(x0 + dw, y0 + vh - dh); c.scale(-sc, sc);
+            p.setFilterBitmap(true); p.setColor(0xffffffff); c.drawBitmap(b, 0, 0, p); c.restore();
+            if (grande) {
+                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(0xffffffff); tp.setShadowLayer(alto * 0.02f, 0, alto * 0.006f, 0x66000000);
+                boolean ancho = w > alto * 1.3f;
+                float tx = ancho ? x0 + w * 0.72f : (x0 + x1) / 2, tw = ancho ? w * 0.5f : w * 0.9f, ty = ancho ? y0 + vh * 0.4f : y0 + vh * 0.16f;
+                if (musicaZ && sv != null) {                          // el renglón de la letra que va (o el nombre de la canción) y debajo el artista
+                    String letra = (sv.letraAhora.isEmpty() ? sv.cancionTitulo : sv.letraAhora).toUpperCase(Locale.ROOT), l1 = letra, l2 = "";
+                    float tam = alto * (ancho ? 0.13f : 0.09f);
+                    tp.setTextSize(tam);
+                    if (tp.measureText(letra) > tw) {                 // largo: en dos pisos, partido en el espacio más cercano a la mitad
+                        int corte = -1;
+                        for (int i = letra.indexOf(' '); i >= 0; i = letra.indexOf(' ', i + 1)) if (corte < 0 || Math.abs(i - letra.length() / 2) < Math.abs(corte - letra.length() / 2)) corte = i;
+                        if (corte > 0) { l1 = letra.substring(0, corte); l2 = letra.substring(corte + 1); }
+                    }
+                    for (String l : new String[]{l1, l2}) {
+                        if (l.isEmpty()) continue;
+                        tp.setTextSize(tam); tp.setTextSize(Math.min(tam, tam * tw / Math.max(1, tp.measureText(l))));
+                        c.drawText(l, tx, ty, tp); ty += tam * 1.1f;
+                    }
+                    tp.setTextSize(tam * 0.5f); tp.setAlpha(215);
+                    c.drawText(TextUtils.ellipsize(sv.cancionArtista + (sv.letraAhora.isEmpty() ? "" : " · " + sv.cancionTitulo), tp, tw, TextUtils.TruncateAt.END).toString(), tx, ty - tam * 0.3f, tp); tp.setAlpha(255);
+                } else {                                              // sin música: la hora, grande
+                    tp.setTextSize(100); tp.setTextSize(Math.min(alto * (ancho ? 0.42f : 0.2f), 100 * tw / tp.measureText(hora)));
+                    c.drawText(hora, tx, ancho ? y0 + vh * 0.5f + tp.getTextSize() * 0.36f : ty + tp.getTextSize() * 0.4f, tp);
+                }
+                tp.clearShadowLayer();
+                // la cajita de abajo: la hora y el clima; con música, también lo que suena
+                p.setStyle(Paint.Style.FILL); p.setColor(0xf00c1018); c.drawRect(x0, y1 - caja, x1, y1, p);
+                String clima = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : "  ·  " + sv.climaGrados + "°  " + sv.climaEstado;
+                texto(c, hora + clima, x0 + caja * 0.5f, y1 - caja * 0.33f, caja * 0.46f, TINTA, true, Paint.Align.LEFT, w * 0.5f);
+                if (musicaZ && sv != null) texto(c, "♪ " + sv.cancionTitulo, x1 - caja * 0.5f, y1 - caja * 0.33f, caja * 0.4f, GRIS, false, Paint.Align.RIGHT, w * 0.42f);
+            }
             c.restore();
         }
         // el cuadro pequeño con los datos del viaje: a cuánto está el destino, a qué hora se llega y en cuántos segundos toca girar
