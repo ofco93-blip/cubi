@@ -40,7 +40,7 @@ struct Rostro {
 static_assert(sizeof(Rostro) % sizeof(float) == 0, "Rostro debe ser solo floats");
 
 static Rostro ahora, meta;
-const char *NOMBRE_PAQ[N_PAQ] = {"Cubi azul", "Cubi", "Nova sólida", "Kira sólida", "Colores", "Nova", "Kira", "Pixel", "Pancho", "Lino", "Mochi", "Gato"};
+const char *NOMBRE_PAQ[N_PAQ] = {"Cubi azul", "Cubi", "Nova sólida", "Kira sólida", "Colores", "Nova", "Kira", "Pixel", "Pancho", "Lino", "Mochi", "Zelda"};
 static uint8_t elPaquete = CUBI_AZUL;
 static int manoEstilo = 3, tonoBase = AZUL;   // las manos y el color de base de la cara puesta
 // Quedan cuatro caras: la minimalista y las tres nuevas. Las viejas ya no se ofrecen: si quedó guardada una, cae en la minimalista.
