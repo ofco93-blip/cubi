@@ -189,9 +189,9 @@ public class CubiCarro extends CarAppService {
             float x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom, w = x1 - x0;
             recorte.rewind(); recorte.addRoundRect(r, 5 * u, 5 * u, Path.Direction.CW);
             c.save(); c.clipPath(recorte);
-            p.setStyle(Paint.Style.FILL); p.setColor(fundido ? VELO : PANEL); c.drawRect(r, p);
             boolean conMapa = nav && s.mapaTramos != null && s.navMapa();
-            if (conMapa) mapa(c, s, x0 + w / 2, y0 + (y1 - y0) * 0.62f, w / 300f, u);
+            p.setStyle(Paint.Style.FILL); p.setColor(fundido ? VELO : PANEL); if (!(fundido && conMapa)) c.drawRect(r, p);   // fundido y con mapa: el velo lo pone el mapa, desvanecido
+            if (conMapa) mapa(c, s, x0, y0, x1, y1, u);
             float pie = franja ? 22 * u : 0;
             if (nav) {
                 // el giro: sobre el mapa va en una tarjeta arriba a la izquierda; sin mapa, grande y al centro
@@ -495,29 +495,73 @@ public class CubiCarro extends CarAppService {
         }
 
         // las calles que bajó el celular (en metros desde el centro, de a 3 m), giradas para que el rumbo quede hacia arriba
-        private void mapa(Canvas c, CubiService s, float cx, float cy, float k, float u) {
-            List<String> tramos = s.mapaTramos;
+        private final Path[] zonasP = {new Path(), new Path(), new Path()};   // agua, parques y ríos
+        private List<String> zonasDe;
+        private final android.graphics.Matrix inclina = new android.graphics.Matrix();
+        private final Paint pd = new Paint();
+        private float rumboS = Float.NaN, degrY, degrH;
+        private static void trazar(String v, Path q, boolean cerrar) {
+            for (int i = 1; i + 4 <= v.length(); i += 4) {
+                float x = (Integer.parseInt(v.substring(i, i + 2), 16) - 128) * 3, y = (Integer.parseInt(v.substring(i + 2, i + 4), 16) - 128) * 3;
+                if (i == 1) q.moveTo(x, y); else q.lineTo(x, y);
+            }
+            if (cerrar) q.close();
+        }
+        // El mapa, inclinado como en un navegador: lo de adelante se aleja y se angosta. El carro es la flecha de abajo y
+        // el mapa gira con él. Entre una posición del GPS y la siguiente (llega una por segundo) se estima el avance con
+        // la velocidad, y el giro se suaviza, para que se mueva parejo. Con Zelda (fundido) va translúcido y se desvanece
+        // hacia arriba sobre el fondo del clip.
+        private void mapa(Canvas c, CubiService s, float x0, float y0, float x1, float y1, float u) {
+            List<String> tramos = s.mapaTramos, zs = s.mapaZonas;
             if (tramos != callesDe) {
                 callesDe = tramos;
                 for (Path q : calles) q.rewind();
-                for (String v : tramos) {
-                    Path q = calles[Math.min(2, Math.max(0, v.charAt(0) - '0'))];
-                    for (int i = 1; i + 4 <= v.length(); i += 4) {
-                        float x = (Integer.parseInt(v.substring(i, i + 2), 16) - 128) * 3, y = (Integer.parseInt(v.substring(i + 2, i + 4), 16) - 128) * 3;
-                        if (i == 1) q.moveTo(x, y); else q.lineTo(x, y);
-                    }
-                }
+                for (String v : tramos) trazar(v, calles[Math.min(2, Math.max(0, v.charAt(0) - '0'))], false);
             }
-            c.save(); c.translate(cx, cy); c.rotate(-s.mapaRumbo); c.scale(k, -k); c.translate((float) -s.mapaDx, (float) -s.mapaDy);
+            if (zs != zonasDe) {
+                zonasDe = zs;
+                for (Path q : zonasP) q.rewind();
+                if (zs != null) for (String v : zs) { int t = v.charAt(0) - '3'; if (t >= 0 && t < 3) trazar(v, zonasP[t], t != 2); }
+            }
+            float w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + h * 0.76f, k = w / 240f;
+            float rumbo = s.mapaRumbo;
+            if (Float.isNaN(rumboS)) rumboS = rumbo;
+            rumboS = (rumboS + (((rumbo - rumboS + 540) % 360) - 180) * 0.12f + 360) % 360;
+            float dt = Math.max(0, Math.min(1.5f, (System.currentTimeMillis() - s.mapaCuando) / 1000f));
+            double ra = Math.toRadians(rumbo);
+            float px = (float) (s.mapaDx + Math.sin(ra) * s.mapaVel * dt), py = (float) (s.mapaDy + Math.cos(ra) * s.mapaVel * dt);
+            if (fundido) { c.saveLayer(x0, y0, x1, y1, null); p.setStyle(Paint.Style.FILL); p.setColor(VELO); c.drawRect(x0, y0, x1, y1, p); } else c.save();
+            c.save(); c.translate(cx, cy);
+            // un rectángulo del suelo (ancho a, b hacia adelante, e hacia atrás) se pinta como trapecio: angosto y alto lo lejano
+            float a = w * 0.6f, b = h * 1.7f, e = h * 0.3f;
+            inclina.setPolyToPoly(new float[]{-a, -b, a, -b, a, e, -a, e}, 0, new float[]{-a * 0.42f, -h * 0.74f, a * 0.42f, -h * 0.74f, a * 1.35f, h * 0.24f, -a * 1.35f, h * 0.24f}, 0, 4);
+            c.concat(inclina); c.clipRect(-a * 4, -b * 5, a * 4, e);       // nada de lo que queda detrás del carro (ahí la inclinación se rompe)
+            c.rotate(-rumboS); c.scale(k, -k); c.translate(-px, -py);
+            p.setStyle(Paint.Style.FILL);
+            p.setColor(fundido ? 0x662a62c8 : 0xff1d3a66); c.drawPath(zonasP[0], p);
+            p.setColor(fundido ? 0x6648b46c : 0xff16382c); c.drawPath(zonasP[1], p);
             p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND);
+            p.setColor(fundido ? 0x882a62c8 : 0xff1d3a66); p.setStrokeWidth(8); c.drawPath(zonasP[2], p);
             // fundido: calles blancas translúcidas y la ruta blanca, que se leen sobre cualquier color de fondo
-            p.setColor(fundido ? 0x47ffffff : 0xff26344f); p.setStrokeWidth(7); c.drawPath(calles[0], p);
-            p.setColor(fundido ? 0x70ffffff : 0xff34466a); p.setStrokeWidth(11); c.drawPath(calles[1], p);
-            p.setColor(fundido ? 0xffffffff : AZUL); p.setStrokeWidth(9); c.drawPath(calles[2], p);
+            p.setColor(fundido ? 0x55ffffff : 0xff26344f); p.setStrokeWidth(6); c.drawPath(calles[0], p);
+            p.setColor(fundido ? 0x80ffffff : 0xff34466a); p.setStrokeWidth(10); c.drawPath(calles[1], p);
+            p.setColor(fundido ? 0xffffffff : AZUL); p.setStrokeWidth(7); c.drawPath(calles[2], p);
             c.restore(); p.setStyle(Paint.Style.FILL);
-            p.setColor(0x4d46a5ff); c.drawCircle(cx, cy, 7 * u, p);
-            p.setColor(0xffffffff); c.drawCircle(cx, cy, 4 * u, p);
-            p.setColor(fundido ? 0xfff28c28 : 0xff2f6fd0); c.drawCircle(cx, cy, 2.5f * u, p);
+            // el carro: una flecha
+            p.setColor(0x40000000); c.drawCircle(cx, cy, 8 * u, p);
+            gp.rewind(); gp.moveTo(cx, cy - 6 * u); gp.lineTo(cx + 4.6f * u, cy + 4.6f * u); gp.lineTo(cx, cy + 2 * u); gp.lineTo(cx - 4.6f * u, cy + 4.6f * u); gp.close();
+            p.setColor(0xffffffff); c.drawPath(gp, p);
+            gp.rewind(); gp.moveTo(cx, cy - 3.4f * u); gp.lineTo(cx + 2.6f * u, cy + 2.8f * u); gp.lineTo(cx, cy + 1.2f * u); gp.lineTo(cx - 2.6f * u, cy + 2.8f * u); gp.close();
+            p.setColor(fundido ? 0xfff28c28 : 0xff2f6fd0); c.drawPath(gp, p);
+            if (fundido) {                                               // se desvanece hacia arriba: se funde con el fondo
+                if (degrY != y0 || degrH != h) {
+                    degrY = y0; degrH = h;
+                    pd.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
+                    pd.setShader(new android.graphics.LinearGradient(0, y0, 0, y0 + h * 0.4f, 0x00000000, 0xff000000, android.graphics.Shader.TileMode.CLAMP));
+                }
+                c.drawRect(x0, y0, x1, y1, pd);
+            }
+            c.restore();
         }
 
         static String metros(double m) {

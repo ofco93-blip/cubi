@@ -506,6 +506,9 @@ public class CubiService extends Service {
     private long mapaPedido;
     volatile float mapaRumbo;
     volatile double mapaDx, mapaDy;                 // dónde va el carro respecto al centro del mapa bajado (m)
+    volatile java.util.List<String> mapaZonas;      // el agua, los parques y los ríos, para la pantalla del carro
+    volatile long mapaCuando;                       // cuándo llegó la última posición y a qué velocidad (m/s): el carro estima el avance entre una y otra
+    volatile float mapaVel;
     volatile java.util.List<String> mapaTramos;     // las calles bajadas, para dibujarlas también en la pantalla del carro
     private volatile String mapaEstado = "Mini mapa: esperando el GPS.";
     // la ruta: el destino lo escribe uno en la app; se busca en OpenStreetMap (nominatim) y la ruta la calcula OSRM
@@ -605,7 +608,7 @@ public class CubiService extends Service {
         }
         double dy = (lat - mapaLat0) * 111320, dx = (lon - mapaLon0) * 111320 * Math.cos(Math.toRadians(mapaLat0));
         double lejos = Math.hypot(dx, dy);
-        mapaDx = dx; mapaDy = dy;
+        mapaDx = dx; mapaDy = dy; mapaCuando = ahora; mapaVel = l.hasSpeed() ? l.getSpeed() : 0;
         if ((!mapaListo || lejos > 130 || mapaForzar) && !mapaCargando && (ahora - mapaPedido > 8000 || mapaForzar)) {
             mapaPedido = ahora; mapaCargando = true; mapaForzar = false;
             new Thread(() -> bajarCalles(lat, lon)).start();
@@ -771,7 +774,7 @@ public class CubiService extends Service {
             }
             // el cierre va en un mensaje de vías (repite un tramo corto) para que también lo entienda el Cubi viejo
             String cierre = todas.get(0).length() > 197 ? todas.get(0).substring(0, 197) : todas.get(0);
-            mapaLat0 = lat; mapaLon0 = lon; mapaListo = true; mapaDx = mapaDy = 0; mapaTramos = todas;
+            mapaLat0 = lat; mapaLon0 = lon; mapaListo = true; mapaDx = mapaDy = 0; mapaZonas = extra; mapaTramos = todas;
             enviar("asis|/mapa?w=" + cierre + "&f=1");
             mapaEstado = "Mini mapa: " + todas.size() + " tramos de calle" + (ruta.isEmpty() ? "" : ", con la ruta") + (extra.isEmpty() ? "" : ", " + extra.size() + " de agua y parques") + ".";
         } catch (Exception e) {
