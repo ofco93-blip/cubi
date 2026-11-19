@@ -57,7 +57,7 @@ public class CubiCarro extends CarAppService {
         private int ancho, alto;
         private boolean sonaba;
         private final Runnable cuadro = new Runnable() {
-            @Override public void run() { pintar(); if (sup != null) h.postDelayed(this, 50); }
+            @Override public void run() { pintar(); if (sup != null) h.postDelayed(this, 33); }
         };
 
         Pantalla(CarContext c) {
@@ -268,8 +268,8 @@ public class CubiCarro extends CarAppService {
             boolean musicaZ = modo == 2;
             // con rap o urbano, el clip de gafas y gorra; si no, el de bailar. Sin música va a media velocidad.
             String clip = musicaZ && sv != null && "urbano".equals(sv.ritmoCancion) ? "rap" : "baila";
-            final int n = 48;
-            int k = (int) ((ahora * (musicaZ ? 12 : 6) / 1000) % (2 * n - 2));
+            final int n = 96;                                         // 4 s a 24 cuadros por segundo
+            int k = (int) ((ahora * (musicaZ ? 24 : 12) / 1000) % (2 * n - 2));
             android.graphics.Bitmap b = assets == null ? null : cuadro(clip, k < n ? k : 2 * n - 2 - k);
             // grande: el fondo del clip llena toda la pantalla, como un fondo animado (los botones quedan encima); si no, su cuadro redondeado
             c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); if (!grande || b == null) c.clipPath(gp);
@@ -316,8 +316,9 @@ public class CubiCarro extends CarAppService {
                 // la cajita de abajo: la hora y el clima; con música, también lo que suena
                 float mg = caja * 0.14f;                              // flota sobre el fondo, translúcida y redondeada
                 p.setStyle(Paint.Style.FILL); p.setColor(0xb00c1018); c.drawRoundRect(x0 + mg, y1 - caja + mg, x1 - mg, y1 - mg, caja * 0.3f, caja * 0.3f, p);
-                String clima = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : "  ·  " + sv.climaGrados + "°  " + sv.climaEstado;
-                texto(c, hora + clima, x0 + caja * 0.5f, y1 - caja * 0.36f, caja * 0.4f, TINTA, true, Paint.Align.LEFT, w * 0.5f);
+                String clima = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaGrados + "°  " + sv.climaEstado;
+                // sin música la hora ya va en grande: aquí solo el clima, para que el reloj no salga dos veces
+                texto(c, !musicaZ ? clima : clima.isEmpty() ? hora : hora + "  ·  " + clima, x0 + caja * 0.5f, y1 - caja * 0.36f, caja * 0.4f, TINTA, true, Paint.Align.LEFT, w * 0.5f);
                 if (musicaZ && sv != null) texto(c, "♪ " + sv.cancionTitulo, x1 - caja * 0.5f, y1 - caja * 0.36f, caja * 0.36f, 0xffd8dde6, false, Paint.Align.RIGHT, w * 0.42f);
             }
             c.restore();
