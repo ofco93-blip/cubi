@@ -270,11 +270,11 @@ section[hidden] { display: none; }
   <div class="card">
     <div class="row"><span>Con una ruta, Cubi muestra</span></div>
     <select id="navModo" aria-label="Qué muestra Cubi con una ruta">
-      <option value="avisos">Solo los avisos de giro (y sigue reaccionando a lo demás)</option>
-      <option value="mapa">Solo el mapa (se queda fijo mientras haya ruta)</option>
+      <option value="avisos">Solo los avisos de giro</option>
+      <option value="mapa">Solo el mapa</option>
       <option value="nada">Nada del mapa</option>
     </select>
-    <p class="note">Sirve con Google Maps o con Waze. Si los dos tienen ruta a la vez, manda Google Maps.</p>
+    <p class="note">Solo los avisos: muestra la flecha cuando se acerca un giro y sigue cantando y reaccionando a lo demás. Solo el mapa: se queda fijo en el mapa mientras haya ruta. Sirve con Google Maps o con Waze; si los dos tienen ruta a la vez, manda Google Maps.</p>
     <div class="row"><span>Mapa completo (sin el muñequito)</span><label class="sw"><input type="checkbox" id="navCompleto"><i></i></label></div>
     <div class="log"><div id="navAhora"></div></div>
     <details class="ayuda"><summary>Cómo funciona</summary>
@@ -311,7 +311,7 @@ section[hidden] { display: none; }
     <select id="carroZelda" aria-label="Personaje de la pantalla"><option value="1">Zelda, la gata</option><option value="0">Cubi (los ojitos)</option></select>
     <div class="row"><span>Fondo</span></div>
     <select id="carroFondo" aria-label="Fondo de la pantalla">
-      <option value="-1">Automático: cielo de día, noche de noche, lila con rap</option>
+      <option value="-1">Automático (día, noche, rap)</option>
       <option value="0">Cielo</option><option value="1">Chicle</option><option value="2">Menta</option><option value="3">Lila</option><option value="4">Noche</option>
     </select>
     <div class="row"><span>Vista</span></div>
