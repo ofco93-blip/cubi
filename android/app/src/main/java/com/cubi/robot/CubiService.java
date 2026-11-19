@@ -593,11 +593,37 @@ public class CubiService extends Service {
 
     private void bajarCarro(double clat, double clon, double lat, double lon) {
         try {
-            if (carroDatos == null) carroEstado = "Mapa: bajando las calles…";
-            String donde = "(around:900," + String.format(Locale.US, "%.5f,%.5f", clat, clon) + ");";
+            // El centro se ajusta a una cuadrícula de unos 440 m (por eso el radio es más grande): así la misma zona pide
+            // siempre lo mismo y lo bajado se guarda en el celular (comprimido, 90 días). Por las rutas de siempre sale al instante.
+            long ia = Math.round(clat / 0.004), io = Math.round(clon / 0.004);
+            clat = ia * 0.004; clon = io * 0.004;
+            java.io.File guardado = new java.io.File(new java.io.File(getFilesDir(), "calles"), ia + "_" + io + ".gz");
+            JSONArray els = null;
+            if (guardado.exists() && System.currentTimeMillis() - guardado.lastModified() < 90L * 86400000) try {
+                java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+                try (java.io.InputStream in = new java.util.zip.GZIPInputStream(new java.io.FileInputStream(guardado))) { byte[] b = new byte[8192]; for (int n; (n = in.read(b)) > 0; ) o.write(b, 0, n); }
+                els = new JSONObject(o.toString("UTF-8")).getJSONArray("elements");
+            } catch (Exception e) { els = null; }
+            if (els == null && carroDatos == null) carroEstado = "Mapa: bajando las calles…";
+            String donde = "(around:1150," + String.format(Locale.US, "%.5f,%.5f", clat, clon) + ");";
             String q = "[out:json][timeout:25];(way[highway~\"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street)(_link)?$\"]" + donde
                     + "way[natural=water]" + donde + "way[waterway~\"^(river|stream|canal)$\"]" + donde + "way[leisure~\"^(park|garden)$\"]" + donde + ");out geom;";
-            JSONArray els = new JSONObject(bajarTexto("https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(q, "UTF-8"), 60000, 4)).getJSONArray("elements");
+            // El servidor principal se satura seguido: se turna con uno de respaldo, primero con poca paciencia (12 s) y luego con más.
+            String[] servidor = {"https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"};
+            Exception falla = null;
+            for (int i = 0; i < 4 && els == null; i++) try {
+                String txt = bajarTexto(servidor[i % 2] + "?data=" + URLEncoder.encode(q, "UTF-8"), i < 2 ? 12000 : 60000, 1);
+                JSONObject r = new JSONObject(txt);
+                if (r.has("remark")) throw new java.io.IOException(r.optString("remark"));   // respondió a medias (se le acabó el tiempo)
+                els = r.getJSONArray("elements");
+                try {
+                    guardado.getParentFile().mkdirs();
+                    java.io.File[] viejos = guardado.getParentFile().listFiles();
+                    if (viejos != null) for (java.io.File v : viejos) if (System.currentTimeMillis() - v.lastModified() > 90L * 86400000) v.delete();
+                    try (java.io.OutputStream o = new java.util.zip.GZIPOutputStream(new java.io.FileOutputStream(guardado))) { o.write(txt.getBytes("UTF-8")); }
+                } catch (Exception e) { guardado.delete(); }   // sin guardar igual sirve
+            } catch (Exception e) { els = null; falla = e; }
+            if (els == null) throw falla;
             double kx = 111320 * Math.cos(Math.toRadians(lat));
             java.util.ArrayList<float[]> ls = new java.util.ArrayList<>();
             java.util.ArrayList<Byte> cs = new java.util.ArrayList<>();
