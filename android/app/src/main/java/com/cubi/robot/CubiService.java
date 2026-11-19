@@ -371,6 +371,8 @@ public class CubiService extends Service {
     }
 
     void enviar(String s) {
+        int pq = s.indexOf("paq=");   // el personaje escogido, para dibujar el mismo en la pantalla del carro
+        if (pq >= 0) try { getSharedPreferences("cubi", 0).edit().putInt("paq", Integer.parseInt(s.substring(pq + 4).replaceAll("\\D.*", ""))).apply(); } catch (NumberFormatException ignored) { }
         int oj = s.indexOf("ojos=");   // el color de la cara se guarda para pintarla igual en la pantalla del carro
         if (oj >= 0 && s.length() >= oj + 11) try { getSharedPreferences("cubi", 0).edit().putInt("ojos", Integer.parseInt(s.substring(oj + 5, oj + 11), 16)).apply(); } catch (NumberFormatException ignored) { }
         if (otaActiva && !s.startsWith("ota|")) return;  // durante la actualización no se manda nada más

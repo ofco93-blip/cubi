@@ -25,6 +25,9 @@ import androidx.car.app.SurfaceContainer;
 import androidx.car.app.model.Action;
 import androidx.car.app.model.ActionStrip;
 import androidx.car.app.model.CarIcon;
+import androidx.car.app.model.ItemList;
+import androidx.car.app.model.ListTemplate;
+import androidx.car.app.model.Row;
 import androidx.car.app.model.Template;
 import androidx.car.app.navigation.model.NavigationTemplate;
 import androidx.car.app.validation.HostValidator;
@@ -64,12 +67,9 @@ public class CubiCarro extends CarAppService {
         }
 
         @NonNull @Override public Template onGetTemplate() {
-            boolean sola = prefs.getBoolean("carroSola", false);
             return new NavigationTemplate.Builder().setActionStrip(new ActionStrip.Builder()
                     .addAction(tecla(R.drawable.carro_antes, -1)).addAction(tecla(sonaba ? R.drawable.carro_pausa : R.drawable.carro_play, 0)).addAction(tecla(R.drawable.carro_sigue, 1))
-                    .addAction(new Action.Builder()
-                    .setTitle(sola ? "Con mapa" : "Solo carita")
-                    .setOnClickListener(() -> { prefs.edit().putBoolean("carroSola", !sola).apply(); invalidate(); }).build()).build()).build();
+                    .addAction(new Action.Builder().setTitle("Opciones").setOnClickListener(() -> getScreenManager().push(new Opciones(getCarContext()))).build()).build()).build();
         }
 
         private Action tecla(int icono, int cual) {
@@ -94,10 +94,36 @@ public class CubiCarro extends CarAppService {
             try { c = s.lockHardwareCanvas(); } catch (Exception e) { return; }
             try {
                 Rect a = zona.isEmpty() ? new Rect(0, 0, ancho, alto) : zona;
-                lienzo.dibujar(c, a, firme, CubiService.yo, prefs.getBoolean("carroSola", false), prefs.getInt("ojos", 0xffffff));
+                lienzo.dibujar(c, a, firme, CubiService.yo, prefs.getInt("carroVista", prefs.getBoolean("carroSola", false) ? 1 : 0), prefs.getInt("ojos", 0xffffff), prefs.getInt("paq", 1) == 11, prefs.getInt("carroFondo", -1));
             } finally {
                 s.unlockCanvasAndPost(c);
             }
+        }
+    }
+
+    // Las opciones: tres renglones; cada toque pasa a la siguiente opción de ese renglón. El personaje también se le cambia al robot.
+    static class Opciones extends Screen {
+        static final String[] FONDOS = {"Automático (según la hora y la música)", "Cielo", "Chicle", "Menta", "Lila", "Noche"};
+        static final String[] VISTAS = {"Personaje con mapa", "Solo el personaje", "Solo el mapa"};
+        Opciones(CarContext c) { super(c); }
+
+        @NonNull @Override public Template onGetTemplate() {
+            SharedPreferences p = getCarContext().getSharedPreferences("cubi", 0);
+            int paq = p.getInt("paq", 1), fondo = p.getInt("carroFondo", -1), vista = p.getInt("carroVista", p.getBoolean("carroSola", false) ? 1 : 0);
+            ItemList lista = new ItemList.Builder()
+                    .addItem(fila("Personaje", paq == 11 ? "Zelda" : "Cubi", () -> {
+                        int n = paq == 11 ? 1 : 11;
+                        p.edit().putInt("paq", n).apply();
+                        if (CubiService.yo != null) CubiService.yo.enviar("asis|/ajuste?paq=" + n);
+                    }))
+                    .addItem(fila("Fondo de Zelda", FONDOS[fondo + 1], () -> p.edit().putInt("carroFondo", fondo >= 4 ? -1 : fondo + 1).apply()))
+                    .addItem(fila("Vista", VISTAS[vista], () -> p.edit().putInt("carroVista", (vista + 1) % 3).apply()))
+                    .build();
+            return new ListTemplate.Builder().setTitle("Opciones de Cubi").setHeaderAction(Action.BACK).setSingleList(lista).build();
+        }
+
+        private Row fila(String titulo, String valor, Runnable alTocar) {
+            return new Row.Builder().setTitle(titulo).addText(valor).setOnClickListener(() -> { alTocar.run(); invalidate(); }).build();
         }
     }
 
@@ -111,7 +137,8 @@ public class CubiCarro extends CarAppService {
         private final Path[] calles = {new Path(), new Path(), new Path()};   // 0 calles, 1 avenidas, 2 la ruta
         private List<String> callesDe;
 
-        void dibujar(Canvas c, Rect a, Rect firme, CubiService s, boolean sola, int ojos) {
+        // vista: 0 personaje con mapa, 1 solo el personaje, 2 solo el mapa. zelda: el personaje es la gata (si no, los ojos de Cubi)
+        void dibujar(Canvas c, Rect a, Rect firme, CubiService s, int vista, int ojos, boolean zelda, int fondo) {
             long ahora = System.currentTimeMillis();
             c.drawColor(0xff000000);
             boolean musica = s != null && !s.cancionTitulo.isEmpty(), suena = musica && s.musicaPlay;
@@ -124,15 +151,20 @@ public class CubiCarro extends CarAppService {
             if (!aLoAncho && !firme.isEmpty()) a = firme;
             boolean franja = musica && aLoAncho;
             float u = Math.min(a.height(), a.width() * (aLoAncho ? 0.5f : 1f)) / 100f;
-            if (sola) {
+            int modo = suena ? 2 : nav ? 1 : (ahora / 1000) % 34 >= 28 ? 1 : 0;   // Zelda: canta con música, va despierta manejando y, si no, duerme (y cada rato se despierta)
+            if (vista == 1) {
+                if (zelda) { zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, !nav && !suena); return; }
                 cara(c, a.centerX(), a.centerY() - (franja ? 5 * u : 0), 60 * u, ojos, suena, ahora);
                 if (franja) texto(c, cancion, a.centerX(), a.bottom - 9 * u, 5.5f * u, GRIS, false, Paint.Align.CENTER, a.width() - 12 * u);
                 return;
             }
             // la carita a un lado (arriba si la pantalla es angosta) y el panel con lo demás
             float corte = aLoAncho ? a.left + a.width() * 0.38f : a.top + a.height() * 0.46f, m = 3 * u;
-            if (aLoAncho) { cara(c, (a.left + corte) / 2, a.centerY(), 46 * u, ojos, suena, ahora); r.set(corte, a.top + m, a.right - m, a.bottom - m); }
-            else { cara(c, a.centerX(), (a.top + corte) / 2, Math.min(46 * u, (corte - a.top) * 0.95f), ojos, suena, ahora); r.set(a.left + m, corte, a.right - m, a.bottom - m); }
+            if (vista == 2) corte = aLoAncho ? a.left : a.top;                      // solo el mapa: el panel ocupa todo
+            else if (zelda) { if (aLoAncho) zelda(c, a.left + m, a.top + m, corte - m, a.bottom - m, 5 * u, ahora, modo, fondo, !nav); else zelda(c, a.left + m, a.top, a.right - m, corte - m, 5 * u, ahora, modo, fondo, !nav); }
+            else if (aLoAncho) cara(c, (a.left + corte) / 2, a.centerY(), 46 * u, ojos, suena, ahora);
+            else cara(c, a.centerX(), (a.top + corte) / 2, Math.min(46 * u, (corte - a.top) * 0.95f), ojos, suena, ahora);
+            if (aLoAncho) r.set(corte, a.top + m, a.right - m, a.bottom - m); else r.set(a.left + m, corte, a.right - m, a.bottom - m);
             float x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom, w = x1 - x0;
             recorte.rewind(); recorte.addRoundRect(r, 5 * u, 5 * u, Path.Direction.CW);
             c.save(); c.clipPath(recorte);
@@ -180,6 +212,96 @@ public class CubiCarro extends CarAppService {
                 texto(c, s.cancionArtista, tx, y1 - pie / 2 + 6.5f * u, 5 * u, GRIS, false, Paint.Align.LEFT, x1 - 4 * u - tx);
             }
             c.restore();
+        }
+
+        // ---- Zelda, la gata: el mismo dibujo del robot. Su cuadro de color con la hora atrás (si conHora) y ella asomada por delante.
+        static final int[] FONDO_Z = {0xff35c3e8, 0xfff0457e, 0xff27c48f, 0xff8b6cf0, 0xff262262}, LETRA_Z = {0xffffd23f, 0xffffffff, 0xff0f3d33, 0xfffff3b0, 0xff9a95ff};
+        private final Path gp = new Path();
+        private final RectF gr = new RectF();
+        private void zelda(Canvas c, float x0, float y0, float x1, float y1, float radio, long ahora, int modo, int fondo, boolean conHora) {
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            int h = cal.get(java.util.Calendar.HOUR_OF_DAY), tm = fondo >= 0 ? fondo : modo == 2 ? 1 : h >= 19 || h < 6 ? 4 : 0;
+            float w = x1 - x0, alto = y1 - y0, s = Math.min(w, alto) * 0.24f;
+            c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); c.clipPath(gp);
+            p.setStyle(Paint.Style.FILL); p.setColor(FONDO_Z[tm]); c.drawRect(gr, p);
+            if (conHora) {
+                String hora = (h % 12 == 0 ? 12 : h % 12) + ":" + String.format(Locale.US, "%02d", cal.get(java.util.Calendar.MINUTE));
+                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(LETRA_Z[tm]); tp.setTextSize(100);
+                tp.setTextSize(Math.min(alto * 0.5f, 100 * w * 0.9f / tp.measureText(hora)));
+                c.drawText(hora, (x0 + x1) / 2, y0 + alto * 0.08f + tp.getTextSize() * 0.8f, tp);
+            }
+            gato(c, (x0 + x1) / 2 + (conHora ? w * 0.12f : 0), y1 - s * 1.1f, s, ahora, modo, y1, LETRA_Z[tm]);
+            c.restore();
+        }
+        private void ovalo(Canvas c, float cx, float cy, float rx, float ry) { gr.set(cx - rx, cy - ry, cx + rx, cy + ry); c.drawOval(gr, p); }
+        private void tri(Canvas c, float ax, float ay, float bx, float by, float cx, float cy) { gp.rewind(); gp.moveTo(ax, ay); gp.lineTo(bx, by); gp.lineTo(cx, cy); gp.close(); c.drawPath(gp, p); }
+        // modo: 0 duerme, 1 despierta, 2 canta. borde: la y del borde donde apoya las manos. Las medidas del gato van en "s".
+        // ponytail: en el carro la boca y el baile van a un pulso fijo; usar la letra y el pulso de la canción cuando el servicio los exponga
+        private void gato(Canvas c, float cx, float cy, float s, long ms, int modo, float borde, int tinta) {
+            final int N = 0xfff28c28, O = 0xffd96f14, C = 0xffffe3bd, T = 0xff3a2212, ROSA = 0xffec7f86;
+            float t = (ms % 3600000L) / 1000f;
+            boolean duerme = modo == 0, canta = modo == 2;
+            float golpe = canta ? (float) Math.abs(Math.sin(t * Math.PI * 104 / 60)) : 0, k = canta && t % 4 > 1.2f && t % 4 < 2.2f ? 1 : 0;
+            float cola = (duerme ? 0.08f : canta ? 0.4f : 0.25f) * (float) Math.sin(t * (canta ? 5.4f : duerme ? 0.6f : 1.3f));
+            float qy = cy + s * (canta ? -0.1f * golpe : 0.04f * (float) Math.sin(t * 1.6f));
+            c.save(); c.translate(cx, qy); c.rotate((float) Math.toDegrees(canta ? 0.07 * Math.sin(t * 3.4) : 0.025 * Math.sin(t * 0.9))); c.scale(s, s);
+            p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeJoin(Paint.Join.ROUND);
+            for (int pasada = 0; pasada < 2; pasada++) {                 // la silueta: primero de sombra (una capa, para que no se oscurezca donde se cruza) y luego de color
+                if (pasada == 0) { c.saveLayerAlpha(-2.4f, -1.4f, 2.6f, 2.8f, 51); c.translate(0.06f, 0.08f); } else c.save();
+                p.setColor(pasada == 0 ? 0xff000000 : N);
+                p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(0.42f); gp.rewind(); gp.moveTo(0.7f, 1.5f); gp.cubicTo(1.5f, 1.4f, 1.55f + cola, 0.5f, 1.2f + cola, 0.05f); c.drawPath(gp, p);
+                p.setStyle(Paint.Style.FILL); ovalo(c, 0, 1.25f, 1.08f, 1f); ovalo(c, 0, 0, 0.86f, 0.7f);
+                for (int l = -1; l <= 1; l += 2) {
+                    tri(c, l * 0.78f, -0.28f, l * 0.66f, -1f, l * 0.18f, -0.58f);
+                    gp.rewind(); gp.moveTo(l * 0.72f, -0.05f); gp.lineTo(l * 1.08f, 0.12f); gp.lineTo(l * 0.8f, 0.2f); gp.lineTo(l * 1.04f, 0.42f); gp.lineTo(l * 0.66f, 0.45f); gp.close(); c.drawPath(gp, p);
+                }
+                c.restore();
+            }
+            p.setColor(C); ovalo(c, 1.2f + cola, 0.08f, 0.2f, 0.2f); ovalo(c, 0, 1.2f, 0.6f, 0.7f);
+            p.setColor(0xfff7b8a0); for (int l = -1; l <= 1; l += 2) tri(c, l * 0.66f, -0.34f, l * 0.62f, -0.8f, l * 0.34f, -0.54f);
+            p.setStyle(Paint.Style.STROKE); p.setColor(O); p.setStrokeWidth(0.09f);
+            for (float x = -0.2f; x <= 0.21f; x += 0.2f) c.drawLine(x, -0.62f, x * 0.8f, -(0.36f - Math.abs(x) * 0.3f), p);
+            p.setStyle(Paint.Style.FILL); p.setColor(C); ovalo(c, 0, 0.26f, 0.4f, 0.28f);
+            p.setColor(ROSA); tri(c, -0.09f, 0.12f, 0.09f, 0.12f, 0, 0.23f);
+            if (canta) { p.setColor(0xff5a1e22); ovalo(c, 0, 0.37f, 0.13f, 0.04f + 0.13f * golpe); p.setColor(ROSA); ovalo(c, 0, 0.4f + 0.08f * golpe, 0.08f, 0.05f * golpe); }
+            else { p.setStyle(Paint.Style.STROKE); p.setColor(T); p.setStrokeWidth(0.04f); gp.rewind(); gp.moveTo(0, 0.23f); gp.lineTo(0, 0.3f); gp.moveTo(-0.14f, 0.3f); gp.quadTo(-0.07f, 0.4f, 0, 0.3f); gp.quadTo(0.07f, 0.4f, 0.14f, 0.3f); c.drawPath(gp, p); }
+            p.setStyle(Paint.Style.STROKE); p.setColor(0xd9ffffff); p.setStrokeWidth(0.025f);
+            for (int l = -1; l <= 1; l += 2) { c.drawLine(l * 0.34f, 0.236f, l * 0.98f, 0.08f, p); c.drawLine(l * 0.34f, 0.292f, l * 0.98f, 0.36f, p); }
+            float abre = (t % 6.7f > 6.56f ? 0.12f : 1) * (!canta && t % 23 > 20.5f ? 0.45f : 1), mx = canta ? 0 : 0.05f * Math.max(-1, Math.min(1, (float) Math.sin(t * 0.45f) * 3));
+            boolean feliz = canta && (golpe > 0.75f || k > 0);
+            for (int l = -1; l <= 1; l += 2) {                           // los ojos verdes; dormida o cantando duro, cerrados
+                float ex = l * 0.34f + mx;
+                if (duerme || feliz) {
+                    float ey = duerme ? -0.16f : -0.02f;
+                    p.setStyle(Paint.Style.STROKE); p.setColor(T); p.setStrokeWidth(0.06f); gr.set(ex - 0.13f, ey - 0.13f, ex + 0.13f, ey + 0.13f); c.drawArc(gr, duerme ? 27 : 207, 126, false, p);
+                    continue;
+                }
+                p.setStyle(Paint.Style.FILL); p.setColor(0xff35b85f); gr.set(ex - 0.12f, -0.1f - 0.2f * abre, ex + 0.12f, -0.1f + 0.2f * abre); c.drawRoundRect(gr, 0.12f, 0.12f, p);
+                p.setColor(0xff12301c); gr.set(ex - 0.04f, -0.1f - 0.15f * abre, ex + 0.04f, -0.1f + 0.15f * abre); c.drawRoundRect(gr, 0.04f, 0.04f, p);
+                if (abre > 0.5f) { p.setColor(0xffffffff); ovalo(c, ex + 0.05f, -0.2f, 0.04f, 0.04f); }
+            }
+            c.restore();
+            // las manos (no se ladean): en el borde, o en el micrófono; en la nota larga, las dos
+            p.setStrokeCap(Paint.Cap.ROUND);
+            float hx = 0.38f * (1 - k), hy = 0.63f + 0.05f * k, bx = 0.82f * (1 - k), by = 1.32f;
+            if (canta) {
+                p.setStyle(Paint.Style.STROKE); p.setColor(0xff2c303e); p.setStrokeWidth(s * 0.14f); c.drawLine(cx + bx * s, qy + by * s, cx + (hx + (bx - hx) * 0.18f) * s, qy + (hy + (by - hy) * 0.18f) * s, p);
+                p.setStyle(Paint.Style.FILL); p.setColor(0xffced4e2); c.drawCircle(cx + hx * s, qy + hy * s, s * 0.17f, p);
+            }
+            for (int l = -1; l <= 1; l += 2) {
+                float x, y;
+                if (!canta) { x = cx + l * s * 0.74f; y = borde - s * 0.13f; }
+                else if (l > 0) { x = cx + (0.72f - 0.57f * k) * s; y = qy + (1.14f - 0.08f * k) * s; }
+                else { float ay = 0.5f - 0.32f * golpe; x = cx + (-1.02f + 0.87f * k) * s; y = qy + (ay + (1 - ay) * k) * s; }
+                p.setStyle(Paint.Style.FILL); p.setColor(O); ovalo(c, x, y, s * 0.31f, s * 0.26f); p.setColor(C); ovalo(c, x, y, s * 0.27f, s * 0.22f);
+                p.setStyle(Paint.Style.STROKE); p.setColor(O); p.setStrokeWidth(s * 0.035f); c.drawLine(x - 0.09f * s, y - 0.02f * s, x - 0.09f * s, y + 0.14f * s, p); c.drawLine(x + 0.09f * s, y - 0.02f * s, x + 0.09f * s, y + 0.14f * s, p);
+            }
+            p.setStyle(Paint.Style.FILL);
+            if (duerme) for (int i = 0; i < 3; i++) {                    // las zetas
+                float q = (t * 0.28f + i / 3f) % 1;
+                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(tinta); tp.setAlpha((int) (255 * Math.sin(q * Math.PI))); tp.setTextSize(s * (0.3f + 0.3f * q));
+                c.drawText("z", cx + s * (0.75f + 0.5f * q), cy - s * (0.7f + q), tp); tp.setAlpha(255);
+            }
         }
 
         // dos ojos cápsula como los de Cubi: parpadean cada 5 s y con música se mecen
