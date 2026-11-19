@@ -1420,6 +1420,8 @@ public class CubiService extends Service {
     volatile String navDir = "", navCalle = "";
     volatile int navForma;
     volatile double navMetros = -1;
+    volatile int navDestM = -1;            // a cuánto está el destino (m) y la hora de llegada, si Maps las dio
+    volatile String navLlega = "";
     private String flechaAntes = "";
 
     // para la app: por qué salen o no las flechas
@@ -1471,7 +1473,8 @@ public class CubiService extends Service {
             int minutos = (rs.group(1) == null ? 0 : Integer.parseInt(rs.group(1)) * 60) + Integer.parseInt(rs.group(2));
             String hora = rs.group(5) != null ? rs.group(5)   // si Maps no trae la hora, se calcula con los minutos que faltan
                     : new java.text.SimpleDateFormat(android.text.format.DateFormat.is24HourFormat(this) ? "H:mm" : "h:mm", Locale.US).format(new java.util.Date(ahora + minutos * 60000L));
-            destino = "&d=" + Math.round(rs.group(4).equals("km") ? v * 1000 : rs.group(4).equals("mi") ? v * 1609 : v) + "&h=" + hora;
+            navDestM = (int) Math.round(rs.group(4).equals("km") ? v * 1000 : rs.group(4).equals("mi") ? v * 1609 : v); navLlega = hora;
+            destino = "&d=" + navDestM + "&h=" + hora;
             s = RESUMEN.matcher(s).replaceFirst(" ").trim();
             t = RESUMEN.matcher(t).replaceFirst(" ").trim();
         }
@@ -1527,6 +1530,7 @@ public class CubiService extends Service {
     String cancionTexto = "";              // "Título de Artista", para que Haiku sepa qué suena
     private volatile long[] letraT;        // cuándo empieza cada línea (ms)
     private volatile boolean[] letraVoz;   // si esa línea tiene letra (las vacías son partes sin voz)
+    volatile String letraAhora = "";       // el renglón de la letra que se está cantando
     private volatile String[] letraTxt;    // el texto de cada línea, para mostrarlo en la pantalla de música de la gata
     private volatile String[] letraSil;    // una vocal por sílaba de cada línea: la boca de Cubi las va diciendo
     private volatile boolean[] letraCoro;  // la línea se repite en la canción: es del coro
@@ -1588,7 +1592,7 @@ public class CubiService extends Service {
             if (titulo != null && !id.equals(cancionId)) {
                 cancionId = id;
                 cancionTexto = titulo + (artista != null ? " de " + artista : "");
-                cancionTitulo = titulo; cancionArtista = artista == null ? "" : artista;
+                cancionTitulo = titulo; cancionArtista = artista == null ? "" : artista; letraAhora = "";
                 try {   // el nombre de la canción, para la pantalla de música del gato (sin lo que va entre paréntesis)
                     String tc = titulo.replaceAll("\\s*[\\(\\[].*$", "").replaceAll("\\s+-\\s+.*$", ""), ar = cancionArtista.split(",")[0];
                     enviar("cancion|/musica?tit=" + URLEncoder.encode(tc.length() > 26 ? tc.substring(0, 26) : tc, "UTF-8").replace("+", "%20")
@@ -1616,6 +1620,7 @@ public class CubiService extends Service {
                 if (s == 1 && i != lineaEnviada) {   // línea nueva: sus sílabas, para que la boca vaya con la letra
                     enviar("asis|/musica?voz=1&s=" + sil[i] + "&d=" + d + "&o=" + (pos + 150 - t[i]) + "&c=" + (coro[i] ? 1 : 0));
                     String[] tx = letraTxt;
+                    letraAhora = tx != null && i < tx.length ? tx[i] : "";
                     if (tx != null && i < tx.length) try {   // el renglón que empieza, para la pantalla de la gata (el Cubi viejo lo ignora)
                         enviar("letra|/musica?let=" + URLEncoder.encode(tx[i].length() > 64 ? tx[i].substring(0, 64) : tx[i], "UTF-8").replace("+", "%20"));
                     } catch (Exception ignored) { }

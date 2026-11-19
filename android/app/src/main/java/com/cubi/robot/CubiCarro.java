@@ -94,28 +94,25 @@ public class CubiCarro extends CarAppService {
             try { c = s.lockHardwareCanvas(); } catch (Exception e) { return; }
             try {
                 Rect a = zona.isEmpty() ? new Rect(0, 0, ancho, alto) : zona;
-                lienzo.dibujar(c, a, firme, CubiService.yo, prefs.getInt("carroVista", prefs.getBoolean("carroSola", false) ? 1 : 0), prefs.getInt("ojos", 0xffffff), prefs.getInt("paq", 1) == 11, prefs.getInt("carroFondo", -1));
+                lienzo.dibujar(c, a, firme, CubiService.yo, prefs.getInt("carroVista", prefs.getBoolean("carroSola", false) ? 1 : 0), prefs.getInt("ojos", 0xffffff), prefs.getBoolean("carroZelda", true), prefs.getInt("carroFondo", -1));
             } finally {
                 s.unlockCanvasAndPost(c);
             }
         }
     }
 
-    // Las opciones: tres renglones; cada toque pasa a la siguiente opción de ese renglón. El personaje también se le cambia al robot.
+    // Las opciones: tres renglones; cada toque pasa a la siguiente opción de ese renglón. El personaje es solo de esta pantalla: el robot sigue con el suyo.
     static class Opciones extends Screen {
         static final String[] FONDOS = {"Automático (según la hora y la música)", "Cielo", "Chicle", "Menta", "Lila", "Noche"};
-        static final String[] VISTAS = {"Personaje con mapa", "Solo el personaje", "Solo el mapa"};
+        static final String[] VISTAS = {"Personaje, y mapa cuando hay ruta", "Solo el personaje", "Solo el mapa"};
         Opciones(CarContext c) { super(c); }
 
         @NonNull @Override public Template onGetTemplate() {
             SharedPreferences p = getCarContext().getSharedPreferences("cubi", 0);
-            int paq = p.getInt("paq", 1), fondo = p.getInt("carroFondo", -1), vista = p.getInt("carroVista", p.getBoolean("carroSola", false) ? 1 : 0);
+            boolean zelda = p.getBoolean("carroZelda", true);
+            int fondo = p.getInt("carroFondo", -1), vista = p.getInt("carroVista", p.getBoolean("carroSola", false) ? 1 : 0);
             ItemList lista = new ItemList.Builder()
-                    .addItem(fila("Personaje", paq == 11 ? "Zelda" : "Cubi", () -> {
-                        int n = paq == 11 ? 1 : 11;
-                        p.edit().putInt("paq", n).apply();
-                        if (CubiService.yo != null) CubiService.yo.enviar("asis|/ajuste?paq=" + n);
-                    }))
+                    .addItem(fila("Personaje en esta pantalla", zelda ? "Zelda" : "Cubi", () -> p.edit().putBoolean("carroZelda", !zelda).apply()))
                     .addItem(fila("Fondo de Zelda", FONDOS[fondo + 1], () -> p.edit().putInt("carroFondo", fondo >= 4 ? -1 : fondo + 1).apply()))
                     .addItem(fila("Vista", VISTAS[vista], () -> p.edit().putInt("carroVista", (vista + 1) % 3).apply()))
                     .build();
@@ -153,18 +150,30 @@ public class CubiCarro extends CarAppService {
             float u = Math.min(a.height(), a.width() * (aLoAncho ? 0.5f : 1f)) / 100f;
             int modo = suena ? 2 : nav ? 1 : (ahora / 1000) % 34 >= 28 ? 1 : 0;   // Zelda: canta con música, va despierta manejando y, si no, duerme (y cada rato se despierta)
             if (vista == 1) {
-                if (zelda) { zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, !nav && !suena); return; }
+                if (zelda) { zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, true); return; }
                 cara(c, a.centerX(), a.centerY() - (franja ? 5 * u : 0), 60 * u, ojos, suena, ahora);
                 if (franja) texto(c, cancion, a.centerX(), a.bottom - 9 * u, 5.5f * u, GRIS, false, Paint.Align.CENTER, a.width() - 12 * u);
                 return;
             }
+            if (zelda && vista == 0 && !nav) { zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, true); return; }   // sin ruta: Zelda en grande
             // la carita a un lado (arriba si la pantalla es angosta) y el panel con lo demás
             float corte = aLoAncho ? a.left + a.width() * 0.38f : a.top + a.height() * 0.46f, m = 3 * u;
             if (vista == 2) corte = aLoAncho ? a.left : a.top;                      // solo el mapa: el panel ocupa todo
-            else if (zelda) { if (aLoAncho) zelda(c, a.left + m, a.top + m, corte - m, a.bottom - m, 5 * u, ahora, modo, fondo, !nav); else zelda(c, a.left + m, a.top, a.right - m, corte - m, 5 * u, ahora, modo, fondo, !nav); }
+            else if (zelda) {                                                       // con ruta: el mapa en grande y, a un lado (abajo si es angosta), los datos del viaje y Zelda
+                if (aLoAncho) {
+                    float cx = a.left + a.width() * 0.72f, cy = a.top + a.height() * 0.42f;
+                    viaje(c, cx, a.top + m, a.right - m, cy - m / 2, s, u); zelda(c, cx, cy + m / 2, a.right - m, a.bottom - m, 5 * u, ahora, modo, fondo, s, false);
+                    r.set(a.left + m, a.top + m, cx - m, a.bottom - m);
+                } else {
+                    float cy = a.top + a.height() * 0.62f, cx = a.left + a.width() * 0.42f;
+                    zelda(c, a.left + m, cy, cx - m / 2, a.bottom - m, 5 * u, ahora, modo, fondo, s, false); viaje(c, cx + m / 2, cy, a.right - m, a.bottom - m, s, u);
+                    r.set(a.left + m, a.top, a.right - m, cy - m);
+                }
+            }
             else if (aLoAncho) cara(c, (a.left + corte) / 2, a.centerY(), 46 * u, ojos, suena, ahora);
             else cara(c, a.centerX(), (a.top + corte) / 2, Math.min(46 * u, (corte - a.top) * 0.95f), ojos, suena, ahora);
-            if (aLoAncho) r.set(corte, a.top + m, a.right - m, a.bottom - m); else r.set(a.left + m, corte, a.right - m, a.bottom - m);
+            if (zelda && vista == 0) { }                                             // el panel ya quedó puesto arriba
+            else if (aLoAncho) r.set(corte, a.top + m, a.right - m, a.bottom - m); else r.set(a.left + m, corte, a.right - m, a.bottom - m);
             float x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom, w = x1 - x0;
             recorte.rewind(); recorte.addRoundRect(r, 5 * u, 5 * u, Path.Direction.CW);
             c.save(); c.clipPath(recorte);
@@ -218,20 +227,51 @@ public class CubiCarro extends CarAppService {
         static final int[] FONDO_Z = {0xff35c3e8, 0xfff0457e, 0xff27c48f, 0xff8b6cf0, 0xff262262}, LETRA_Z = {0xffffd23f, 0xffffffff, 0xff0f3d33, 0xfffff3b0, 0xff9a95ff};
         private final Path gp = new Path();
         private final RectF gr = new RectF();
-        private void zelda(Canvas c, float x0, float y0, float x1, float y1, float radio, long ahora, int modo, int fondo, boolean conHora) {
+        private void zelda(Canvas c, float x0, float y0, float x1, float y1, float radio, long ahora, int modo, int fondo, CubiService sv, boolean grande) {
             java.util.Calendar cal = java.util.Calendar.getInstance();
             int h = cal.get(java.util.Calendar.HOUR_OF_DAY), tm = fondo >= 0 ? fondo : modo == 2 ? 1 : h >= 19 || h < 6 ? 4 : 0;
-            float w = x1 - x0, alto = y1 - y0, s = Math.min(w, alto) * 0.24f;
+            float w = x1 - x0, alto = y1 - y0, s = Math.min(w, alto) * (grande ? 0.24f : 0.3f);
             c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); c.clipPath(gp);
             p.setStyle(Paint.Style.FILL); p.setColor(FONDO_Z[tm]); c.drawRect(gr, p);
-            if (conHora) {
+            tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(LETRA_Z[tm]);
+            boolean alLado = grande && w > alto * 1.5f;               // pantalla ancha: el texto a la izquierda y ella a la derecha
+            float tx = alLado ? x0 + w * 0.33f : (x0 + x1) / 2, tw = alLado ? w * 0.58f : w * 0.9f;
+            if (grande && modo == 2 && sv != null) {                  // con música: el renglón de la letra que va (o el nombre de la canción), en grande
+                String letra = sv.letraAhora.isEmpty() ? sv.cancionTitulo : sv.letraAhora, abajo = sv.letraAhora.isEmpty() ? sv.cancionArtista : sv.cancionTitulo;
+                letra = letra.toUpperCase(Locale.ROOT);
+                String l1 = letra, l2 = "";
+                tp.setTextSize(alto * 0.16f);
+                if (tp.measureText(letra) > tw) {                     // largo: en dos pisos, partido en el espacio más cercano a la mitad
+                    int corte = -1;
+                    for (int i = letra.indexOf(' '); i >= 0; i = letra.indexOf(' ', i + 1)) if (corte < 0 || Math.abs(i - letra.length() / 2) < Math.abs(corte - letra.length() / 2)) corte = i;
+                    if (corte > 0) { l1 = letra.substring(0, corte); l2 = letra.substring(corte + 1); }
+                }
+                float yy = y0 + alto * (alLado ? 0.36f : 0.2f);
+                for (String l : new String[]{l1, l2}) {
+                    if (l.isEmpty()) continue;
+                    tp.setTextSize(alto * 0.16f); tp.setTextSize(Math.min(alto * 0.16f, alto * 0.16f * tw / Math.max(1, tp.measureText(l))));
+                    c.drawText(l, tx, yy, tp); yy += alto * 0.17f;
+                }
+                tp.setAlpha(170); tp.setTextSize(alto * 0.07f); c.drawText(TextUtils.ellipsize(abajo, tp, tw, TextUtils.TruncateAt.END).toString(), tx, yy - alto * 0.04f, tp); tp.setAlpha(255);
+            } else if (grande) {                                      // sin música: la hora enorme, y ella por delante
                 String hora = (h % 12 == 0 ? 12 : h % 12) + ":" + String.format(Locale.US, "%02d", cal.get(java.util.Calendar.MINUTE));
-                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(LETRA_Z[tm]); tp.setTextSize(100);
-                tp.setTextSize(Math.min(alto * 0.5f, 100 * w * 0.9f / tp.measureText(hora)));
-                c.drawText(hora, (x0 + x1) / 2, y0 + alto * 0.08f + tp.getTextSize() * 0.8f, tp);
+                tp.setTextSize(100); tp.setTextSize(Math.min(alto * (alLado ? 0.62f : 0.46f), 100 * tw / tp.measureText(hora)));
+                c.drawText(hora, tx, alLado ? y0 + alto * 0.5f + tp.getTextSize() * 0.36f : y0 + alto * 0.08f + tp.getTextSize() * 0.8f, tp);
             }
-            gato(c, (x0 + x1) / 2 + (conHora ? w * 0.12f : 0), y1 - s * 1.1f, s, ahora, modo, y1, LETRA_Z[tm]);
+            gato(c, alLado ? x0 + w * 0.76f : (x0 + x1) / 2 + (grande && modo != 2 ? w * 0.12f : 0), y1 - s * 1.1f, s, ahora, modo, y1, LETRA_Z[tm]);
             c.restore();
+        }
+        // el cuadro pequeño con los datos del viaje: a cuánto está el destino, a qué hora se llega y en cuántos segundos toca girar
+        private void viaje(Canvas c, float x0, float y0, float x1, float y1, CubiService sv, float u) {
+            p.setStyle(Paint.Style.FILL); p.setColor(PANEL); gr.set(x0, y0, x1, y1); c.drawRoundRect(gr, 5 * u, 5 * u, p);
+            float cx = (x0 + x1) / 2, alto = y1 - y0, w = x1 - x0 - 4 * u;
+            boolean hayDest = sv.navDestM >= 0, haySeg = sv.navMetros >= 0 && sv.kmh >= 8 && sv.navMetros * 3.6 / sv.kmh < 100;
+            if (hayDest) {
+                texto(c, metros(sv.navDestM), cx, y0 + alto * 0.3f, alto * 0.24f, TINTA, true, Paint.Align.CENTER, w);
+                texto(c, sv.navLlega.isEmpty() ? "al destino" : "llegamos " + sv.navLlega, cx, y0 + alto * 0.5f, alto * 0.12f, GRIS, false, Paint.Align.CENTER, w);
+            }
+            if (haySeg) texto(c, "giro en " + Math.round(sv.navMetros * 3.6 / sv.kmh) + " s", cx, y0 + alto * (hayDest ? 0.8f : 0.55f), alto * 0.15f, AZUL, true, Paint.Align.CENTER, w);
+            if (!hayDest && !haySeg) texto(c, "En ruta", cx, y0 + alto * 0.55f, alto * 0.16f, GRIS, true, Paint.Align.CENTER, w);
         }
         private void ovalo(Canvas c, float cx, float cy, float rx, float ry) { gr.set(cx - rx, cy - ry, cx + rx, cy + ry); c.drawOval(gr, p); }
         private void tri(Canvas c, float ax, float ay, float bx, float by, float cx, float cy) { gp.rewind(); gp.moveTo(ax, ay); gp.lineTo(bx, by); gp.lineTo(cx, cy); gp.close(); c.drawPath(gp, p); }
