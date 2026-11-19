@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+// App aparte para compartir: un botón que baja Fermata Auto y lo instala con la marca de Play Store,
+// que es lo que Android Auto pide para mostrar una app (el mismo método con que Cubi se instala a sí mismo).
+android {
+    namespace 'com.cubi.instalador'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.cubi.instalador'
+        minSdk 26
+        targetSdk 34
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int)
+        versionName "1." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+
+    // la misma llave de Cubi (la compilación la deja en app/cubi.p12)
+    def llave = rootProject.file('app/cubi.p12')
+    signingConfigs {
+        cubi {
+            storeFile llave
+            storeType 'pkcs12'
+            storePassword System.getenv('CUBI_CLAVE')
+            keyAlias 'cubi'
+            keyPassword System.getenv('CUBI_CLAVE')
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig llave.exists() ? signingConfigs.cubi : signingConfigs.debug
+        }
+    }
+
+    lint {
+        checkReleaseBuilds false
+        abortOnError false
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'   // FileProvider, para pasarle el APK al instalador del sistema
+}

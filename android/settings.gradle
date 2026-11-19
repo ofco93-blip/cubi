@@ -7,3 +7,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = 'Cubi'
 include ':app'
+include ':instalador'
