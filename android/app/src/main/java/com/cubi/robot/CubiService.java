@@ -1621,6 +1621,7 @@ public class CubiService extends Service {
     String cancionTexto = "";              // "Título de Artista", para que Haiku sepa qué suena
     private volatile long[] letraT;        // cuándo empieza cada línea (ms)
     private volatile boolean[] letraVoz;   // si esa línea tiene letra (las vacías son partes sin voz)
+    volatile String letraSigue = "";       // el renglón que viene después, para mostrarlo apagado
     volatile String letraAhora = "";       // el renglón de la letra que se está cantando
     private volatile String[] letraTxt;    // el texto de cada línea, para mostrarlo en la pantalla de música de la gata
     private volatile String[] letraSil;    // una vocal por sílaba de cada línea: la boca de Cubi las va diciendo
@@ -1683,7 +1684,7 @@ public class CubiService extends Service {
             if (titulo != null && !id.equals(cancionId)) {
                 cancionId = id;
                 cancionTexto = titulo + (artista != null ? " de " + artista : "");
-                cancionTitulo = titulo; cancionArtista = artista == null ? "" : artista; letraAhora = "";
+                cancionTitulo = titulo; cancionArtista = artista == null ? "" : artista; letraAhora = ""; letraSigue = "";
                 try {   // el nombre de la canción, para la pantalla de música del gato (sin lo que va entre paréntesis)
                     String tc = titulo.replaceAll("\\s*[\\(\\[].*$", "").replaceAll("\\s+-\\s+.*$", ""), ar = cancionArtista.split(",")[0];
                     enviar("cancion|/musica?tit=" + URLEncoder.encode(tc.length() > 26 ? tc.substring(0, 26) : tc, "UTF-8").replace("+", "%20")
@@ -1712,6 +1713,7 @@ public class CubiService extends Service {
                     enviar("asis|/musica?voz=1&s=" + sil[i] + "&d=" + d + "&o=" + (pos + 150 - t[i]) + "&c=" + (coro[i] ? 1 : 0));
                     String[] tx = letraTxt;
                     letraAhora = tx != null && i < tx.length ? tx[i] : "";
+                    letraSigue = tx != null && i + 1 < tx.length ? tx[i + 1] : "";
                     if (tx != null && i < tx.length) try {   // el renglón que empieza, para la pantalla de la gata (el Cubi viejo lo ignora)
                         enviar("letra|/musica?let=" + URLEncoder.encode(tx[i].length() > 64 ? tx[i].substring(0, 64) : tx[i], "UTF-8").replace("+", "%20"));
                     } catch (Exception ignored) { }
