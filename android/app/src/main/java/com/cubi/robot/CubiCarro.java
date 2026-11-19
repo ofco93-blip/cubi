@@ -230,6 +230,7 @@ public class CubiCarro extends CarAppService {
         private final RectF gr = new RectF();
         // Los clips de Zelda en 3D: cuadros sueltos en assets/zelda/<clip>/NN.jpg (48 por clip, 12 por segundo).
         android.content.res.AssetManager assets;
+        private final android.graphics.Matrix mz = new android.graphics.Matrix();
         private android.graphics.Bitmap cuadroZ;
         private String cuadroDe = "";
         private android.graphics.Bitmap cuadro(String clip, int i) {
@@ -257,20 +258,23 @@ public class CubiCarro extends CarAppService {
             final int n = 48;
             int k = (int) ((ahora * (musicaZ ? 12 : 6) / 1000) % (2 * n - 2));
             android.graphics.Bitmap b = assets == null ? null : cuadro(clip, k < n ? k : 2 * n - 2 - k);
-            c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); c.clipPath(gp);
-            if (b == null) {                                          // sin clips: la Zelda dibujada de antes
+            // grande: el fondo del clip llena toda la pantalla, como un fondo animado (los botones quedan encima); si no, su cuadro redondeado
+            c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); if (!grande || b == null) c.clipPath(gp);
+            if (b == null) {                                         // sin clips: la Zelda dibujada de antes
                 int tm = fondo >= 0 ? fondo : musicaZ ? 1 : h >= 19 || h < 6 ? 4 : 0;
                 p.setStyle(Paint.Style.FILL); p.setColor(FONDO_Z[tm]); c.drawRect(gr, p);
                 float s = Math.min(w, alto) * 0.26f;
                 gato(c, (x0 + x1) / 2, y1 - s * 1.1f, s, ahora, modo, y1, LETRA_Z[tm]);
                 c.restore(); return;
             }
-            // el clip se ajusta al alto (ella entera, sin cortarle la cabeza) y queda pegado a la izquierda; lo que sobra a la
-            // derecha se rellena estirando la orilla del clip, que es puro fondo
+            // el clip se ajusta al alto (ella entera, sin cortarle la cabeza), en espejo y pegado a la izquierda; todo lo que
+            // sobra alrededor se rellena estirando las orillas del clip, que son puro fondo
             float sc = vh / b.getHeight(), dw = b.getWidth() * sc, libre = x0 + dw * 0.62f;   // libre: donde termina ella y empieza el fondo vacío
-            c.save(); c.clipRect(x0, y0, x1, y0 + vh); p.setFilterBitmap(true); p.setColor(0xffffffff);
-            if (dw < w) { gr.set(x0 + dw - 1, y0, x1, y0 + vh); c.drawBitmap(b, new Rect(0, 0, 2, b.getHeight()), gr, p); }
-            c.translate(x0 + dw, y0); c.scale(-sc, sc); c.drawBitmap(b, 0, 0, p); c.restore();
+            android.graphics.BitmapShader relleno = new android.graphics.BitmapShader(b, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
+            mz.setScale(-sc, sc); mz.postTranslate(x0 + dw, y0); relleno.setLocalMatrix(mz);
+            p.setStyle(Paint.Style.FILL); p.setFilterBitmap(true); p.setColor(0xffffffff); p.setShader(relleno);
+            if (grande) c.drawPaint(p); else c.drawRect(x0, y0, x1, y1, p);
+            p.setShader(null);
             if (grande) {
                 tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(0xffffffff); tp.setShadowLayer(alto * 0.02f, 0, alto * 0.006f, 0x66000000);
                 boolean ancho = x1 - libre > w * 0.3f;               // hay campo a la derecha de ella: el texto va ahí; si no, arriba y más chico
@@ -297,10 +301,11 @@ public class CubiCarro extends CarAppService {
                 }
                 tp.clearShadowLayer();
                 // la cajita de abajo: la hora y el clima; con música, también lo que suena
-                p.setStyle(Paint.Style.FILL); p.setColor(0xf00c1018); c.drawRect(x0, y1 - caja, x1, y1, p);
+                float mg = caja * 0.14f;                              // flota sobre el fondo, translúcida y redondeada
+                p.setStyle(Paint.Style.FILL); p.setColor(0xb00c1018); c.drawRoundRect(x0 + mg, y1 - caja + mg, x1 - mg, y1 - mg, caja * 0.3f, caja * 0.3f, p);
                 String clima = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : "  ·  " + sv.climaGrados + "°  " + sv.climaEstado;
-                texto(c, hora + clima, x0 + caja * 0.5f, y1 - caja * 0.33f, caja * 0.46f, TINTA, true, Paint.Align.LEFT, w * 0.5f);
-                if (musicaZ && sv != null) texto(c, "♪ " + sv.cancionTitulo, x1 - caja * 0.5f, y1 - caja * 0.33f, caja * 0.4f, GRIS, false, Paint.Align.RIGHT, w * 0.42f);
+                texto(c, hora + clima, x0 + caja * 0.5f, y1 - caja * 0.36f, caja * 0.4f, TINTA, true, Paint.Align.LEFT, w * 0.5f);
+                if (musicaZ && sv != null) texto(c, "♪ " + sv.cancionTitulo, x1 - caja * 0.5f, y1 - caja * 0.36f, caja * 0.36f, 0xffd8dde6, false, Paint.Align.RIGHT, w * 0.42f);
             }
             c.restore();
         }
