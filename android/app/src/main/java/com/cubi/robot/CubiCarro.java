@@ -523,7 +523,7 @@ public class CubiCarro extends CarAppService {
                 for (Path q : zonasP) q.rewind();
                 if (zs != null) for (String v : zs) { int t = v.charAt(0) - '3'; if (t >= 0 && t < 3) trazar(v, zonasP[t], t != 2); }
             }
-            float w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + h * 0.76f, k = w / 240f;
+            float w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + h * 0.66f, k = w / 400f;
             float rumbo = s.mapaRumbo;
             if (Float.isNaN(rumboS)) rumboS = rumbo;
             rumboS = (rumboS + (((rumbo - rumboS + 540) % 360) - 180) * 0.12f + 360) % 360;
