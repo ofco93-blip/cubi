@@ -250,7 +250,9 @@ public class CubiCarro extends CarAppService {
         float zLibre;                                                 // hasta dónde llega Zelda en su clip: de ahí a la derecha queda fondo libre
         boolean fundido;                                              // el mapa y los datos van translúcidos sobre el fondo de Zelda
         String falla;                                               // el último error al dibujar, si hubo
-        private android.graphics.Bitmap cuadroZ;
+        private android.graphics.Bitmap cuadroZ, mascZ;
+        private final Paint pm = new Paint(Paint.FILTER_BITMAP_FLAG);   // pinta la silueta como recorte: deja de la capa solo donde la silueta es blanca
+        { pm.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)); pm.setColorFilter(new android.graphics.ColorMatrixColorFilter(new float[]{0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 1,0,0,0,0})); }
         private String cuadroDe = "";
         private android.graphics.Bitmap cuadro(String clip, int i) {
             String clave = clip + i;
@@ -261,6 +263,9 @@ public class CubiCarro extends CarAppService {
             try (java.io.InputStream in = assets.open(String.format(Locale.US, "zelda/%s/%02d.jpg", clip, i + 1))) {
                 android.graphics.Bitmap b = android.graphics.BitmapFactory.decodeStream(in, null, o);
                 if (b != null) { cuadroZ = b; cuadroDe = clave; }
+                // su silueta (blanco donde está ella), para poder dejar texto por detrás
+                o.inBitmap = mascZ;
+                try (java.io.InputStream im = assets.open(String.format(Locale.US, "zelda/%s/m%02d.jpg", clip, i + 1))) { mascZ = android.graphics.BitmapFactory.decodeStream(im, null, o); } catch (Throwable e) { mascZ = null; }
             } catch (Throwable e) {
                 cuadroZ = null; cuadroDe = ""; falla = String.valueOf(e);   // el siguiente intento pide un bitmap nuevo
                 return null;
@@ -306,11 +311,31 @@ public class CubiCarro extends CarAppService {
             p.setStyle(Paint.Style.FILL); p.setFilterBitmap(true); p.setColor(0xffffffff); p.setShader(relleno);
             if (grande) c.drawPaint(p); else c.drawRect(x0, y0, x1, y1, p);
             p.setShader(null);
+            // Como los fondos de iPhone: la hora, enorme, queda por DETRÁS de Zelda (se vuelve a pintar ella encima, recortada
+            // con su silueta), así las orejas o una pata le pasan por delante a los números. La letra va después, por delante.
+            boolean anchoZ = x1 - libre > w * 0.3f, horaGrande = conTexto && mascZ != null && (anchoZ || !musicaZ);
+            if (horaGrande) {
+                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.clearShadowLayer(); tp.setColor(0xffffffff); tp.setAlpha(musicaZ ? 150 : 255);
+                if (anchoZ) {                                          // a lo ancho: arranca un poco metida detrás de ella
+                    float tam = vh * (musicaZ ? 0.34f : 0.5f); tp.setTextSize(tam);
+                    float th = tp.measureText(hora), cabe = (x1 - libre) * 1.02f;
+                    if (th > cabe) { tam *= cabe / th; tp.setTextSize(tam); th = cabe; }
+                    tp.setTextAlign(Paint.Align.LEFT); c.drawText(hora, libre - th * 0.12f, y0 + vh * (musicaZ ? 0.27f : 0.5f) + tam * 0.36f, tp);
+                } else {                                               // angosta: arriba, con las orejas tapando la parte de abajo
+                    tp.setTextSize(100); tp.setTextSize(Math.min(vh * 0.26f, 100 * w * 0.9f / tp.measureText(hora)));
+                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, (x0 + x1) / 2, y0 + vh * 0.27f, tp);
+                }
+                tp.setAlpha(255);
+                c.saveLayer(x0, y0, Math.min(x1, x0 + dw), y0 + vh, null);
+                c.concat(mz); c.drawBitmap(b, 0, 0, p);
+                c.scale(b.getWidth() / (float) mascZ.getWidth(), b.getHeight() / (float) mascZ.getHeight()); c.drawBitmap(mascZ, 0, 0, pm);
+                c.restore();
+            }
             if (conCaja) {
                 if (conTexto) {
                 tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(0xffffffff); tp.setShadowLayer(alto * 0.02f, 0, alto * 0.006f, 0x66000000);
                 boolean ancho = x1 - libre > w * 0.3f;               // hay campo a la derecha de ella: el texto va ahí; si no, arriba y más chico
-                float tx = ancho ? (libre + x1) / 2 : (x0 + x1) / 2, tw = ancho ? (x1 - libre) * 0.9f : w * 0.9f, ty = ancho ? y0 + vh * 0.4f : y0 + vh * 0.1f;
+                float tx = ancho ? (libre + x1) / 2 : (x0 + x1) / 2, tw = ancho ? (x1 - libre) * 0.9f : w * 0.9f, ty = ancho ? y0 + vh * (horaGrande ? 0.6f : 0.4f) : y0 + vh * 0.1f;
                 if (musicaZ && sv != null) {                          // el renglón de la letra que va (o el nombre de la canción) y debajo el artista
                     String letra = (sv.letraAhora.isEmpty() ? sv.cancionTitulo : sv.letraAhora).toUpperCase(Locale.ROOT), l1 = letra, l2 = "";
                     float tam = alto * (ancho ? 0.13f : 0.065f);
@@ -327,7 +352,7 @@ public class CubiCarro extends CarAppService {
                     }
                     tp.setTextSize(tam * 0.5f); tp.setAlpha(215);
                     c.drawText(TextUtils.ellipsize(sv.cancionArtista + (sv.letraAhora.isEmpty() ? "" : " · " + sv.cancionTitulo), tp, tw, TextUtils.TruncateAt.END).toString(), tx, ty - tam * 0.3f, tp); tp.setAlpha(255);
-                } else {                                              // sin música: la hora, grande
+                } else if (!horaGrande) {                             // sin música y sin silueta: la hora, grande, al lado
                     tp.setTextSize(100); tp.setTextSize(Math.min(alto * (ancho ? 0.42f : 0.12f), 100 * tw / tp.measureText(hora)));
                     c.drawText(hora, tx, ancho ? y0 + vh * 0.5f + tp.getTextSize() * 0.36f : ty + tp.getTextSize() * 0.4f, tp);
                 }
@@ -338,7 +363,7 @@ public class CubiCarro extends CarAppService {
                 p.setStyle(Paint.Style.FILL); p.setColor(0xb00c1018); c.drawRoundRect(x0 + mg, y1 - caja + mg, x1 - mg, y1 - mg, caja * 0.3f, caja * 0.3f, p);
                 String clima = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaGrados + "°  " + sv.climaEstado;
                 // sin música la hora ya va en grande: aquí solo el clima, para que el reloj no salga dos veces
-                texto(c, conTexto && !musicaZ ? clima : clima.isEmpty() ? hora : hora + "  ·  " + clima, x0 + caja * 0.5f, y1 - caja * 0.36f, caja * 0.4f, TINTA, true, Paint.Align.LEFT, w * 0.5f);
+                texto(c, horaGrande || (conTexto && !musicaZ) ? clima : clima.isEmpty() ? hora : hora + "  ·  " + clima, x0 + caja * 0.5f, y1 - caja * 0.36f, caja * 0.4f, TINTA, true, Paint.Align.LEFT, w * 0.5f);
                 if (musicaZ && sv != null) texto(c, "♪ " + sv.cancionTitulo, x1 - caja * 0.5f, y1 - caja * 0.36f, caja * 0.36f, 0xffd8dde6, false, Paint.Align.RIGHT, w * 0.42f);
             }
             c.restore();
