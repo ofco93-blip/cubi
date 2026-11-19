@@ -2775,6 +2775,9 @@ namespace {
 int relojMin = -1; float relojT = 0;
 char cancionTit[28] = "", cancionArt[24] = "";
 struct Gt { float cx, cy, s, c, n; };                                // dónde está, qué tan grande y cuánto se ladea
+// cómo baila en este cuadro: cuánto salta, cuánto se corre de lado, cuánto se ladea y qué hace la mano libre
+// (0 marca el ritmo en el aire, 1 descansa en el borde, 2 arriba saludando, 3 abajo siguiendo el golpe)
+struct Baile { float salto = 0, lado = 0, ladeo = 0; int gesto = 0; };
 inline void gLoc(const Gt &q, float px, float py, float &x, float &y) { const float dx = px - q.cx, dy = py - q.cy; x = (dx * q.c + dy * q.n) / q.s; y = (dy * q.c - dx * q.n) / q.s; }
 inline void gPan(const Gt &q, float x, float y, float &px, float &py) { px = q.cx + (x * q.c - y * q.n) * q.s; py = q.cy + (x * q.n + y * q.c) * q.s; }
 // una pieza del gato: su forma se escribe en las medidas del gato (1 = el tamaño s), sin pensar en el ladeo
@@ -2789,10 +2792,11 @@ template <class F> void pieza(const Gt &q, float x0, float y0, float x1, float y
 void reloj(int minutos) { relojMin = minutos; relojT = tAhora; }
 void mostrarCancion(const char *t, const char *a) { snprintf(cancionTit, sizeof cancionTit, "%s", t ? t : ""); snprintf(cancionArt, sizeof cancionArt, "%s", a ? a : ""); }
 // boca: 0..1 qué tan abierta; golpe: 0..1 el golpe de la música (salta y mueve la cola); emo: 0..1 sostiene una nota larga; tinta: el color de las zetas
-static void gato(float cx, float cy, float s, float giro, bool duerme, bool canta, float boca, float golpe, float emo, const Col &tinta) {
+static void gato(float cx, float cy, float s, float giro, bool duerme, bool canta, float boca, float golpe, float emo, const Baile &b, const Col &tinta) {
+  cx += b.lado * s;
   const Col N{242, 140, 40}, O{217, 111, 20}, C{255, 227, 189}, T{58, 34, 18}, ROSA{236, 127, 134};
-  const float t = tAhora, g = giro + (canta ? 0.07f * sinf(t * 3.4f) : 0.025f * sinf(t * 0.9f));
-  const Gt q{cx, cy + s * (canta ? -0.1f * golpe : 0.04f * sinf(t * 1.6f)), s, cosf(g), sinf(g)};
+  const float t = tAhora, g = giro + (canta ? b.ladeo : 0.025f * sinf(t * 0.9f));
+  const Gt q{cx, cy + s * (canta ? -b.salto : 0.04f * sinf(t * 1.6f)), s, cosf(g), sinf(g)};
   const float cola = (duerme ? 0.08f : canta ? 0.4f : 0.25f) * sinf(t * (canta ? 5.4f : duerme ? 0.6f : 1.3f));
   float tx[5], ty[5];                                                // la cola: una curva hecha de cuatro tramos
   for (int i = 0; i < 5; i++) {
@@ -2860,7 +2864,13 @@ static void gato(float cx, float cy, float s, float giro, bool duerme, bool cant
     float mx2, my2;                                                  // dónde va esta mano, en las medidas del gato
     if (!canta) { mx2 = l * 0.74f; my2 = (H - 0.13f * s - q.cy) / s; }
     else if (l > 0) { mx2 = 0.72f + (0.15f - 0.72f) * k; my2 = 1.14f + (1.06f - 1.14f) * k; }
-    else { const float ax = -1.02f, ay = 0.5f - 0.32f * golpe; mx2 = ax + (-0.15f - ax) * k; my2 = ay + (1.0f - ay) * k; }
+    else {                                                         // la mano libre: va de un gesto a otro sin saltos
+      static float lx = -1.02f, ly = 0.5f;
+      const float ax = b.gesto == 1 ? -0.74f : b.gesto == 2 ? -1.0f + 0.13f * sinf(t * 6) : b.gesto == 3 ? -0.86f : -1.02f;
+      const float ay = b.gesto == 1 ? (H - 0.13f * s - q.cy) / s : b.gesto == 2 ? -0.2f : b.gesto == 3 ? 0.95f - 0.16f * golpe : 0.5f - 0.32f * golpe;
+      lx += (ax - lx) * 0.22f; ly += (ay - ly) * 0.22f;
+      mx2 = lx + (-0.15f - lx) * k; my2 = ly + (1.0f - ly) * k;
+    }
     const Gt qp{cx + mx2 * s, q.cy + my2 * s, s, 1, 0};
     pieza(qp, -0.34f, -0.29f, 0.34f, 0.29f, O, 1, [](float x, float y) { return dElipse(x, y, 0, 0, 0.31f, 0.26f); });   // el borde: se distingue sobre el pecho
     pieza(qp, -0.3f, -0.25f, 0.3f, 0.25f, C, 1, [](float x, float y) { return dElipse(x, y, 0, 0, 0.27f, 0.22f); });
@@ -2892,7 +2902,21 @@ static void cuadroGato(float t, const Entradas &e) {
     float tam = 84;
     while (tam > 30 && anchoTexto(tit, tam) > W * 0.92f) tam -= 4;
     texto(tit, CX, 62, tam * (1 + 0.04f * golpe), LETRA[tm]); texto(cancionArt, CX, 62 + tam * 0.6f + 12, 30, TENUE[tm]);
-    gato(CX, 262, 92, 0, false, true, e.canta ? e.boca : 0, golpe, e.emocion, LETRA[tm]);
+    // El baile cambia cada 8 golpes: salta, se mece, cabecea con la mano arriba, da pasos de lado. En las partes suaves
+    // se mueve menos y en las fuertes (el coro) más, con la mano arriba.
+    static int golpes = 0; static float pulsoAntes = 0;
+    if (e.pulso < pulsoAntes - 0.5f) golpes++;
+    pulsoAntes = e.pulso;
+    const float amp = 0.45f + 0.55f * lim(e.nivel, 0, 1), par = golpes % 2 ? -1.f : 1.f, vaiven = par * cosf(e.pulso * PI);   // va de un lado al otro en cada golpe
+    Baile b; b.gesto = (golpes / 8) % 4;
+    switch (b.gesto) {
+      case 0: b.salto = 0.13f * golpe * amp; b.ladeo = 0.03f * vaiven; break;
+      case 1: b.ladeo = 0.11f * amp * vaiven; b.salto = 0.03f * golpe * amp; break;
+      case 2: b.salto = 0.07f * golpe * amp; b.ladeo = 0.05f * sinf(t * 2); break;
+      default: b.lado = 0.2f * amp * vaiven; b.salto = 0.05f * golpe * amp; b.ladeo = 0.04f * vaiven; break;
+    }
+    if (e.nivel > 0.8f) b.gesto = 2;
+    gato(CX, 262, 92, 0, false, true, e.canta ? e.boca : 0, golpe, e.emocion, b, LETRA[tm]);
   } else {
     texto("CUBI", 150, 296, 230, TENUE[tm]);
     if (hh >= 0) {                                                   // la hora, a todo lo ancho; el gato va por delante
@@ -2904,7 +2928,7 @@ static void cuadroGato(float t, const Entradas &e) {
     // en reposo duerme; cada rato se despierta: bosteza con los ojos cerrados, mira la hora unos segundos y se vuelve a dormir
     const float f = fmodf(t, 34);
     const bool atento = habla || laBase == ESCUCHA || laBase == PIENSA, bosteza = !atento && f > 27 && f < 28.4f;
-    gato(312, 262, 92, -0.08f, !atento && f < 28.4f, false, habla ? e.boca : bosteza ? sinf((f - 27) / 1.4f * PI) : 0, 0, 0, LETRA[tm]);
+    gato(312, 262, 92, -0.08f, !atento && f < 28.4f, false, habla ? e.boca : bosteza ? sinf((f - 27) / 1.4f * PI) : 0, 0, 0, Baile(), LETRA[tm]);
   }
 }
 
