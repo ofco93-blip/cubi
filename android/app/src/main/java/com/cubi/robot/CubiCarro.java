@@ -663,6 +663,84 @@ public class CubiCarro extends CarAppService {
             }
             if (cerrado && hay) q.close();
         }
+        // El camino hasta el próximo giro cuando no hay destino escrito en la app. Google no entrega su ruta, pero sí dice a
+        // cuántos metros se gira y hacia qué lado: se busca la calle por la que va el carro (la más cercana que vaya en su
+        // rumbo), se sigue esa distancia y se dobla por la calle que sale hacia ese lado. lado: -1 izquierda, 1 derecha, 0 no gira.
+        // Todo en metros (x al este, y al norte), como las líneas del mapa.
+        // ponytail: empate ingenuo por cercanía y rumbo; en glorietas o calles paralelas pegadas puede elegir mal. Si molesta,
+        // pedir la ruta entera a OSRM con el destino (ya existe: pestaña Mapa).
+        private float[] giroM; private long giroDe; private CubiService.MapaCarro giroDatos;
+        static float[] hastaGiro(float[][] ls, byte[] cl, float px, float py, double ra, float metros, int lado) {
+            float dx = (float) Math.sin(ra), dy = (float) Math.cos(ra), mejor = 35, qx = 0, qy = 0;
+            int l = -1, i = 0, sg = 1;
+            for (int m = 0; m < ls.length; m++) {                        // la calle por la que va
+                if (cl[m] > 1) continue;
+                float[] v = ls[m];
+                for (int j = 2; j < v.length; j += 2) {
+                    float ax = v[j - 2], ay = v[j - 1], vx = v[j] - ax, vy = v[j + 1] - ay, l2 = vx * vx + vy * vy;
+                    if (l2 == 0) continue;
+                    float co = (vx * dx + vy * dy) / (float) Math.sqrt(l2);
+                    if (Math.abs(co) < 0.7f) continue;
+                    float t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / l2)), ex = ax + t * vx, ey = ay + t * vy;
+                    float lejos = (float) Math.hypot(px - ex, py - ey);
+                    if (lejos < mejor) { mejor = lejos; l = m; sg = co > 0 ? 1 : -1; i = co > 0 ? j / 2 : j / 2 - 1; qx = ex; qy = ey; }
+                }
+            }
+            if (l < 0) return null;
+            float[] pts = new float[800];
+            pts[0] = qx; pts[1] = qy;
+            int n = 1, nMet = -1, corta = -1, rl = 0, rj = 0, rg = 0;
+            float rec = 0, nota = 1e9f;
+            for (int pasos = 0; pasos < 250 && rec < metros + 60 && n < 300; pasos++) {
+                float[] v = ls[l];
+                float ex = pts[2 * n - 2], ey = pts[2 * n - 1];
+                if (i < 0 || i * 2 >= v.length) {                        // se acabó este tramo: sigue por el que va más derecho
+                    int nl = -1, ni = 0, ns = 1; float mc = 0.3f;
+                    for (int m = 0; m < ls.length; m++) {
+                        if (m == l || cl[m] > 1) continue;
+                        float[] o = ls[m];
+                        for (int j = 0; j < o.length; j += 2) if (Math.abs(o[j] - ex) < 1.5f && Math.abs(o[j + 1] - ey) < 1.5f)
+                            for (int g = -1; g <= 1; g += 2) {
+                                int q = j + 2 * g;
+                                if (q < 0 || q >= o.length) continue;
+                                float wx = o[q] - o[j], wy = o[q + 1] - o[j + 1], wl = (float) Math.hypot(wx, wy);
+                                if (wl > 0 && (wx * dx + wy * dy) / wl > mc) { mc = (wx * dx + wy * dy) / wl; nl = m; ni = q / 2; ns = g; }
+                            }
+                    }
+                    if (nl < 0) break;
+                    l = nl; i = ni; sg = ns; continue;
+                }
+                float nx = v[2 * i], ny = v[2 * i + 1], sl = (float) Math.hypot(nx - ex, ny - ey);
+                if (sl > 0) { dx = (nx - ex) / sl; dy = (ny - ey) / sl; }
+                rec += sl; pts[2 * n] = nx; pts[2 * n + 1] = ny; n++;
+                if (nMet < 0 && rec >= metros) nMet = n;
+                if (lado != 0 && Math.abs(rec - metros) <= 60)           // ¿sale de aquí una calle hacia el lado del giro?
+                    for (int m = 0; m < ls.length; m++) {
+                        if (m == l || cl[m] > 1) continue;
+                        float[] o = ls[m];
+                        for (int j = 0; j < o.length; j += 2) if (Math.abs(o[j] - nx) < 1.5f && Math.abs(o[j + 1] - ny) < 1.5f)
+                            for (int g = -1; g <= 1; g += 2) {
+                                int q = j + 2 * g;
+                                if (q < 0 || q >= o.length) continue;
+                                float wx = o[q] - o[j], wy = o[q + 1] - o[j + 1], wl = (float) Math.hypot(wx, wy);
+                                if (wl == 0) continue;
+                                float cruz = (dx * wy - dy * wx) / wl * -lado;   // > 0: sale hacia el lado pedido
+                                float p = Math.abs(rec - metros) + (1 - cruz) * 40;
+                                if (cruz > 0.5f && p < nota) { nota = p; corta = n; rl = m; rj = j; rg = g; }
+                            }
+                    }
+                i += sg;
+            }
+            if (corta > 0) {                                             // dobla: 150 m por la calle del giro
+                n = corta;
+                float[] o = ls[rl]; float van = 0;
+                for (int q = rj + 2 * rg; q >= 0 && q < o.length && van < 150 && n < 400; q += 2 * rg) {
+                    van += (float) Math.hypot(o[q] - pts[2 * n - 2], o[q + 1] - pts[2 * n - 1]);
+                    pts[2 * n] = o[q]; pts[2 * n + 1] = o[q + 1]; n++;
+                }
+            } else if (nMet > 0) n = nMet;
+            return n < 2 ? null : java.util.Arrays.copyOf(pts, n * 2);
+        }
         private void mapa(Canvas c, CubiService s, float x0, float y0, float x1, float y1, float u) {
             CubiService.MapaCarro d = s.carroDatos;
             float w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + h * 0.66f, k = w / 400f;
@@ -689,6 +767,16 @@ public class CubiCarro extends CarAppService {
                 for (int i = 0; i * 2 < rutaM.length; i++) { rutaM[2 * i] = (float) ((rlo[i] - d.lon0) * kx); rutaM[2 * i + 1] = (float) ((rla[i] - d.lat0) * 111320); }
             }
             if (rutaM != null) trazo(rutaM, calles[2], false);
+            else {                                                       // sin destino propio: el tramo hasta el próximo giro
+                boolean nav = s.navMetros > 0 && System.currentTimeMillis() - s.navCuando < 60000;
+                if (!nav) giroM = null;
+                else if (giroDe != s.mapaCuando || giroDatos != d) {     // una vez por posición del GPS
+                    giroDe = s.mapaCuando; giroDatos = d;
+                    giroM = hastaGiro(d.lineas, d.clase, (float) ((s.posLon - d.lon0) * kx), (float) ((s.posLat - d.lat0) * 111320), ra,
+                            (float) s.navMetros, s.navDir.equals("maps_izq") ? -1 : s.navDir.equals("maps_der") ? 1 : 0);
+                }
+                if (giroM != null) trazo(giroM, calles[2], false);
+            }
             if (fundido) { c.saveLayer(x0, y0, x1, y1, null); p.setStyle(Paint.Style.FILL); p.setColor(VELO); c.drawRect(x0, y0, x1, y1, p); } else c.save();
             c.save(); c.translate(cx, cy);
             inclina.setPolyToPoly(new float[]{-a, -b, a, -b, a, e, -a, e}, 0, new float[]{-a * 0.42f, -h * 0.74f, a * 0.42f, -h * 0.74f, a * 1.35f, h * 0.24f, -a * 1.35f, h * 0.24f}, 0, 4);
