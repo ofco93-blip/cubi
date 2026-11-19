@@ -2777,7 +2777,8 @@ char cancionTit[28] = "", cancionArt[24] = "";
 struct Gt { float cx, cy, s, c, n; };                                // dónde está, qué tan grande y cuánto se ladea
 // cómo baila en este cuadro: cuánto salta, cuánto se corre de lado, cuánto se ladea y qué hace la mano libre
 // (0 marca el ritmo en el aire, 1 descansa en el borde, 2 arriba saludando, 3 abajo siguiendo el golpe)
-struct Baile { float salto = 0, lado = 0, ladeo = 0; int gesto = 0; };
+// zoom: más grande (se pega a la pantalla) o más chica (se va hacia atrás); ojos: 0 normales, 1 muy abiertos (susto), 2 apretados
+struct Baile { float salto = 0, lado = 0, ladeo = 0; int gesto = 0; float zoom = 1; int ojos = 0; };
 inline void gLoc(const Gt &q, float px, float py, float &x, float &y) { const float dx = px - q.cx, dy = py - q.cy; x = (dx * q.c + dy * q.n) / q.s; y = (dy * q.c - dx * q.n) / q.s; }
 inline void gPan(const Gt &q, float x, float y, float &px, float &py) { px = q.cx + (x * q.c - y * q.n) * q.s; py = q.cy + (x * q.n + y * q.c) * q.s; }
 // una pieza del gato: su forma se escribe en las medidas del gato (1 = el tamaño s), sin pensar en el ladeo
@@ -2793,10 +2794,10 @@ void reloj(int minutos) { relojMin = minutos; relojT = tAhora; }
 void mostrarCancion(const char *t, const char *a) { snprintf(cancionTit, sizeof cancionTit, "%s", t ? t : ""); snprintf(cancionArt, sizeof cancionArt, "%s", a ? a : ""); }
 // boca: 0..1 qué tan abierta; golpe: 0..1 el golpe de la música (salta y mueve la cola); emo: 0..1 sostiene una nota larga; tinta: el color de las zetas
 static void gato(float cx, float cy, float s, float giro, bool duerme, bool canta, float boca, float golpe, float emo, const Baile &b, const Col &tinta) {
-  cx += b.lado * s;
+  s *= b.zoom; cx += b.lado * s;
   const Col N{242, 140, 40}, O{217, 111, 20}, C{255, 227, 189}, T{58, 34, 18}, ROSA{236, 127, 134};
-  const float t = tAhora, g = giro + (canta ? b.ladeo : 0.025f * sinf(t * 0.9f));
-  const Gt q{cx, cy + s * (canta ? -b.salto : 0.04f * sinf(t * 1.6f)), s, cosf(g), sinf(g)};
+  const float t = tAhora, g = giro + b.ladeo + (canta ? 0 : 0.025f * sinf(t * 0.9f));
+  const Gt q{cx, cy + s * (-b.salto + (canta ? 0 : 0.04f * sinf(t * 1.6f))), s, cosf(g), sinf(g)};
   const float cola = (duerme ? 0.08f : canta ? 0.4f : 0.25f) * sinf(t * (canta ? 5.4f : duerme ? 0.6f : 1.3f));
   float tx[5], ty[5];                                                // la cola: una curva hecha de cuatro tramos
   for (int i = 0; i < 5; i++) {
@@ -2836,10 +2837,14 @@ static void gato(float cx, float cy, float s, float giro, bool duerme, bool cant
     return fminf(dSegmento(x, y, l * 0.34f, 0.236f, l * 0.98f, 0.08f, 0.0125f), dSegmento(x, y, l * 0.34f, 0.292f, l * 0.98f, 0.36f, 0.0125f));
   });
   // parpadea cada 6 o 7 segundos; cada tanto hace el parpadeo lento de los gatos (ojos entrecerrados un rato) y mira a los lados
-  const float abre = (fmodf(t, 6.7f) > 6.56f ? 0.12f : 1) * (!canta && fmodf(t, 23) > 20.5f ? 0.45f : 1), mx = canta ? 0 : 0.05f * lim(sinf(t * 0.45f) * 3, -1, 1);
+  const float abre = b.ojos == 1 ? 1.22f : (fmodf(t, 6.7f) > 6.56f ? 0.12f : 1) * (!canta && fmodf(t, 23) > 20.5f ? 0.45f : 1), mx = canta ? 0 : 0.05f * lim(sinf(t * 0.45f) * 3, -1, 1);
   const bool feliz = canta && (boca > 0.75f || emo > 0.5f);
   for (int l = -1; l <= 1; l += 2) {                                 // los ojos: cápsulas verdes con la pupila de gato; dormido o cantando duro, cerrados
     const float ex = l * 0.34f + mx;
+    if (b.ojos == 2) {                                               // apretados: > <
+      pieza(q, ex - 0.2f, -0.3f, ex + 0.2f, 0.1f, T, 1, [=](float x, float y) { return fminf(dSegmento(x, y, ex + l * 0.11f, -0.22f, ex - l * 0.09f, -0.1f, 0.035f), dSegmento(x, y, ex - l * 0.09f, -0.1f, ex + l * 0.11f, 0.02f, 0.035f)); });
+      continue;
+    }
     if (duerme || feliz) {
       const float ey = duerme ? -0.16f : -0.02f;
       pieza(q, ex - 0.2f, ey - 0.2f, ex + 0.2f, ey + 0.2f, T, 1, [=](float x, float y) { return (duerme ? y < ey + 0.03f : y > ey - 0.03f) ? 1.f : fabsf(hypotf(x - ex, y - ey) - 0.13f) - 0.03f; });
@@ -2881,7 +2886,8 @@ static void gato(float cx, float cy, float s, float giro, bool duerme, bool cant
     texto("z", cx + s * (0.75f + 0.5f * p), cy - s * (0.7f + 1.0f * p), s * (0.5f + 0.5f * p), tinta, sinf(p * PI));
   }
 }
-static void cuadroGato(float t, const Entradas &e) {
+// u: segundos desde que empezó la reacción del carro (giro, hueco, acelerón, frenazo, arranque), o -1 si no hay
+static void cuadroGato(float t, const Entradas &e, float u) {
   dib::SinZoom sz;
   ConColor cc;
   // cinco fondos con su color de letra y su tono tenue: cielo, chicle, menta, lila y noche
@@ -2894,6 +2900,18 @@ static void cuadroGato(float t, const Entradas &e) {
   // con música, chicle; si no, según el cielo: de noche, noche; con lluvia, lila; nublado, menta; despejado, cielo
   const int tm = musica ? 1 : (climaTipo == 1 || (hh >= 0 && (hh >= 19 || hh < 6))) ? 4 : climaTipo >= 3 ? 3 : climaTipo == 2 ? 2 : 0;
   const float golpe = musica ? (1 - e.pulso) * (1 - e.pulso) : 0;
+  Baile rb;                                                          // lo que le hace el carro: la inercia la mueve, como a uno
+  if (u >= 0) {
+    const float env = sinf(PI * lim(u / DURA[laReac], 0, 1));
+    switch (laReac) {
+      case GIRO_IZQ: rb.lado = 0.32f * env; rb.ladeo = 0.17f * env; break;                                  // el carro gira a la izquierda: ella se va hacia la derecha
+      case GIRO_DER: rb.lado = -0.32f * env; rb.ladeo = -0.17f * env; break;
+      case BACHE: rb.salto = 0.42f * fabsf(sinf(u * 13)) * expf(-u * 2.5f); rb.ojos = 1; break;             // el hueco: rebota y abre los ojos
+      case ACELERON: rb.zoom = 1 - 0.17f * env; rb.salto = -0.06f * env; rb.ojos = 1; break;                 // el acelerón la pega al espaldar
+      case FRENAZO: rb.zoom = 1 + 0.2f * env; rb.salto = -0.1f * env; rb.ojos = 2; break;                    // el frenazo la manda contra la pantalla
+      default: rb.salto = 0.12f * fabsf(sinf(u * 8)) * env; break;                                          // el arranque: un brinquito
+    }
+  }
   figura(0, 0, W, H, solido(musica ? mezcla(FONDO[tm], BLANCO, 0.1f * golpe) : FONDO[tm]), [](float, float) { return -1.f; });   // con música el fondo late
   if (musica) {
     char tit[28]; int n = 0;
@@ -2916,6 +2934,7 @@ static void cuadroGato(float t, const Entradas &e) {
       default: b.lado = 0.2f * amp * vaiven; b.salto = 0.05f * golpe * amp; b.ladeo = 0.04f * vaiven; break;
     }
     if (e.nivel > 0.8f) b.gesto = 2;
+    b.salto += rb.salto; b.lado += rb.lado; b.ladeo += rb.ladeo; b.zoom = rb.zoom; b.ojos = rb.ojos;
     gato(CX, 262, 92, 0, false, true, e.canta ? e.boca : 0, golpe, e.emocion, b, LETRA[tm]);
   } else {
     texto("CUBI", 150, 296, 230, TENUE[tm]);
@@ -2928,7 +2947,7 @@ static void cuadroGato(float t, const Entradas &e) {
     // en reposo duerme; cada rato se despierta: bosteza con los ojos cerrados, mira la hora unos segundos y se vuelve a dormir
     const float f = fmodf(t, 34);
     const bool atento = habla || laBase == ESCUCHA || laBase == PIENSA, bosteza = !atento && f > 27 && f < 28.4f;
-    gato(312, 262, 92, -0.08f, !atento && f < 28.4f, false, habla ? e.boca : bosteza ? sinf((f - 27) / 1.4f * PI) : 0, 0, 0, Baile(), LETRA[tm]);
+    gato(312, 262, 92, -0.08f, !atento && f < 28.4f && u < 0, false, habla ? e.boca : bosteza && u < 0 ? sinf((f - 27) / 1.4f * PI) : 0, 0, 0, rb, LETRA[tm]);   // con una reacción del carro se despierta
   }
 }
 
@@ -2948,7 +2967,9 @@ void cuadro(float t, float dt, const Entradas &e0) {
   }
   if (laReac != NINGUNA && t - reacDesde - reacExtra >= DURA[laReac]) laReac = NINGUNA;
   if (laReac == PUM && pumCuenta >= 0 && t - reacDesde - pumCuenta > 5.6f) laReac = NINGUNA;   // terminó de reírse
-  if (elPaquete == GATO && laReac == NINGUNA) { cuadroGato(t, e); dib::zoom = 1; dib::blanco = false; return; }   // el gato se dibuja aparte; sus reacciones, por ahora, con la cara de Cubi
+  // el gato se dibuja aparte, también cuando el carro gira, coge un hueco, acelera, frena o arranca; las demás reacciones, por ahora, con la cara de Cubi
+  const bool delCarro = laReac == GIRO_IZQ || laReac == GIRO_DER || laReac == BACHE || laReac == ACELERON || laReac == FRENAZO || laReac == ARRANQUE;
+  if (elPaquete == GATO && (laReac == NINGUNA || delCarro)) { cuadroGato(t, e, delCarro ? t - reacDesde : -1); dib::zoom = 1; dib::blanco = false; return; }
   float vel;
   float u = t - reacDesde;
   if (reacExtra > 0 && u > 1.5f) u = fmaxf(1.5f, u - reacExtra);   // mantenida: se queda quieta en pantalla el tiempo extra
