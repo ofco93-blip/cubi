@@ -558,13 +558,74 @@ public class CubiService extends Service {
         }).start();
     }
 
-    private static String bajarTexto(String u) throws Exception {
-        HttpURLConnection h = (HttpURLConnection) new URL(u).openConnection();
-        h.setConnectTimeout(8000); h.setReadTimeout(12000);
-        h.setRequestProperty("User-Agent", "robot-app");
-        java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
-        try (java.io.InputStream in = h.getInputStream()) { byte[] b = new byte[8192]; for (int n; (n = in.read(b)) > 0; ) o.write(b, 0, n); }
-        return o.toString("UTF-8");
+    private static String bajarTexto(String u) throws Exception { return bajarTexto(u, 30000, 2); }
+
+    // espera: cuánto aguanta la respuesta (ms). intentos: cuántas veces insiste si el servidor dice que está ocupado
+    // (el de OpenStreetMap lo hace seguido: 429, 502, 503 o 504), esperando un poco más cada vez.
+    private static String bajarTexto(String u, int espera, int intentos) throws Exception {
+        for (int i = 1; ; i++) {
+            HttpURLConnection h = (HttpURLConnection) new URL(u).openConnection();
+            h.setConnectTimeout(8000); h.setReadTimeout(espera);
+            h.setRequestProperty("User-Agent", "robot-app");
+            int c = h.getResponseCode();
+            if ((c == 429 || c == 502 || c == 503 || c == 504) && i < intentos) { h.disconnect(); Thread.sleep(3000L * i); continue; }
+            java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+            try (java.io.InputStream in = h.getInputStream()) { byte[] b = new byte[8192]; for (int n; (n = in.read(b)) > 0; ) o.write(b, 0, n); }
+            return o.toString("UTF-8");
+        }
+    }
+
+    // ---------- el mapa de la pantalla del carro ----------
+    // Va aparte del del robot (que solo entiende 375 m a la redonda): 900 m alrededor de un punto adelantado hacia donde
+    // va el carro, porque la respuesta puede tardar más de medio minuto. Las líneas van en metros desde (lat0, lon0).
+    static class MapaCarro { double lat0, lon0; float[][] lineas; byte[] clase; }   // clase: 0 calle, 1 avenida, 2 ruta, 3 agua, 4 parque, 5 río
+    volatile MapaCarro carroDatos;
+    volatile String carroEstado = "Mapa: esperando el GPS.";
+    volatile double posLat = Double.NaN, posLon;
+    private volatile boolean carroCargando;
+    private long carroPedido;
+
+    private static float[] aMetros(double[] la, double[] lo, double lat, double lon, double kx) {
+        float[] p = new float[la.length * 2];
+        for (int i = 0; i < la.length; i++) { p[2 * i] = (float) ((lo[i] - lon) * kx); p[2 * i + 1] = (float) ((la[i] - lat) * 111320); }
+        return p;
+    }
+
+    private void bajarCarro(double clat, double clon, double lat, double lon) {
+        try {
+            if (carroDatos == null) carroEstado = "Mapa: bajando las calles…";
+            String donde = "(around:900," + String.format(Locale.US, "%.5f,%.5f", clat, clon) + ");";
+            String q = "[out:json][timeout:25];(way[highway~\"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street)(_link)?$\"]" + donde
+                    + "way[natural=water]" + donde + "way[waterway~\"^(river|stream|canal)$\"]" + donde + "way[leisure~\"^(park|garden)$\"]" + donde + ");out geom;";
+            JSONArray els = new JSONObject(bajarTexto("https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(q, "UTF-8"), 60000, 4)).getJSONArray("elements");
+            double kx = 111320 * Math.cos(Math.toRadians(lat));
+            java.util.ArrayList<float[]> ls = new java.util.ArrayList<>();
+            java.util.ArrayList<Byte> cs = new java.util.ArrayList<>();
+            for (double[][] a : aguaGrande) { ls.add(aMetros(a[0], a[1], lat, lon, kx)); cs.add((byte) 3); }
+            for (int e = 0; e < els.length(); e++) {
+                JSONObject w = els.getJSONObject(e);
+                JSONArray g = w.optJSONArray("geometry");
+                if (g == null || g.length() < 2) continue;
+                JSONObject tags = w.optJSONObject("tags") == null ? new JSONObject() : w.getJSONObject("tags");
+                String tipo = tags.optString("highway");
+                boolean grande = tipo.startsWith("motorway") || tipo.startsWith("trunk") || tipo.startsWith("primary") || tipo.startsWith("secondary");
+                double[] la = new double[g.length()], lo = new double[g.length()];
+                for (int i = 0; i < g.length(); i++) { la[i] = g.getJSONObject(i).getDouble("lat"); lo[i] = g.getJSONObject(i).getDouble("lon"); }
+                ls.add(aMetros(la, lo, lat, lon, kx));
+                cs.add((byte) (!tipo.isEmpty() ? (grande ? 1 : 0) : tags.has("waterway") ? 5 : tags.has("natural") ? 3 : 4));
+            }
+            double[] rla = rutaLat, rlo = rutaLon;
+            if (rla != null && rlo != null) { ls.add(aMetros(rla, rlo, lat, lon, kx)); cs.add((byte) 2); }
+            if (ls.isEmpty()) { carroEstado = "Mapa: no hay calles en el mapa por aquí."; return; }
+            MapaCarro d = new MapaCarro();
+            d.lat0 = lat; d.lon0 = lon; d.lineas = ls.toArray(new float[0][]); d.clase = new byte[cs.size()];
+            for (int i = 0; i < d.clase.length; i++) d.clase[i] = cs.get(i);
+            carroDatos = d; carroEstado = "";
+        } catch (Exception e) {
+            carroEstado = carroDatos == null ? "Mapa: el servidor de calles está ocupado; sigo intentando…" : "";
+        } finally {
+            carroCargando = false;
+        }
     }
 
     private void calcularRuta(double lat, double lon) {
@@ -606,6 +667,17 @@ public class CubiService extends Service {
         if (ahora - navCuando > 120000 && !hayDestino) return;   // sin ruta en Maps ni destino propio no hay mapa
         if (l.hasBearing() && l.hasSpeed() && l.getSpeed() > 1.5f) mapaRumbo = l.getBearing();   // parado, el rumbo del GPS no sirve
         final double lat = l.getLatitude(), lon = l.getLongitude();
+        posLat = lat; posLon = lon;
+        if (carroMapa()) {                                   // el mapa del carro: se vuelve a pedir al alejarse 400 m de donde se pidió
+            MapaCarro d = carroDatos;
+            double ido = d == null ? 1e9 : Math.hypot((lat - d.lat0) * 111320, (lon - d.lon0) * 111320 * Math.cos(Math.toRadians(lat)));
+            if (ido > 400 && !carroCargando && ahora - carroPedido > 10000) {
+                carroPedido = ahora; carroCargando = true;
+                double ade = Math.min(500, (l.hasSpeed() ? l.getSpeed() : 0) * 35), ra = Math.toRadians(mapaRumbo);   // adelantado: donde estará en ~35 s
+                final double clat = lat + Math.cos(ra) * ade / 111320, clon = lon + Math.sin(ra) * ade / (111320 * Math.cos(Math.toRadians(lat)));
+                new Thread(() -> bajarCarro(clat, clon, lat, lon)).start();
+            }
+        }
         // la ruta: la primera vez, y otra vez si el carro se sale más de 70 m de la línea (máximo cada 20 s)
         if (hayDestino && !rutaCalculando && ahora - rutaPedida > 20000 && (rutaLat == null || fueraDeRuta(lat, lon) > 70)) {
             rutaPedida = ahora; rutaCalculando = true;
@@ -614,7 +686,7 @@ public class CubiService extends Service {
         double dy = (lat - mapaLat0) * 111320, dx = (lon - mapaLon0) * 111320 * Math.cos(Math.toRadians(mapaLat0));
         double lejos = Math.hypot(dx, dy);
         mapaDx = dx; mapaDy = dy; mapaCuando = ahora; mapaVel = l.hasSpeed() ? l.getSpeed() : 0;
-        if ((!mapaListo || lejos > 130 || mapaForzar) && !mapaCargando && (ahora - mapaPedido > 8000 || mapaForzar)) {
+        if (navMapa() && (!mapaListo || lejos > 130 || mapaForzar) && !mapaCargando && (ahora - mapaPedido > 8000 || mapaForzar)) {
             mapaPedido = ahora; mapaCargando = true; mapaForzar = false;
             new Thread(() -> bajarCalles(lat, lon)).start();
         }

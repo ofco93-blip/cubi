@@ -196,7 +196,7 @@ public class CubiCarro extends CarAppService {
             float x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom, w = x1 - x0;
             recorte.rewind(); recorte.addRoundRect(r, 5 * u, 5 * u, Path.Direction.CW);
             c.save(); c.clipPath(recorte);
-            boolean conMapa = nav && s.mapaTramos != null;
+            boolean conMapa = nav && s.carroDatos != null && !Double.isNaN(s.posLat);
             p.setStyle(Paint.Style.FILL); p.setColor(fundido ? VELO : PANEL); if (!(fundido && conMapa)) c.drawRect(r, p);   // fundido y con mapa: el velo lo pone el mapa, desvanecido
             if (conMapa) mapa(c, s, x0, y0, x1, y1, u);
             float pie = franja ? 22 * u : 0;
@@ -222,7 +222,7 @@ public class CubiCarro extends CarAppService {
                 if (s == null) texto(c, "Abre la app de Cubi en el celular", x0 + w / 2, cy + 20 * u, 5.5f * u, GRIS, false, Paint.Align.CENTER, w - 8 * u);
             }
             if (nav && !conMapa)                                         // sin mapa: por qué (sin GPS, bajando las calles, sin internet…)
-                texto(c, s.gpsActivo() ? s.mapaEstado.replace("Mini mapa: ", "Mapa: ") : "Para ver el mapa, prende “Usar el GPS” en la app de Cubi", x0 + w / 2, y1 - 17 * u, 4.5f * u, fundido ? 0xe6ffffff : GRIS, false, Paint.Align.CENTER, w - 8 * u);
+                texto(c, s.gpsActivo() ? s.carroEstado : "Para ver el mapa, prende “Usar el GPS” en la app de Cubi", x0 + w / 2, y0 + (y1 - y0) * 0.9f, 4.5f * u, fundido ? 0xe6ffffff : GRIS, false, Paint.Align.CENTER, w - 8 * u);
             if (nav && fundido && aLoAncho) {
                 String d = s.navDestM < 0 ? "" : metros(s.navDestM) + (s.navLlega.isEmpty() ? " al destino" : "  ·  llegamos " + s.navLlega);
                 boolean haySeg = s.navMetros >= 0 && s.kmh >= 8 && s.navMetros * 3.6 / s.kmh < 100;
@@ -254,7 +254,7 @@ public class CubiCarro extends CarAppService {
         private final RectF gr = new RectF();
         // Los clips de Zelda en 3D: cuadros sueltos en assets/zelda/<clip>/NN.jpg (48 por clip, 12 por segundo).
         android.content.res.AssetManager assets;
-        private final android.graphics.Matrix mz = new android.graphics.Matrix();
+        private final android.graphics.Matrix mz = new android.graphics.Matrix(), mm = new android.graphics.Matrix();
         static final String[] QUIETA = {"quieta"}, BAILES = {"cabeceo", "pata", "cabeceo", "baile"}, RAP = {"rapcabeza", "rapmano", "rapcabeza"};
         float zLibre;                                                 // hasta dónde llega Zelda en su clip: de ahí a la derecha queda fondo libre
         boolean fundido;                                              // el mapa y los datos van translúcidos sobre el fondo de Zelda
@@ -344,7 +344,9 @@ public class CubiCarro extends CarAppService {
             c.saveLayer(x0, y0, x0 + 921 * sc, repisa, null);
             mz.setScale(-sc, sc); mz.postTranslate(x0 + 920 * sc, y0 + 40 * sc); c.concat(mz);
             p.setFilterBitmap(true); p.setColor(0xffffffff); c.drawBitmap(b, 0, 0, p);
-            c.scale(b.getWidth() / (float) mascZ.getWidth(), b.getHeight() / (float) mascZ.getHeight()); c.drawBitmap(mascZ, 0, 0, pm);
+            android.graphics.BitmapShader sil = new android.graphics.BitmapShader(mascZ, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
+            mm.setScale(b.getWidth() / (float) mascZ.getWidth(), b.getHeight() / (float) mascZ.getHeight()); sil.setLocalMatrix(mm);
+            pm.setShader(sil); c.drawPaint(pm); pm.setShader(null);   // llena toda la capa: fuera de la silueta todo queda transparente
             c.restore();
             if (conTexto && musicaZ && sv != null) {                  // la letra (o el nombre de la canción) y el artista, por delante
                 if (anchoZ) letra(c, sv, (libre + x1) / 2, y0 + vh * 0.42f, (x1 - libre) * 0.9f, alto * 0.13f);
@@ -539,32 +541,27 @@ public class CubiCarro extends CarAppService {
 
         // las calles que bajó el celular (en metros desde el centro, de a 3 m), giradas para que el rumbo quede hacia arriba
         private final Path[] zonasP = {new Path(), new Path(), new Path()};   // agua, parques y ríos
-        private List<String> zonasDe;
+        private CubiService.MapaCarro datosDe;
         private final android.graphics.Matrix inclina = new android.graphics.Matrix();
         private final Paint pd = new Paint();
         private float rumboS = Float.NaN, degrY, degrH;
-        private static void trazar(String v, Path q, boolean cerrar) {
-            for (int i = 1; i + 4 <= v.length(); i += 4) {
-                float x = (Integer.parseInt(v.substring(i, i + 2), 16) - 128) * 3, y = (Integer.parseInt(v.substring(i + 2, i + 4), 16) - 128) * 3;
-                if (i == 1) q.moveTo(x, y); else q.lineTo(x, y);
-            }
-            if (cerrar) q.close();
-        }
         // El mapa, inclinado como en un navegador: lo de adelante se aleja y se angosta. El carro es la flecha de abajo y
         // el mapa gira con él. Entre una posición del GPS y la siguiente (llega una por segundo) se estima el avance con
         // la velocidad, y el giro se suaviza, para que se mueva parejo. Con Zelda (fundido) va translúcido y se desvanece
-        // hacia arriba sobre el fondo del clip.
+        // hacia arriba sobre el fondo.
         private void mapa(Canvas c, CubiService s, float x0, float y0, float x1, float y1, float u) {
-            List<String> tramos = s.mapaTramos, zs = s.mapaZonas;
-            if (tramos != callesDe) {
-                callesDe = tramos;
+            CubiService.MapaCarro d = s.carroDatos;
+            if (d != datosDe) {                                          // llegó un mapa nuevo: se arman los trazos (en metros)
+                datosDe = d;
                 for (Path q : calles) q.rewind();
-                for (String v : tramos) trazar(v, calles[Math.min(2, Math.max(0, v.charAt(0) - '0'))], false);
-            }
-            if (zs != zonasDe) {
-                zonasDe = zs;
                 for (Path q : zonasP) q.rewind();
-                if (zs != null) for (String v : zs) { int t = v.charAt(0) - '3'; if (t >= 0 && t < 3) trazar(v, zonasP[t], t != 2); }
+                for (int i = 0; i < d.lineas.length; i++) {
+                    int cl = d.clase[i];
+                    Path q = cl <= 2 ? calles[cl] : zonasP[Math.min(2, cl - 3)];
+                    float[] v = d.lineas[i];
+                    for (int j = 0; j + 1 < v.length; j += 2) { if (j == 0) q.moveTo(v[0], v[1]); else q.lineTo(v[j], v[j + 1]); }
+                    if (cl == 3 || cl == 4) q.close();
+                }
             }
             float w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + h * 0.66f, k = w / 400f;
             float rumbo = s.mapaRumbo;
@@ -572,7 +569,7 @@ public class CubiCarro extends CarAppService {
             rumboS = (rumboS + (((rumbo - rumboS + 540) % 360) - 180) * 0.12f + 360) % 360;
             float dt = Math.max(0, Math.min(1.5f, (System.currentTimeMillis() - s.mapaCuando) / 1000f));
             double ra = Math.toRadians(rumbo);
-            float px = (float) (s.mapaDx + Math.sin(ra) * s.mapaVel * dt), py = (float) (s.mapaDy + Math.cos(ra) * s.mapaVel * dt);
+            float px = (float) ((s.posLon - d.lon0) * 111320 * Math.cos(Math.toRadians(d.lat0)) + Math.sin(ra) * s.mapaVel * dt), py = (float) ((s.posLat - d.lat0) * 111320 + Math.cos(ra) * s.mapaVel * dt);
             if (fundido) { c.saveLayer(x0, y0, x1, y1, null); p.setStyle(Paint.Style.FILL); p.setColor(VELO); c.drawRect(x0, y0, x1, y1, p); } else c.save();
             c.save(); c.translate(cx, cy);
             // un rectángulo del suelo (ancho a, b hacia adelante, e hacia atrás) se pinta como trapecio: angosto y alto lo lejano
