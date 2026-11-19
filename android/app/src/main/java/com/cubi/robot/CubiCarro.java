@@ -175,10 +175,10 @@ public class CubiCarro extends CarAppService {
                 fundido = true;
                 if (aLoAncho) {                                                     // Zelda a la izquierda, el mapa en lo que queda libre y la cajita abajo
                     zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, 2);
-                    float izq = Math.max(zLibre, a.left + a.width() * 0.3f) + m, abajo = a.bottom - Math.max(a.height() * 0.16f, 30) - m, parte = suena ? a.top + m + (abajo - a.top - m) * 0.6f : abajo;
+                    float izq = Math.max(zLibre, a.left + a.width() * 0.3f) + m, abajo = a.bottom - Math.max(a.height() * 0.16f, 30) - m, parte = suena ? a.top + m + (abajo - a.top - m) * 0.68f : abajo;
                     if (suena) {                                                    // la letra, sobre una tarjeta oscura para que se lea
                         gr.set(izq, parte + m / 2, a.right - m, abajo); p.setStyle(Paint.Style.FILL); p.setColor(0x73000000); c.drawRoundRect(gr, 5 * u, 5 * u, p);
-                        letra(c, s, gr.centerX(), gr.top + gr.height() * 0.36f, gr.width() * 0.92f, gr.height() * 0.25f);
+                        letra(c, s, gr.centerX(), gr.top + gr.height() * 0.4f, gr.width() * 0.92f, gr.height() * 0.26f);
                     }
                     r.set(izq, a.top + m, a.right - m, parte - (suena ? m / 2 : 0));
                 } else {                                                            // angosta: el mapa arriba; abajo Zelda y los datos del viaje
@@ -202,10 +202,10 @@ public class CubiCarro extends CarAppService {
                 // el giro: sobre el mapa va en una tarjeta arriba a la izquierda; sin mapa, grande y al centro
                 boolean llego = s.navDir.equals("llegamos");
                 String dist = llego ? "Llegaste" : metros(s.navMetros), calle = llego ? "" : s.navCalle;
-                float k = conMapa ? 1f : 1.5f, fx = x0 + 15 * u * k, fy = conMapa ? y0 + 17 * u : (y0 + y1 - pie) / 2;
-                if (conMapa) { p.setColor(fundido ? 0x8005070c : 0xd905070c); r.set(x0 + 3 * u, y0 + 3 * u, x0 + Math.min(w - 3 * u, 78 * u), y0 + 31 * u); c.drawRoundRect(r, 4 * u, 4 * u, p); }
+                float k = conMapa ? (y1 - y0 < 62 * u ? 0.72f : 1f) : 1.5f, fx = x0 + 15 * u * k, fy = conMapa ? y0 + 3 * u + 14 * u * k : (y0 + y1 - pie) / 2;
+                if (conMapa) { p.setColor(fundido ? 0x8005070c : 0xd905070c); r.set(x0 + 3 * u, y0 + 3 * u, x0 + Math.min(w - 3 * u, 78 * u * k), y0 + 3 * u + 28 * u * k); c.drawRoundRect(r, 4 * u, 4 * u, p); }
                 if (!llego) flecha(c, fx, fy, 9 * u * k, s.navDir, s.navForma);
-                float tx = llego ? x0 + 8 * u * k : fx + 15 * u * k, tw = (conMapa ? x0 + 76 * u : x1 - 4 * u) - tx;
+                float tx = llego ? x0 + 8 * u * k : fx + 15 * u * k, tw = (conMapa ? x0 + 76 * u * k : x1 - 4 * u) - tx;
                 if (dist.isEmpty()) texto(c, calle, tx, fy + 2.5f * u * k, 6.5f * u * k, TINTA, true, Paint.Align.LEFT, tw);   // indicación sin metros
                 else {
                     texto(c, dist, tx, fy - (calle.isEmpty() ? -4 * u * k : 1 * u * k), 12 * u * k, TINTA, true, Paint.Align.LEFT, tw);
@@ -332,8 +332,8 @@ public class CubiCarro extends CarAppService {
                     if (th > cabe) { tam *= cabe / th; tp.setTextSize(tam); th = cabe; }
                     tp.setTextAlign(Paint.Align.LEFT); c.drawText(hora, libre - th * 0.2f, y0 + vh * 0.5f + tam * 0.36f, tp);
                 } else {
-                    tp.setTextSize(100); tp.setTextSize(Math.min(vh * 0.3f, 100 * (anchoZ ? libre - x0 : w) * 0.92f / tp.measureText(hora)));
-                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, anchoZ ? x0 + 1280 * sc * 0.36f : (x0 + x1) / 2, y0 + vh * 0.29f, tp);
+                    tp.setTextSize(100); tp.setTextSize(Math.min(vh * 0.24f, 100 * (anchoZ ? libre - x0 : w) * 0.92f / tp.measureText(hora)));
+                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, anchoZ ? x0 + 1280 * sc * 0.36f : (x0 + x1) / 2, y0 + vh * 0.225f, tp);
                 }
             }
             // ella: su cuadro (840x648, recortado del clip desde el punto 360,40), dejando solo donde su silueta es blanca
