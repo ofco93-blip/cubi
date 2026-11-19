@@ -261,25 +261,25 @@ public class CubiCarro extends CarAppService {
         // Los clips de Zelda en 3D: cuadros sueltos en assets/zelda/<clip>/NN.jpg (48 por clip, 12 por segundo).
         android.content.res.AssetManager assets;
         private final android.graphics.Matrix mz = new android.graphics.Matrix(), mm = new android.graphics.Matrix();
-        static final String[] QUIETA = {"quieta"}, BAILES = {"cabeceo", "pata", "cabeceo", "baile"}, RAP = {"rapcabeza", "rapmano", "rapcabeza"};
+        static final String[] QUIETA = {"quieta"}, BAILES = {"cabeceo", "pata", "audifonos", "baile", "cabeceo", "audifonos"}, RAP = {"rapcabeza", "rapmano", "rapcabeza"};
         float zLibre;                                                 // hasta dónde llega Zelda en su clip: de ahí a la derecha queda fondo libre
         boolean fundido;                                              // el mapa y los datos van translúcidos sobre el fondo de Zelda
         String falla;                                               // el último error al dibujar, si hubo
         private android.graphics.Bitmap cuadroZ, mascZ;                // el cuadro de ahora (la gata, sin fondo) y su silueta
         private final Paint pm = new Paint(Paint.FILTER_BITMAP_FLAG);   // pinta la silueta como recorte: deja de la capa solo donde la silueta es blanca
         { pm.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)); pm.setColorFilter(new android.graphics.ColorMatrixColorFilter(new float[]{0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 1,0,0,0,0})); }
-        private String cuadroDe = "";
+        private String cuadroDe = "", clipDe = "";
         private android.graphics.Bitmap cuadro(String clip, int i) {
             String clave = clip + i;
             if (clave.equals(cuadroDe) && cuadroZ != null) return cuadroZ;
             // se decodifica siempre sobre el mismo bitmap: sin esto cada cuadro pedía 3,7 MB nuevos, 12 veces por segundo
             android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options();
-            o.inMutable = true; o.inBitmap = cuadroZ;
+            o.inMutable = true; o.inBitmap = clip.equals(clipDe) ? cuadroZ : null;   // otro clip puede ser de otro tamaño: bitmap nuevo
             try (java.io.InputStream in = assets.open(String.format(Locale.US, "zelda/%s/%02d.jpg", clip, i + 1))) {
                 android.graphics.Bitmap b = android.graphics.BitmapFactory.decodeStream(in, null, o);
                 if (b != null) { cuadroZ = b; cuadroDe = clave; }
                 // su silueta (blanco donde está ella), para poder dejar texto por detrás
-                o.inBitmap = mascZ;
+                o.inBitmap = clip.equals(clipDe) ? mascZ : null; clipDe = clip;
                 try (java.io.InputStream im = assets.open(String.format(Locale.US, "zelda/%s/m%02d.jpg", clip, i + 1))) { mascZ = android.graphics.BitmapFactory.decodeStream(im, null, o); } catch (Throwable e) { mascZ = null; }
             } catch (Throwable e) {
                 cuadroZ = null; cuadroDe = ""; falla = String.valueOf(e);   // el siguiente intento pide un bitmap nuevo
@@ -291,7 +291,13 @@ public class CubiCarro extends CarAppService {
         static final int[][] TEMA = {{0xff8fc6d6, 0xff6fb0c6, 0xffa5d6de}, {0xfff7b6cb, 0xffee8fb0, 0xfffbd0dc}, {0xffa2dec6, 0xff74c7a8, 0xffbdead9},
                 {0xff6a5ea0, 0xff4f447f, 0xff8073b6}, {0xff16244a, 0xff0a1226, 0xff22335f}};
         static final int CREMA = 0xfffff0d9, NARANJA = 0xfff28c28, CAFE = 0xff3a2212;   // los colores de Zelda, para la barra
-        private android.graphics.Shader fondoSh; private int fondoT = -1; private float fondoY, fondoH;
+        private android.graphics.Shader fondoSh; private int fondoT, fondoB; private float fondoY, fondoH;
+        static final int[] CALOR = {0xff8a1a24, 0xff4a0a12, 0xffa62a34}, FRIO = {0xff1f5a86, 0xff0f3352, 0xff2c74a8}, LLUVIA = {0xff2a3644, 0xff161e28, 0xff3a4a5c};   // el fondo durante cada reacción
+        private String climaDe = ""; private long climaCiclo = -9, giroDesde;
+        private static int mezcla(int a, int b, float f) {
+            int r = (int) (((a >> 16) & 255) + ((((b >> 16) & 255)) - ((a >> 16) & 255)) * f), g = (int) (((a >> 8) & 255) + (((b >> 8) & 255) - ((a >> 8) & 255)) * f), z = (int) ((a & 255) + ((b & 255) - (a & 255)) * f);
+            return 0xff000000 | r << 16 | g << 8 | z;
+        }
         // Zelda. Los clips traen solo a la gata (su silueta va aparte), así que el fondo lo pinta la app: automático es cielo de
         // día, noche de noche y lila con rap; o el que se escoja en Opciones. Ella va a la izquierda, en espejo.
         // estilo 0: en un cuadro redondeado; 1: pantalla entera con texto y barra; 2: entera con barra (el mapa y la letra los
@@ -311,19 +317,39 @@ public class CubiCarro extends CarAppService {
             final int n = 76, vuelta = 2 * n - 2;                     // 76 cuadros a 24 por segundo
             long cuadros = ahora * 24 / 1000;
             int j = (int) (cuadros % vuelta), semilla = (int) (cuadros / vuelta) * 7919 + (sv == null ? 0 : sv.cancionTitulo.hashCode());
-            android.graphics.Bitmap b = assets == null ? null : cuadro(lista[(semilla & 0x7fffffff) % lista.length], n - 1 - (j < n ? j : vuelta - j));
+            String clip = lista[(semilla & 0x7fffffff) % lista.length];
+            long ciclo = cuadros / vuelta;
+            int[] tinte = null; boolean alReves = false;
+            // El clima: lluvia, calor o frío. Reacciona en los dos bucles siguientes a que cambie, y luego uno de cada seis.
+            String est = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaEstado.toLowerCase(Locale.ROOT);
+            String cc = est.isEmpty() && (sv == null || sv.climaGrados == Integer.MIN_VALUE) ? null : est.contains("lluv") || est.contains("llov") || est.contains("torment") ? "lluvia" : sv.climaGrados >= 28 ? "calor" : sv.climaGrados <= 13 ? "frio" : null;
+            if (cc == null) climaDe = "";
+            else if (!cc.equals(climaDe)) { climaDe = cc; climaCiclo = ciclo + 1; }
+            if (cc != null && (ciclo == climaCiclo || ciclo == climaCiclo + 1 || ciclo % 6 == 5)) { clip = cc; tinte = cc.equals("calor") ? CALOR : cc.equals("frio") ? FRIO : LLUVIA; }
+            // Cerca de un giro (150 m) lo señala: el clip señala a un lado y para el otro se pinta sin espejo. Arranca de una
+            // (no espera a que acabe el bucle) y lleva su propio reloj.
+            boolean giro = sv != null && sv.navMetros > 0 && sv.navMetros <= 150 && ahora - sv.navCuando < 60000 && (sv.navDir.equals("maps_izq") || sv.navDir.equals("maps_der"));
+            if (giro) {
+                if (giroDesde == 0) giroDesde = ahora;
+                clip = "senala"; tinte = null; alReves = sv.navDir.equals("maps_izq");
+                j = (int) (((ahora - giroDesde) * 24 / 1000) % vuelta);
+            } else giroDesde = 0;
+            android.graphics.Bitmap b = assets == null ? null : cuadro(clip, n - 1 - (j < n ? j : vuelta - j));
             int tm = fondo >= 0 && fondo < TEMA.length ? fondo : 4;   // automático: siempre oscuro
+            // el color del fondo: el del tema o, durante una reacción al clima, teñido (entra y sale suave con el bucle)
+            float ft = tinte == null ? 0 : Math.max(0, Math.min(1, Math.min(j, vuelta - j) / 14f));
+            int c0 = tinte == null ? TEMA[tm][0] : mezcla(TEMA[tm][0], tinte[0], ft), c1 = tinte == null ? TEMA[tm][1] : mezcla(TEMA[tm][1], tinte[1], ft), c2 = tinte == null ? TEMA[tm][2] : mezcla(TEMA[tm][2], tinte[2], ft);
             c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); if (!lleno) c.clipPath(gp);
             // el fondo y la repisa. El clip es de 1280x720; aquí se ajusta al alto: "sc" pasa de sus puntos a la pantalla.
             float sc = vh / 720f, libre = x0 + 1280 * sc * 0.62f, repisa = y0 + 688 * sc;   // libre: donde termina ella y empieza el fondo vacío
             zLibre = libre;
-            if (fondoSh == null || fondoT != tm || fondoY != y0 || fondoH != vh) {
-                fondoT = tm; fondoY = y0; fondoH = vh;
-                fondoSh = new android.graphics.LinearGradient(0, y0, 0, y0 + vh, TEMA[tm][0], TEMA[tm][1], android.graphics.Shader.TileMode.CLAMP);
+            if (fondoSh == null || fondoT != c0 || fondoB != c1 || fondoY != y0 || fondoH != vh) {
+                fondoT = c0; fondoB = c1; fondoY = y0; fondoH = vh;
+                fondoSh = new android.graphics.LinearGradient(0, y0, 0, y0 + vh, c0, c1, android.graphics.Shader.TileMode.CLAMP);
             }
             p.setStyle(Paint.Style.FILL); p.setColor(0xffffffff); p.setShader(fondoSh);
             if (lleno) c.drawPaint(p); else c.drawRect(x0, y0, x1, y1, p);
-            p.setShader(null); p.setColor(TEMA[tm][2]);
+            p.setShader(null); p.setColor(c2);
             if (lleno) c.drawRect(-1e5f, repisa, 1e5f, 1e5f, p); else c.drawRect(x0, repisa, x1, y1, p);
             if (b == null || mascZ == null) {                         // sin clips: la Zelda dibujada de antes
                 float t = Math.min(w, alto) * 0.26f;
@@ -346,9 +372,12 @@ public class CubiCarro extends CarAppService {
                     tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, anchoZ ? x0 + 1280 * sc * 0.36f : (x0 + x1) / 2, y0 + vh * 0.225f, tp);
                 }
             }
-            // ella: su cuadro (840x648, recortado del clip desde el punto 360,40), dejando solo donde su silueta es blanca
-            c.saveLayer(x0, y0, x0 + 921 * sc, repisa, null);
-            mz.setScale(-sc, sc); mz.postTranslate(x0 + 920 * sc, y0 + 40 * sc); c.concat(mz);
+            // ella: su cuadro (recortado del clip desde el punto rx,40; el de señalar es más ancho), dejando solo donde su
+            // silueta es blanca. Va en espejo; al revés (sin espejo) queda en el mismo sitio, porque está centrada en x=784.
+            float rx = clip.equals("senala") ? 80 : 360, bw = b.getWidth();
+            float izq = alReves ? x0 + (rx - 288) * sc : x0 + (1280 - rx - bw) * sc;
+            c.saveLayer(izq - 1, y0, izq + bw * sc + 1, repisa, null);
+            mz.setScale(alReves ? sc : -sc, sc); mz.postTranslate(alReves ? izq : izq + bw * sc, y0 + 40 * sc); c.concat(mz);
             p.setFilterBitmap(true); p.setColor(0xffffffff); c.drawBitmap(b, 0, 0, p);
             android.graphics.BitmapShader sil = new android.graphics.BitmapShader(mascZ, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
             mm.setScale(b.getWidth() / (float) mascZ.getWidth(), b.getHeight() / (float) mascZ.getHeight()); sil.setLocalMatrix(mm);
