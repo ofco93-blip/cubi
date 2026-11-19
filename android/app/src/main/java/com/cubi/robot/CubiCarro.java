@@ -175,7 +175,12 @@ public class CubiCarro extends CarAppService {
                 fundido = true;
                 if (aLoAncho) {                                                     // Zelda a la izquierda, el mapa en lo que queda libre y la cajita abajo
                     zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, 2);
-                    r.set(Math.max(zLibre, a.left + a.width() * 0.3f) + m, a.top + m, a.right - m, a.bottom - Math.max(a.height() * 0.14f, 28) - m);
+                    float izq = Math.max(zLibre, a.left + a.width() * 0.3f) + m, abajo = a.bottom - Math.max(a.height() * 0.16f, 30) - m, parte = suena ? a.top + m + (abajo - a.top - m) * 0.6f : abajo;
+                    if (suena) {                                                    // la letra, sobre una tarjeta oscura para que se lea
+                        gr.set(izq, parte + m / 2, a.right - m, abajo); p.setStyle(Paint.Style.FILL); p.setColor(0x73000000); c.drawRoundRect(gr, 5 * u, 5 * u, p);
+                        letra(c, s, gr.centerX(), gr.top + gr.height() * 0.36f, gr.width() * 0.92f, gr.height() * 0.25f);
+                    }
+                    r.set(izq, a.top + m, a.right - m, parte - (suena ? m / 2 : 0));
                 } else {                                                            // angosta: el mapa arriba; abajo Zelda y los datos del viaje
                     float cy = a.top + a.height() * 0.62f, cx = a.left + a.width() * 0.42f;
                     zelda(c, a.left, cy, cx, a.bottom, 0, ahora, modo, fondo, s, 3); viaje(c, cx + m / 2, cy, a.right - m, a.bottom - m, s, u);
@@ -250,7 +255,7 @@ public class CubiCarro extends CarAppService {
         float zLibre;                                                 // hasta dónde llega Zelda en su clip: de ahí a la derecha queda fondo libre
         boolean fundido;                                              // el mapa y los datos van translúcidos sobre el fondo de Zelda
         String falla;                                               // el último error al dibujar, si hubo
-        private android.graphics.Bitmap cuadroZ, mascZ;
+        private android.graphics.Bitmap cuadroZ, mascZ;                // el cuadro de ahora (la gata, sin fondo) y su silueta
         private final Paint pm = new Paint(Paint.FILTER_BITMAP_FLAG);   // pinta la silueta como recorte: deja de la capa solo donde la silueta es blanca
         { pm.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)); pm.setColorFilter(new android.graphics.ColorMatrixColorFilter(new float[]{0,0,0,0,0, 0,0,0,0,0, 0,0,0,0,0, 1,0,0,0,0})); }
         private String cuadroDe = "";
@@ -272,111 +277,145 @@ public class CubiCarro extends CarAppService {
             }
             return cuadroZ;
         }
-        // Zelda en su cuadro. El clip va en bucle de ida y vuelta (no se nota el corte) y en espejo: ella a la izquierda y
-        // a la derecha el texto (la hora; con música, el renglón de la letra y el artista). Abajo, donde apoya las patas,
-        // una cajita con la hora y el clima. grande: con texto y cajita; si no, solo ella.
+        // Los fondos: arriba, abajo y la repisa donde apoya las patas. En el orden de las opciones: cielo, chicle, menta, lila y noche.
+        static final int[][] TEMA = {{0xff8fc6d6, 0xff6fb0c6, 0xffa5d6de}, {0xfff7b6cb, 0xffee8fb0, 0xfffbd0dc}, {0xffa2dec6, 0xff74c7a8, 0xffbdead9},
+                {0xff6a5ea0, 0xff4f447f, 0xff8073b6}, {0xff16244a, 0xff0a1226, 0xff22335f}};
+        static final int CREMA = 0xfffff0d9, NARANJA = 0xfff28c28, CAFE = 0xff3a2212;   // los colores de Zelda, para la barra
+        private android.graphics.Shader fondoSh; private int fondoT = -1; private float fondoY, fondoH;
+        // Zelda. Los clips traen solo a la gata (su silueta va aparte), así que el fondo lo pinta la app: automático es cielo de
+        // día, noche de noche y lila con rap; o el que se escoja en Opciones. Ella va a la izquierda, en espejo.
+        // estilo 0: en un cuadro redondeado; 1: pantalla entera con texto y barra; 2: entera con barra (el mapa y la letra los
+        // pone quien llama, a la derecha de zLibre); 3: entera, solo ella.
+        // Los bucles se encadenan: todos terminan en la misma postura (patas apoyadas), cada uno se pasa del final hacia atrás
+        // y de vuelta (6 s) y al volver se cambia por otro sin que se note el corte.
+        // ponytail: el bucle se escoge al azar por canción, no por la parte de la canción; y si la música arranca o para a
+        // mitad de un bucle, ese cambio sí salta. Seguir el ritmo de verdad pide el tempo de la canción.
         private void zelda(Canvas c, float x0, float y0, float x1, float y1, float radio, long ahora, int modo, int fondo, CubiService sv, int estilo) {
-            boolean grande = estilo > 0, conCaja = estilo == 1 || estilo == 2, conTexto = estilo == 1;   // 0: en su cuadro; 1: pantalla entera con texto y cajita; 2: entera con cajita; 3: solo el fondo entero
+            boolean lleno = estilo > 0, conBarra = estilo == 1 || estilo == 2, conTexto = estilo == 1;
             java.util.Calendar cal = java.util.Calendar.getInstance();
             int h = cal.get(java.util.Calendar.HOUR_OF_DAY);
             String hora = (h % 12 == 0 ? 12 : h % 12) + ":" + String.format(Locale.US, "%02d", cal.get(java.util.Calendar.MINUTE));
-            float w = x1 - x0, alto = y1 - y0, caja = conCaja ? Math.max(alto * 0.14f, 28) : 0, vh = alto - caja;
+            float w = x1 - x0, alto = y1 - y0, caja = conBarra ? Math.max(alto * 0.16f, 30) : 0, vh = alto - caja;
             boolean musicaZ = modo == 2;
-            // Varios bucles que se encadenan. Todos terminan en la misma postura (patas apoyadas), así que cada uno se pasa
-            // del final hacia atrás y de vuelta (6 s) y al volver al final se cambia por otro sin que se note el corte.
-            // Sin música, la quieta; con rap o urbano, los de gafas y gorra; si no, cabeceo, una pata arriba o baile.
-            // ponytail: el bucle se escoge al azar por canción, no por la parte de la canción; y si la música arranca o
-            // para a mitad de un bucle, ese cambio sí salta. Seguir el ritmo de verdad pide el tempo de la canción.
             String[] lista = !musicaZ ? QUIETA : sv != null && "urbano".equals(sv.ritmoCancion) ? RAP : BAILES;
             final int n = 76, vuelta = 2 * n - 2;                     // 76 cuadros a 24 por segundo
             long cuadros = ahora * 24 / 1000;
             int j = (int) (cuadros % vuelta), semilla = (int) (cuadros / vuelta) * 7919 + (sv == null ? 0 : sv.cancionTitulo.hashCode());
-            String clip = lista[(semilla & 0x7fffffff) % lista.length];
-            android.graphics.Bitmap b = assets == null ? null : cuadro(clip, n - 1 - (j < n ? j : vuelta - j));
-            // grande: el fondo del clip llena toda la pantalla, como un fondo animado (los botones quedan encima); si no, su cuadro redondeado
-            c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); if (!grande || b == null) c.clipPath(gp);
-            if (b == null) {                                         // sin clips: la Zelda dibujada de antes
-                int tm = fondo >= 0 ? fondo : musicaZ ? 1 : h >= 19 || h < 6 ? 4 : 0;
-                p.setStyle(Paint.Style.FILL); p.setColor(FONDO_Z[tm]); c.drawRect(gr, p);
-                float s = Math.min(w, alto) * 0.26f;
-                gato(c, (x0 + x1) / 2, y1 - s * 1.1f, s, ahora, modo, y1, LETRA_Z[tm]);
+            android.graphics.Bitmap b = assets == null ? null : cuadro(lista[(semilla & 0x7fffffff) % lista.length], n - 1 - (j < n ? j : vuelta - j));
+            int tm = fondo >= 0 && fondo < TEMA.length ? fondo : !CubiService.esDeDia() ? 4 : lista == RAP ? 3 : 0;
+            c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); if (!lleno) c.clipPath(gp);
+            // el fondo y la repisa. El clip es de 1280x720; aquí se ajusta al alto: "sc" pasa de sus puntos a la pantalla.
+            float sc = vh / 720f, libre = x0 + 1280 * sc * 0.62f, repisa = y0 + 688 * sc;   // libre: donde termina ella y empieza el fondo vacío
+            zLibre = libre;
+            if (fondoSh == null || fondoT != tm || fondoY != y0 || fondoH != vh) {
+                fondoT = tm; fondoY = y0; fondoH = vh;
+                fondoSh = new android.graphics.LinearGradient(0, y0, 0, y0 + vh, TEMA[tm][0], TEMA[tm][1], android.graphics.Shader.TileMode.CLAMP);
+            }
+            p.setStyle(Paint.Style.FILL); p.setColor(0xffffffff); p.setShader(fondoSh);
+            if (lleno) c.drawPaint(p); else c.drawRect(x0, y0, x1, y1, p);
+            p.setShader(null); p.setColor(TEMA[tm][2]);
+            if (lleno) c.drawRect(-1e5f, repisa, 1e5f, 1e5f, p); else c.drawRect(x0, repisa, x1, y1, p);
+            if (b == null || mascZ == null) {                         // sin clips: la Zelda dibujada de antes
+                float t = Math.min(w, alto) * 0.26f;
+                gato(c, (x0 + x1) / 2, y1 - t * 1.1f, t, ahora, modo, y1, 0xffffffff);
                 c.restore(); return;
             }
-            // el clip se ajusta al alto (ella entera, sin cortarle la cabeza), en espejo y pegado a la izquierda; todo lo que
-            // sobra alrededor se rellena estirando las orillas del clip, que son puro fondo
-            float sc = vh / b.getHeight(), dw = b.getWidth() * sc, libre = x0 + dw * 0.62f;   // libre: donde termina ella y empieza el fondo vacío
-            zLibre = libre;
-            android.graphics.BitmapShader relleno = new android.graphics.BitmapShader(b, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
-            mz.setScale(-sc, sc); mz.postTranslate(x0 + dw, y0); relleno.setLocalMatrix(mz);
-            p.setStyle(Paint.Style.FILL); p.setFilterBitmap(true); p.setColor(0xffffffff); p.setShader(relleno);
-            if (grande) c.drawPaint(p); else c.drawRect(x0, y0, x1, y1, p);
-            p.setShader(null);
-            // Como los fondos de iPhone: la hora, enorme, queda por DETRÁS de Zelda (se vuelve a pintar ella encima, recortada
-            // con su silueta), así las orejas o una pata le pasan por delante a los números. La letra va después, por delante.
-            boolean anchoZ = x1 - libre > w * 0.3f, horaGrande = conTexto && mascZ != null && (anchoZ || !musicaZ);
+            // Como los fondos de iPhone: la hora queda por DETRÁS de Zelda y la letra por delante.
+            // Sin nada más en pantalla va enorme, a la derecha, medio metida detrás de ella; con letra o mapa a la derecha
+            // sube detrás de las orejas, que la tapan a medias. En pantalla angosta y con música no cabe: va en la barra.
+            boolean anchoZ = x1 - libre > w * 0.3f, ocupado = musicaZ || estilo == 2, horaGrande = conBarra && (anchoZ || !musicaZ);
             if (horaGrande) {
-                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.clearShadowLayer(); tp.setColor(0xffffffff); tp.setAlpha(musicaZ ? 150 : 255);
-                if (anchoZ) {                                          // a lo ancho: arranca un poco metida detrás de ella
-                    float tam = vh * (musicaZ ? 0.34f : 0.5f); tp.setTextSize(tam);
+                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.clearShadowLayer(); tp.setColor(0xffffffff);
+                if (anchoZ && !ocupado) {
+                    float tam = vh * 0.5f; tp.setTextSize(tam);
                     float th = tp.measureText(hora), cabe = (x1 - libre) * 1.1f;
                     if (th > cabe) { tam *= cabe / th; tp.setTextSize(tam); th = cabe; }
-                    tp.setTextAlign(Paint.Align.LEFT); c.drawText(hora, libre - th * 0.2f, y0 + vh * (musicaZ ? 0.27f : 0.5f) + tam * 0.36f, tp);
-                } else {                                               // angosta: arriba, con las orejas tapando la parte de abajo
-                    tp.setTextSize(100); tp.setTextSize(Math.min(vh * 0.26f, 100 * w * 0.9f / tp.measureText(hora)));
-                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, (x0 + x1) / 2, y0 + vh * 0.27f, tp);
-                }
-                tp.setAlpha(255);
-                c.saveLayer(x0, y0, Math.min(x1, x0 + dw), y0 + vh, null);
-                c.concat(mz); c.drawBitmap(b, 0, 0, p);
-                c.scale(b.getWidth() / (float) mascZ.getWidth(), b.getHeight() / (float) mascZ.getHeight()); c.drawBitmap(mascZ, 0, 0, pm);
-                c.restore();
-            }
-            if (conCaja) {
-                if (conTexto) {
-                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(0xffffffff); tp.setShadowLayer(alto * 0.02f, 0, alto * 0.006f, 0x66000000);
-                boolean ancho = x1 - libre > w * 0.3f;               // hay campo a la derecha de ella: el texto va ahí; si no, arriba y más chico
-                float tx = ancho ? (libre + x1) / 2 : (x0 + x1) / 2, tw = ancho ? (x1 - libre) * 0.9f : w * 0.9f, ty = ancho ? y0 + vh * (horaGrande ? 0.6f : 0.4f) : y0 + vh * 0.1f;
-                if (musicaZ && sv != null) {                          // el renglón de la letra que va (o el nombre de la canción) y debajo el artista
-                    String letra = (sv.letraAhora.isEmpty() ? sv.cancionTitulo : sv.letraAhora).toUpperCase(Locale.ROOT), l1 = letra, l2 = "";
-                    float tam = alto * (ancho ? 0.13f : 0.065f);
-                    tp.setTextSize(tam);
-                    if (tp.measureText(letra) > tw) {                 // largo: en dos pisos, partido en el espacio más cercano a la mitad
-                        int corte = -1;
-                        for (int i = letra.indexOf(' '); i >= 0; i = letra.indexOf(' ', i + 1)) if (corte < 0 || Math.abs(i - letra.length() / 2) < Math.abs(corte - letra.length() / 2)) corte = i;
-                        if (corte > 0) { l1 = letra.substring(0, corte); l2 = letra.substring(corte + 1); }
-                    }
-                    for (String l : new String[]{l1, l2}) {
-                        if (l.isEmpty()) continue;
-                        tp.setTextSize(tam); tp.setTextSize(Math.min(tam, tam * tw / Math.max(1, tp.measureText(l))));
-                        c.drawText(l, tx, ty, tp); ty += tam * 1.1f;
-                    }
-                    tp.setTextSize(tam * 0.5f); tp.setAlpha(215);
-                    c.drawText(TextUtils.ellipsize(sv.cancionArtista, tp, tw, TextUtils.TruncateAt.END).toString(), tx, ty - tam * 0.3f, tp); tp.setAlpha(255);
-                } else if (!horaGrande) {                             // sin música y sin silueta: la hora, grande, al lado
-                    tp.setTextSize(100); tp.setTextSize(Math.min(alto * (ancho ? 0.42f : 0.12f), 100 * tw / tp.measureText(hora)));
-                    c.drawText(hora, tx, ancho ? y0 + vh * 0.5f + tp.getTextSize() * 0.36f : ty + tp.getTextSize() * 0.4f, tp);
-                }
-                tp.clearShadowLayer();
-                }
-                // la cajita de abajo: la hora y el clima; con música, también lo que suena
-                float mg = caja * 0.14f;                              // flota sobre el fondo, translúcida y redondeada
-                p.setStyle(Paint.Style.FILL); p.setColor(0xb00c1018); c.drawRoundRect(x0 + mg, y1 - caja + mg, x1 - mg, y1 - mg, caja * 0.3f, caja * 0.3f, p);
-                String clima = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaGrados + "°  " + sv.climaEstado;
-                // sin música la hora ya va en grande: aquí solo el clima, para que el reloj no salga dos veces
-                texto(c, horaGrande || (conTexto && !musicaZ) ? clima : clima.isEmpty() ? hora : hora + "  ·  " + clima, x0 + caja * 0.5f, y1 - caja * 0.36f, caja * 0.4f, TINTA, true, Paint.Align.LEFT, w * 0.5f);
-                if (musicaZ && sv != null) {                          // a la derecha: la carátula, chiquita, y el nombre de la canción
-                    float xr = x1 - caja * 0.5f, l = caja - 4 * mg;
-                    android.graphics.Bitmap car = sv.cancionCaratula;
-                    if (car != null && !car.isRecycled()) {
-                        gr.set(xr - l, y1 - caja + 2 * mg, xr, y1 - 2 * mg); gp.rewind(); gp.addRoundRect(gr, l * 0.22f, l * 0.22f, Path.Direction.CW);
-                        c.save(); c.clipPath(gp); p.setColor(0xffffffff); p.setFilterBitmap(true); c.drawBitmap(car, null, gr, p); c.restore();
-                        xr -= l + caja * 0.2f;
-                    }
-                    // el nombre solo va aquí si arriba no está ya en grande (arriba va la letra, o no hay texto)
-                    if (!conTexto || !sv.letraAhora.isEmpty()) texto(c, sv.cancionTitulo, xr, y1 - caja * 0.36f, caja * 0.36f, 0xffd8dde6, false, Paint.Align.RIGHT, w * 0.42f);
+                    tp.setTextAlign(Paint.Align.LEFT); c.drawText(hora, libre - th * 0.2f, y0 + vh * 0.5f + tam * 0.36f, tp);
+                } else {
+                    tp.setTextSize(100); tp.setTextSize(Math.min(vh * 0.3f, 100 * (anchoZ ? libre - x0 : w) * 0.92f / tp.measureText(hora)));
+                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, anchoZ ? x0 + 1280 * sc * 0.36f : (x0 + x1) / 2, y0 + vh * 0.29f, tp);
                 }
             }
+            // ella: su cuadro (840x648, recortado del clip desde el punto 360,40), dejando solo donde su silueta es blanca
+            c.saveLayer(x0, y0, x0 + 921 * sc, repisa, null);
+            mz.setScale(-sc, sc); mz.postTranslate(x0 + 920 * sc, y0 + 40 * sc); c.concat(mz);
+            p.setFilterBitmap(true); p.setColor(0xffffffff); c.drawBitmap(b, 0, 0, p);
+            c.scale(b.getWidth() / (float) mascZ.getWidth(), b.getHeight() / (float) mascZ.getHeight()); c.drawBitmap(mascZ, 0, 0, pm);
             c.restore();
+            if (conTexto && musicaZ && sv != null) {                  // la letra (o el nombre de la canción) y el artista, por delante
+                if (anchoZ) letra(c, sv, (libre + x1) / 2, y0 + vh * 0.42f, (x1 - libre) * 0.9f, alto * 0.13f);
+                else letra(c, sv, (x0 + x1) / 2, y0 + vh * 0.1f, w * 0.9f, alto * 0.065f);
+            }
+            if (conBarra) barra(c, x0, y1 - caja, x1, y1, sv, horaGrande ? "" : hora, musicaZ && !(conTexto && sv != null && sv.letraAhora.isEmpty()));
+            c.restore();
+        }
+        // El renglón de la letra que va (o el nombre de la canción si no hay letra), en uno o dos pisos, y debajo el artista.
+        private void letra(Canvas c, CubiService sv, float tx, float ty, float tw, float tam) {
+            String t = (sv.letraAhora.isEmpty() ? sv.cancionTitulo : sv.letraAhora).toUpperCase(Locale.ROOT), l1 = t, l2 = "";
+            tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(0xffffffff); tp.setShadowLayer(tam * 0.22f, 0, tam * 0.06f, 0xaa000000);
+            tp.setTextSize(tam);
+            if (tp.measureText(t) > tw) {                             // largo: en dos pisos, partido en el espacio más cercano a la mitad
+                int corte = -1;
+                for (int i = t.indexOf(' '); i >= 0; i = t.indexOf(' ', i + 1)) if (corte < 0 || Math.abs(i - t.length() / 2) < Math.abs(corte - t.length() / 2)) corte = i;
+                if (corte > 0) { l1 = t.substring(0, corte); l2 = t.substring(corte + 1); }
+            }
+            for (String l : new String[]{l1, l2}) {
+                if (l.isEmpty()) continue;
+                tp.setTextSize(tam); tp.setTextSize(Math.min(tam, tam * tw / Math.max(1, tp.measureText(l))));
+                c.drawText(l, tx, ty, tp); ty += tam * 1.1f;
+            }
+            tp.setTextSize(tam * 0.5f); tp.setAlpha(225);
+            c.drawText(TextUtils.ellipsize(sv.cancionArtista, tp, tw, TextUtils.TruncateAt.END).toString(), tx, ty - tam * 0.3f, tp);
+            tp.setAlpha(255); tp.clearShadowLayer();
+        }
+        // La barra de abajo, en dos pastillas con los colores de Zelda: a la izquierda (crema) el clima con su dibujo, y la
+        // hora si no va en grande; a la derecha (naranja) la carátula y el nombre de la canción.
+        private void barra(Canvas c, float x0, float y0, float x1, float y1, CubiService sv, String hora, boolean conTitulo) {
+            float alto = y1 - y0, mg = alto * 0.13f, t = y0 + mg, bm = y1 - mg, ph = bm - t, base = t + ph * 0.68f, tam = ph * 0.52f;
+            String estado = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaEstado, grados = estado.isEmpty() && (sv == null || sv.climaGrados == Integer.MIN_VALUE) ? "" : sv.climaGrados + "°";
+            String izq = (hora.isEmpty() ? "" : hora + (grados.isEmpty() ? "" : "   ")) + grados;
+            p.setStyle(Paint.Style.FILL);
+            if (!izq.isEmpty()) {
+                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(tam);
+                float wi = tp.measureText(izq); tp.setTypeface(Typeface.DEFAULT); tp.setTextSize(tam * 0.72f);
+                float we = estado.isEmpty() ? 0 : tp.measureText(estado) + ph * 0.25f, dib = grados.isEmpty() ? 0 : ph * 0.95f;
+                float x = x0 + mg * 2, fin = Math.min(x + ph * 0.45f + dib + wi + we + ph * 0.45f, (x0 + x1) / 2 - mg);
+                p.setColor(CREMA); c.drawRoundRect(x, t, fin, bm, ph / 2, ph / 2, p);
+                x += ph * 0.45f;
+                if (dib > 0) { clima(c, x + ph * 0.36f, t + ph / 2, ph * 0.3f, estado.toLowerCase(Locale.ROOT)); x += dib; }
+                texto(c, izq, x, base, tam, CAFE, true, Paint.Align.LEFT, fin - x);
+                if (we > 0) texto(c, estado, x + wi + ph * 0.25f, base, tam * 0.72f, 0xff8a5a2b, false, Paint.Align.LEFT, fin - ph * 0.3f - x - wi);
+            }
+            if (sv == null || sv.cancionTitulo.isEmpty()) return;
+            android.graphics.Bitmap car = sv.cancionCaratula;
+            boolean hayCar = car != null && !car.isRecycled();
+            if (!hayCar && !conTitulo) return;
+            String tit = conTitulo ? sv.cancionTitulo : "";
+            tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(tam * 0.86f);
+            float wt = tit.isEmpty() ? 0 : Math.min(tp.measureText(tit), (x1 - x0) * 0.4f), lado = ph - mg, fin = x1 - mg * 2;
+            float ini = fin - (hayCar ? lado + mg : ph * 0.4f) - (wt > 0 ? wt + ph * 0.75f : mg * 0.5f);
+            p.setColor(NARANJA); c.drawRoundRect(ini, t, fin, bm, ph / 2, ph / 2, p);
+            if (wt > 0) texto(c, tit, ini + ph * 0.45f, base - tam * 0.03f, tam * 0.86f, CAFE, true, Paint.Align.LEFT, wt + 2);
+            if (hayCar) {
+                gr.set(fin - mg * 0.5f - lado, t + mg * 0.5f, fin - mg * 0.5f, bm - mg * 0.5f); gp.rewind(); gp.addRoundRect(gr, lado / 2, lado / 2, Path.Direction.CW);
+                c.save(); c.clipPath(gp); p.setColor(0xffffffff); p.setFilterBitmap(true); c.drawBitmap(car, null, gr, p); c.restore();
+            }
+        }
+        // el dibujito del clima: sol, nube, o nube con gotas
+        private void clima(Canvas c, float cx, float cy, float r, String e) {
+            boolean sol = e.contains("sol") || e.contains("despej"), agua = e.contains("lluv") || e.contains("llov") || e.contains("torment");
+            p.setStyle(Paint.Style.FILL);
+            if (sol || e.contains("parcial")) { p.setColor(NARANJA); c.drawCircle(cx + (sol ? 0 : r * 0.5f), cy - (sol ? 0 : r * 0.45f), r * (sol ? 0.95f : 0.6f), p); }
+            if (!sol) {
+                p.setColor(0xff9a8672);
+                c.drawCircle(cx - r * 0.5f, cy + r * 0.1f, r * 0.55f, p); c.drawCircle(cx + r * 0.15f, cy - r * 0.25f, r * 0.7f, p); c.drawCircle(cx + r * 0.75f, cy + r * 0.15f, r * 0.5f, p);
+                c.drawRect(cx - r * 0.5f, cy + r * 0.1f, cx + r * 0.75f, cy + r * 0.65f, p);
+            }
+            if (agua) {
+                p.setColor(0xff3a86c8); p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(r * 0.2f); p.setStrokeCap(Paint.Cap.ROUND);
+                for (int i = -1; i <= 1; i++) c.drawLine(cx + i * r * 0.55f, cy + r * 0.9f, cx + i * r * 0.55f - r * 0.15f, cy + r * 1.3f, p);
+                p.setStyle(Paint.Style.FILL);
+            }
         }
         // el cuadro pequeño con los datos del viaje: a cuánto está el destino, a qué hora se llega y en cuántos segundos toca girar
         private void viaje(Canvas c, float x0, float y0, float x1, float y1, CubiService sv, float u) {
