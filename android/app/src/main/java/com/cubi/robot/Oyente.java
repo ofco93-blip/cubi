@@ -13,6 +13,8 @@ import android.service.notification.StatusBarNotification;
 // indicación de navegación de Google Maps / Waze y saber que llegó un WhatsApp. De WhatsApp no se lee nada: solo que
 // llegó uno, para la reacción. Lo demás se ignora.
 public class Oyente extends NotificationListenerService {
+    private static long mapsCuando;                 // el último aviso de Google Maps
+
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         String app = sbn.getPackageName();
@@ -26,6 +28,9 @@ public class Oyente extends NotificationListenerService {
             return;
         }
         if (!(app.equals("com.google.android.apps.maps") || app.equals("com.waze"))) return;
+        // si los dos tienen ruta, manda Google Maps: Waze se ignora mientras Maps haya avisado en el último medio minuto
+        long ya = System.currentTimeMillis();
+        if (app.equals("com.waze")) { if (ya - mapsCuando < 30000) return; } else mapsCuando = ya;
         Bundle x = n.extras;
         if (!CubiService.yo.navActiva()) return;
         StringBuilder t = new StringBuilder();

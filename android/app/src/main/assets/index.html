@@ -107,7 +107,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 
 /* pestañas */
 nav { position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 0 0 10px var(--bg), 0 30px 0 10px var(--bg); padding: 6px; z-index: 6; }
-nav button { flex: 1; padding: 8px 0 7px; display: grid; justify-items: center; gap: 3px; font-size: 12px; color: var(--muted); background: none; border-radius: 16px; }
+nav button { flex: 1; min-width: 0; padding: 8px 0 7px; display: grid; justify-items: center; gap: 3px; font-size: 11px; color: var(--muted); background: none; border-radius: 16px; }
 nav button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 nav button.on { color: var(--accent); background: var(--panel2); }
 section[hidden] { display: none; }
@@ -139,21 +139,6 @@ section[hidden] { display: none; }
     </div>
     <details class="ayuda"><summary>Cómo hablarle</summary>
       <p>Di “Hi Lili” (lo oye el micrófono del robot), “Hola Cubi” (lo oye el celular) o toca dos veces su pantalla. Espera su carita de escuchar y pide lo que quieras: “haz un kamehameha”, “cuéntame un chiste”. Mientras escucha y habla, la música se baja sola. Sin clave de Claude, el doble toque abre Gemini; mientras Gemini te contesta, Cubi mueve la boca.</p>
-    </details>
-  </div>
-  <h2>Su cara</h2>
-  <div class="card">
-    <div class="paqs">
-      <button class="paq" data-paq="1"><span class="eyes"><i></i><i></i></span><b>Cubi</b><small>Ojitos de píldora</small></button>
-      <button class="paq" data-paq="8"><span class="eyes"><i></i><i></i></span><b>Pancho</b><small>Ojos de pan y guantes</small></button>
-      <button class="paq" data-paq="9"><span class="eyes"><i></i><i></i></span><b>Lino</b><small>Todo en línea</small></button>
-      <button class="paq" data-paq="10"><span class="eyes"><i></i><i></i></span><b>Mochi</b><small>Ojitos chiquitos</small></button>
-      <button class="paq" data-paq="11"><span class="eyes"><i></i><i></i></span><b>Zelda</b><small>La gata naranja: reloj y micrófono</small></button>
-    </div>
-    <div class="row"><span>Color</span></div>
-    <div class="colores" id="colores"><input type="color" id="ojos" value="#ffffff" aria-label="Otro color"></div>
-    <details class="ayuda"><summary>Qué toma el color</summary>
-      <p>Todos vienen blancos. Cubi y Pancho lo toman en los ojos y la boca (sus guantes y efectos siguen a color); Lino y Mochi lo toman en todo: ojos, boca, manitos e instrumentos.</p>
     </details>
   </div>
   <h2>Pantalla y sonido</h2>
@@ -279,21 +264,17 @@ section[hidden] { display: none; }
   </div>
 </section>
 
-<!-- ================= AJUSTES ================= -->
-<section id="tab-ajustes" hidden>
-  <h2>Clima y viaje</h2>
+<!-- ================= MAPA ================= -->
+<section id="tab-mapa" hidden>
+  <h2>Mapa en Cubi</h2>
   <div class="card">
-    <div class="row"><span>Usar el GPS</span><label class="sw"><input type="checkbox" id="gps"><i></i></label></div>
-    <div class="row"><span>Reaccionar al clima</span><label class="sw"><input type="checkbox" id="clima"><i></i></label></div>
-    <p class="note" id="climaNota">Solito: cuando empieza a llover, sale el sol o la temperatura sube o baja 3 grados, hace su animación y muestra los grados. Con lluvia saca la sombrilla, con sol se alegra, con calor suda y con frío tirita. Usa tu ubicación aproximada (~1 km) y se actualiza cada 20 minutos.</p>
-    <details class="ayuda"><summary>Para qué usa el GPS</summary>
-      <p>Cuando paran 3 minutos después de un viaje, Cubi celebra que llegaron (sin Google Maps). En el camino revisa el clima cada 8 km y reacciona si cambia (lluvia, sol, frío, calor). Si le hablas, sabe a qué velocidad van.</p>
-    </details>
-  </div>
-  <h2>Navegación</h2>
-  <div class="card">
-    <div class="row"><span>Flechas de Google Maps y Waze</span><label class="sw"><input type="checkbox" id="nav"><i></i></label></div>
-    <div class="row"><span>Modo mapa (pantalla de navegación fija)</span><label class="sw"><input type="checkbox" id="navMapa"><i></i></label></div>
+    <div class="row"><span>Con una ruta, Cubi muestra</span></div>
+    <select id="navModo" aria-label="Qué muestra Cubi con una ruta">
+      <option value="avisos">Solo los avisos de giro (y sigue reaccionando a lo demás)</option>
+      <option value="mapa">Solo el mapa (se queda fijo mientras haya ruta)</option>
+      <option value="nada">Nada del mapa</option>
+    </select>
+    <p class="note">Sirve con Google Maps o con Waze. Si los dos tienen ruta a la vez, manda Google Maps.</p>
     <div class="row"><span>Mapa completo (sin el muñequito)</span><label class="sw"><input type="checkbox" id="navCompleto"><i></i></label></div>
     <div class="log"><div id="navAhora"></div></div>
     <details class="ayuda"><summary>Cómo funciona</summary>
@@ -304,6 +285,53 @@ section[hidden] { display: none; }
     <input type="text" id="destino" placeholder="Destino (ej: Centro Comercial Andino, Bogotá)" autocomplete="off">
     <div class="grid2"><button class="btn" id="trazar">Trazar ruta</button><button class="btn" id="quitarRuta">Quitar ruta</button></div>
     <p class="note">La ruta la calcula un servicio libre (OSRM), no Google: puede no ser la misma que te da Maps. Para buscar el destino y trazarla, el celular manda el destino y tu posición a nominatim.openstreetmap.org y router.project-osrm.org.</p>
+  </div>
+</section>
+
+<!-- ================= MASCOTAS ================= -->
+<section id="tab-mascotas" hidden>
+  <h2>Mascota del carro (el robot)</h2>
+  <div class="card">
+    <div class="paqs">
+      <button class="paq" data-paq="1"><span class="eyes"><i></i><i></i></span><b>Cubi</b><small>Ojitos de píldora</small></button>
+      <button class="paq" data-paq="8"><span class="eyes"><i></i><i></i></span><b>Pancho</b><small>Ojos de pan y guantes</small></button>
+      <button class="paq" data-paq="9"><span class="eyes"><i></i><i></i></span><b>Lino</b><small>Todo en línea</small></button>
+      <button class="paq" data-paq="10"><span class="eyes"><i></i><i></i></span><b>Mochi</b><small>Ojitos chiquitos</small></button>
+      <button class="paq" data-paq="11"><span class="eyes"><i></i><i></i></span><b>Zelda</b><small>La gata naranja: reloj y micrófono</small></button>
+    </div>
+    <div class="row"><span>Color</span></div>
+    <div class="colores" id="colores"><input type="color" id="ojos" value="#ffffff" aria-label="Otro color"></div>
+    <details class="ayuda"><summary>Qué toma el color</summary>
+      <p>Todos vienen blancos. Cubi y Pancho lo toman en los ojos y la boca (sus guantes y efectos siguen a color); Lino y Mochi lo toman en todo: ojos, boca, manitos e instrumentos.</p>
+    </details>
+  </div>
+  <h2>Mascota de la pantalla (Android Auto)</h2>
+  <div class="card">
+    <div class="row"><span>Personaje</span></div>
+    <select id="carroZelda" aria-label="Personaje de la pantalla"><option value="1">Zelda, la gata</option><option value="0">Cubi (los ojitos)</option></select>
+    <div class="row"><span>Fondo</span></div>
+    <select id="carroFondo" aria-label="Fondo de la pantalla">
+      <option value="-1">Automático: cielo de día, noche de noche, lila con rap</option>
+      <option value="0">Cielo</option><option value="1">Chicle</option><option value="2">Menta</option><option value="3">Lila</option><option value="4">Noche</option>
+    </select>
+    <div class="row"><span>Vista</span></div>
+    <select id="carroVista" aria-label="Vista de la pantalla">
+      <option value="0">Personaje, y mapa cuando hay ruta</option><option value="1">Solo el personaje</option><option value="2">Solo el mapa</option>
+    </select>
+    <p class="note">Es lo que sale al abrir Cubi en la pantalla del carro. Son las mismas opciones del botón “Opciones” de esa pantalla: lo que cambies aquí se ve allá al instante. El robot sigue con su propia cara.</p>
+  </div>
+</section>
+
+<!-- ================= AJUSTES ================= -->
+<section id="tab-ajustes" hidden>
+  <h2>Clima y viaje</h2>
+  <div class="card">
+    <div class="row"><span>Usar el GPS</span><label class="sw"><input type="checkbox" id="gps"><i></i></label></div>
+    <div class="row"><span>Reaccionar al clima</span><label class="sw"><input type="checkbox" id="clima"><i></i></label></div>
+    <p class="note" id="climaNota">Solito: cuando empieza a llover, sale el sol o la temperatura sube o baja 3 grados, hace su animación y muestra los grados. Con lluvia saca la sombrilla, con sol se alegra, con calor suda y con frío tirita. Usa tu ubicación aproximada (~1 km) y se actualiza cada 20 minutos.</p>
+    <details class="ayuda"><summary>Para qué usa el GPS</summary>
+      <p>Cuando paran 3 minutos después de un viaje, Cubi celebra que llegaron (sin Google Maps). En el camino revisa el clima cada 8 km y reacciona si cambia (lluvia, sol, frío, calor). Si le hablas, sabe a qué velocidad van.</p>
+    </details>
   </div>
   <h2>¿Dónde parqueé?</h2>
   <div class="card">
@@ -336,6 +364,8 @@ section[hidden] { display: none; }
   <button data-tab="cubi" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="M9 10v3M15 10v3"/></svg>Cubi</button>
   <button data-tab="voz"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Voz</button>
   <button data-tab="musica"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Música</button>
+  <button data-tab="mapa"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>Mapa</button>
+  <button data-tab="mascotas"><svg viewBox="0 0 24 24"><path d="M5 9V4l4 3h6l4-3v5a7 7 0 0 1-14 0zM10 12v1M14 12v1"/></svg>Mascotas</button>
   <button data-tab="ajustes"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Ajustes</button>
 </nav>
 <div class="toast" id="toast"></div>
@@ -516,16 +546,19 @@ $('rot').onclick = () => mandar('/ajuste?rot=1');
 $('clima').onchange = e => Android.climaCubi(e.target.checked);
 $('gps').onchange = e => Android.gpsCubi(e.target.checked);
 function gpsEstado(si) { $('gps').checked = si; }
-$('nav').onchange = e => { Android.navCubi(e.target.checked); navAhora(); };
+$('navModo').onchange = e => { const v = e.target.value; Android.navCubi(v !== 'nada'); Android.navMapaCubi(v === 'mapa'); navAhora(); };
 function navAhora() { if (window.Android && Android.estadoNav) $('navAhora').textContent = Android.estadoNav(); }
-if (window.Android && Android.navActiva) setTimeout(() => { $('nav').checked = Android.navActiva(); navAhora(); }, 500);
+if (window.Android && Android.navActiva) setTimeout(() => { $('navModo').value = !Android.navActiva() ? 'nada' : Android.navMapa() ? 'mapa' : 'avisos'; navAhora(); }, 500);
 setInterval(navAhora, 3000);
-$('navMapa').onchange = e => Android.navMapaCubi(e.target.checked);
 $('navCompleto').onchange = e => Android.navCompletoCubi(e.target.checked);
 $('trazar').onclick = () => { if (window.Android) { Android.destinoCubi($('destino').value); navAhora(); } };
 $('quitarRuta').onclick = () => { $('destino').value = ''; if (window.Android) { Android.destinoCubi(''); navAhora(); } };
 if (window.Android && Android.navCompleto) setTimeout(() => { $('navCompleto').checked = Android.navCompleto(); $('destino').value = Android.destinoTexto(); }, 500);
-if (window.Android && Android.navMapa) setTimeout(() => { $('navMapa').checked = Android.navMapa(); }, 500);
+// la mascota de la pantalla del carro: las mismas opciones que se cambian desde Android Auto
+['carroZelda', 'carroFondo', 'carroVista'].forEach(k => {
+  $(k).onchange = e => { if (window.Android && Android.carroPon) Android.carroPon(k, +e.target.value); };
+  if (window.Android && Android.carroOpcion) setTimeout(() => { $(k).value = Android.carroOpcion(k); }, 500);
+});
 if (window.Android) setTimeout(() => gpsEstado(Android.gpsActivo()), 500);
 function climaEstado(si) { $('clima').checked = si; }
 function climaTexto(s) { if (s) $('climaNota').textContent = s; }

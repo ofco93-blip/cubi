@@ -535,6 +535,23 @@ public class MainActivity extends Activity {
             if (CubiService.yo != null) CubiService.yo.navOn(si);
         }
 
+        // la mascota de la pantalla del carro (las lee CubiCarro en cada cuadro): personaje, fondo y vista
+        @JavascriptInterface
+        public int carroOpcion(String k) {
+            android.content.SharedPreferences p = getSharedPreferences("cubi", 0);
+            if (k.equals("carroZelda")) return p.getBoolean(k, true) ? 1 : 0;
+            return k.equals("carroFondo") ? p.getInt(k, -1) : p.getInt("carroVista", p.getBoolean("carroSola", false) ? 1 : 0);
+        }
+
+        @JavascriptInterface
+        public void carroPon(String k, int v) {
+            android.content.SharedPreferences.Editor e = getSharedPreferences("cubi", 0).edit();
+            if (k.equals("carroZelda")) e.putBoolean(k, v != 0);
+            else if (k.equals("carroFondo")) e.putInt(k, Math.max(-1, Math.min(4, v)));
+            else if (k.equals("carroVista")) e.putInt(k, Math.max(0, Math.min(2, v)));
+            e.apply();
+        }
+
         @JavascriptInterface
         public boolean navMapa() {
             return CubiService.yo != null && CubiService.yo.navMapa();
