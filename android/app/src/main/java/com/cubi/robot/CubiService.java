@@ -469,9 +469,18 @@ public class CubiService extends Service {
                     : cod <= 77 ? "nieve" : cod <= 82 ? "lluvia" : cod <= 86 ? "nieve" : "tormenta";
                 climaOrden = "/clima?t=" + t + "&e=" + e + "&d=" + dia;
                 climaGrados = t; climaEstado = e;
+                if (todo.has("elevation")) climaAltura = (int) Math.round(todo.optDouble("elevation"));   // la del terreno, por si el GPS no da la suya
                 enviar("clima|" + climaOrden);
                 climaTexto = "Ahora: " + e + ", " + t + " grados" + (llueve < 0 ? "" : ". Probabilidad de lluvia en las próximas 6 horas: " + llueve + " por ciento");
                 js("climaTexto(" + JSONObject.quote(climaTexto) + ")");
+            } catch (Exception ignored) {}
+            try {   // el pueblo o la ciudad por donde va, con el buscador de direcciones del propio celular; sin señal queda el último
+                java.util.List<android.location.Address> as = new android.location.Geocoder(this, new Locale("es")).getFromLocation(Double.parseDouble(ll[0]), Double.parseDouble(ll[1]), 1);
+                if (as != null && !as.isEmpty()) {
+                    android.location.Address a = as.get(0);
+                    String n = a.getLocality() != null ? a.getLocality() : a.getSubAdminArea() != null ? a.getSubAdminArea() : a.getAdminArea();
+                    if (n != null) climaLugar = n;
+                }
             } catch (Exception ignored) {}
         }).start();
     }
@@ -1883,6 +1892,8 @@ public class CubiService extends Service {
 
     volatile int climaGrados = Integer.MIN_VALUE;   // el clima de ahora, para la cajita de la pantalla del carro
     volatile String climaEstado = "";
+    volatile String climaLugar = "";               // la ciudad o el pueblo de donde es ese clima
+    volatile int climaAltura = Integer.MIN_VALUE;  // metros sobre el mar del terreno ahí
     volatile String ritmoCancion = "";   // el instrumento de la canción (por su género)
     private volatile boolean introPiano;         // la canción empieza solo con piano
     private String ritmoMandado = "";

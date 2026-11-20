@@ -460,12 +460,28 @@ public class CubiCarro extends CarAppService {
                 tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(tam);
                 float wi = tp.measureText(izq); tp.setTypeface(Typeface.DEFAULT); tp.setTextSize(tam * 0.72f);
                 float we = estado.isEmpty() ? 0 : tp.measureText(estado) + ph * 0.25f, dib = grados.isEmpty() ? 0 : ph * 0.95f;
-                float x = x0 + mg * 2, fin = Math.min(x + ph * 0.45f + dib + wi + we + ph * 0.45f, cx - medio);
+                // después del clima, si caben: el lugar por donde va y, con una montañita, los metros sobre el mar
+                int msnm = sv == null ? Integer.MIN_VALUE : sv.altura != Integer.MIN_VALUE ? sv.altura : sv.climaAltura;
+                String lugar = sv == null ? "" : sv.climaLugar, alt = msnm == Integer.MIN_VALUE ? "" : msnm + " m";
+                float x = x0 + mg * 2, libre = cx - medio - (x + ph * 0.45f + dib + wi + we + ph * 0.45f);
+                float wa = alt.isEmpty() ? 0 : ph * 0.85f + tp.measureText(alt), wl = lugar.isEmpty() ? 0 : ph * 0.35f + tp.measureText(lugar);
+                if (wa > libre) wa = 0;
+                if (wl + wa > libre) wl = 0;
+                float fin = Math.min(x + ph * 0.45f + dib + wi + we + wl + wa + ph * 0.45f, cx - medio);
                 p.setColor(CREMA); c.drawRoundRect(x, t, fin, bm, ph / 2, ph / 2, p);
                 x += ph * 0.45f;
                 if (dib > 0) { clima(c, x + ph * 0.36f, t + ph / 2, ph * 0.3f, estado.toLowerCase(Locale.ROOT)); x += dib; }
                 texto(c, izq, x, base, tam, CAFE, true, Paint.Align.LEFT, fin - x);
                 if (we > 0) texto(c, estado, x + wi + ph * 0.25f, base, tam * 0.72f, 0xff8a5a2b, false, Paint.Align.LEFT, fin - ph * 0.3f - x - wi);
+                float q = x + wi + we;
+                if (wl > 0) { texto(c, lugar, q + ph * 0.35f, base, tam * 0.72f, CAFE, false, Paint.Align.LEFT, wl); q += wl; }
+                if (wa > 0) {
+                    float mx = q + ph * 0.35f, mw = ph * 0.42f, mh = tam * 0.5f;
+                    gp.rewind(); gp.moveTo(mx, base); gp.lineTo(mx + mw * 0.36f, base - mh); gp.lineTo(mx + mw * 0.56f, base - mh * 0.55f);
+                    gp.lineTo(mx + mw * 0.7f, base - mh * 0.75f); gp.lineTo(mx + mw, base); gp.close();
+                    p.setStyle(Paint.Style.FILL); p.setColor(0xff8a5a2b); c.drawPath(gp, p);
+                    texto(c, alt, mx + mw + ph * 0.08f, base, tam * 0.72f, CAFE, false, Paint.Align.LEFT, wa);
+                }
             }
             if (!hayMusica) return;
             if (conBot) {                                             // atrás, pausa o seguir, siguiente
