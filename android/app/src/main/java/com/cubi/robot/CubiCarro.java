@@ -768,12 +768,16 @@ public class CubiCarro extends CarAppService {
             }
             if (rutaM != null) trazo(rutaM, calles[2], false);
             else {                                                       // sin destino propio: el tramo hasta el próximo giro
-                boolean nav = s.navMetros > 0 && System.currentTimeMillis() - s.navCuando < 60000;
-                if (!nav) giroM = null;
+                // mientras haya flecha hay caminito (los mismos 2 min). Si Maps no dio la distancia: derecho 300 m, o el
+                // primer cruce hacia el lado del giro
+                boolean nav = s.navDir.startsWith("maps_") && System.currentTimeMillis() - s.navCuando < 120000;
+                if (!nav) { giroM = null; s.giroEstado = ""; }
                 else if (giroDe != s.mapaCuando || giroDatos != d) {     // una vez por posición del GPS
                     giroDe = s.mapaCuando; giroDatos = d;
+                    int lado = s.navDir.equals("maps_izq") ? -1 : s.navDir.equals("maps_der") ? 1 : 0;
                     giroM = hastaGiro(d.lineas, d.clase, (float) ((s.posLon - d.lon0) * kx), (float) ((s.posLat - d.lat0) * 111320), ra,
-                            (float) s.navMetros, s.navDir.equals("maps_izq") ? -1 : s.navDir.equals("maps_der") ? 1 : 0);
+                            s.navMetros >= 0 ? (float) s.navMetros : lado == 0 ? 300 : 0, lado);
+                    s.giroEstado = giroM == null ? "Caminito: no encuentro en el mapa la calle por la que vas." : s.navMetros < 0 ? "Caminito: Maps no dio la distancia; marco el primer cruce." : "Caminito: dibujado.";
                 }
                 if (giroM != null) trazo(giroM, calles[2], false);
             }

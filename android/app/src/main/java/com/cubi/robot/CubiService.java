@@ -1537,6 +1537,7 @@ public class CubiService extends Service {
     volatile String navDir = "", navCalle = "";
     volatile int navForma;
     volatile double navMetros = -1;
+    volatile String giroEstado = "";       // para la app: si el caminito azul del carro salió o por qué no
     volatile int navDestM = -1;            // a cuánto está el destino (m) y la hora de llegada, si Maps las dio
     volatile String navLlega = "";
     private String flechaAntes = "";
@@ -1548,7 +1549,7 @@ public class CubiService extends Service {
         String mini = !navMapa() ? "" : " " + (gpsActivo() ? mapaEstado + (rutaEstado.isEmpty() ? "" : " " + rutaEstado) : "Mini mapa: prende “Usar el GPS” para que salga.");
         if (navUltima.isEmpty()) return "Esperando una ruta: empieza a navegar en Google Maps o Waze con el celular (con Android Auto en la pantalla del carro, Maps no le avisa al celular).";
         long hace = (System.currentTimeMillis() - navCuando) / 1000;
-        return "Lo último que vio (hace " + (hace < 90 ? hace + " s" : hace / 60 + " min") + "): “" + navUltima + "” → " + navDecision + "." + mini;
+        return "Lo último que vio (hace " + (hace < 90 ? hace + " s" : hace / 60 + " min") + "): “" + navUltima + "” → " + navDecision + "." + mini + (giroEstado.isEmpty() ? "" : " " + giroEstado);
     }
 
     // lado: lo que dice el dibujo de la flecha (-1 izquierda, 1 derecha, 0 no se sabe); el texto manda si lo dice
