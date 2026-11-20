@@ -20,13 +20,15 @@ public class Oyente extends NotificationListenerService {
     @Override public void onListenerDisconnected() { yo = null; }
 
     // ¿sigue en el celular el aviso fijo de navegación de Google Maps o de Waze?
+    static volatile String navClave = "";
     static boolean rutaViva() {
         Oyente o = yo;
         if (o == null) return false;
         try {
             for (StatusBarNotification n : o.getActiveNotifications()) {
                 String app = n.getPackageName();
-                if ((app.equals("com.google.android.apps.maps") || app.equals("com.waze")) && n.isOngoing()) return true;
+                // el aviso de la ruta: el fijo de navegación o, si no viene marcado así, el mismo del que salió la última indicación
+                if ((app.equals("com.google.android.apps.maps") || app.equals("com.waze")) && (n.isOngoing() || n.getKey().equals(navClave))) return true;
             }
         } catch (Exception e) { }
         return false;
@@ -56,6 +58,7 @@ public class Oyente extends NotificationListenerService {
         CharSequence[] lineas = x.getCharSequenceArray(Notification.EXTRA_TEXT_LINES);
         if (lineas != null) for (CharSequence l : lineas) t.append(l).append(' ');
         if (n.tickerText != null) t.append(n.tickerText);
+        navClave = sbn.getKey();
         CubiService.yo.indicacion(t.toString(), ladoDelDibujo(n));
     }
 
