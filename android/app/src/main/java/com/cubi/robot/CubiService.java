@@ -1798,9 +1798,10 @@ public class CubiService extends Service {
         if (m == null || st == null) estadoLetra = "No veo qué canción suena (¿Spotify o YouTube Music en play?)";
         if (m != null && st != null) {
             android.graphics.Bitmap car = m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART);
-            cancionCaratula = car != null ? car : m.getBitmap(MediaMetadata.METADATA_KEY_ART);
+            if (car == null) car = m.getBitmap(MediaMetadata.METADATA_KEY_ART);
             String titulo = m.getString(MediaMetadata.METADATA_KEY_TITLE), artista = m.getString(MediaMetadata.METADATA_KEY_ARTIST);
             String id = artista + "|" + titulo;
+            cancionCaratula = titulo == null ? car : caratula(id, car);
             if (titulo != null && !id.equals(cancionId)) {
                 cancionId = id;
                 cancionTexto = titulo + (artista != null ? " de " + artista : "");
@@ -1932,10 +1933,45 @@ public class CubiService extends Service {
         } }).start();
     }
 
+    // Lo que ya sonó queda en el celular: la letra y la carátula de cada canción, para que salgan al instante y sin señal.
+    // ponytail: no se borra nada (unos 25 KB por canción); si algún día pesa, borrar los más viejos al pasar de N archivos.
+    private File guardado(String carpeta, String id, String ext) {
+        return new File(new File(getFilesDir(), carpeta), Integer.toHexString(id.toLowerCase(Locale.ROOT).hashCode()) + "_" + id.length() + ext);
+    }
+    private String caratulaVista = "", caratulaLeida = "";
+    private android.graphics.Bitmap caratulaVieja;
+    private android.graphics.Bitmap caratula(String id, android.graphics.Bitmap car) {
+        if (car == null) {                                           // el reproductor no la dio: la guardada, si hay
+            if (!id.equals(caratulaLeida)) { caratulaLeida = id; caratulaVieja = android.graphics.BitmapFactory.decodeFile(guardado("caratulas", id, ".jpg").getPath()); }
+            return caratulaVieja;
+        }
+        if (!id.equals(caratulaVista)) {                             // una vez por canción, achicada a 320
+            caratulaVista = id;
+            final File f = guardado("caratulas", id, ".jpg");
+            final android.graphics.Bitmap b = car;
+            if (!f.exists()) new Thread(() -> {
+                try {
+                    f.getParentFile().mkdirs();
+                    float k = 320f / Math.max(1, Math.max(b.getWidth(), b.getHeight()));
+                    android.graphics.Bitmap c = k < 1 ? android.graphics.Bitmap.createScaledBitmap(b, Math.round(b.getWidth() * k), Math.round(b.getHeight() * k), true) : b;
+                    try (FileOutputStream o = new FileOutputStream(f)) { c.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, o); }
+                } catch (Exception e) { f.delete(); }
+            }).start();
+        }
+        return car;
+    }
+
     // busca la canción en LRCLIB y se queda con la letra sincronizada de la versión de duración más parecida
     private void bajarLetra(String titulo, String artista, long durMs, String id) {
         new Thread(() -> {
             try {
+                String mejor = null; double dif = 1e9;
+                File gl = guardado("letras", id, ".lrc");
+                if (gl.exists()) {                                   // ya sonó antes: la letra guardada
+                    ByteArrayOutputStream o = new ByteArrayOutputStream();
+                    try (InputStream in = new java.io.FileInputStream(gl)) { byte[] b = new byte[8192]; for (int n; (n = in.read(b)) > 0; ) o.write(b, 0, n); }
+                    mejor = o.toString("UTF-8"); dif = 0;
+                } else {
                 String u = "https://lrclib.net/api/search?track_name=" + URLEncoder.encode(titulo, "UTF-8")
                         + "&artist_name=" + URLEncoder.encode(artista, "UTF-8");
                 HttpURLConnection h = (HttpURLConnection) new URL(u).openConnection();
@@ -1950,13 +1986,17 @@ public class CubiService extends Service {
                     while ((n = in.read(b)) > 0) o.write(b, 0, n);
                     a = new JSONArray(o.toString("UTF-8"));
                 }
-                String mejor = null; double dif = 1e9;
                 for (int i = 0; i < a.length(); i++) {
                     JSONObject r = a.getJSONObject(i);
                     String sync = r.optString("syncedLyrics", "");
                     if (sync.isEmpty() || sync.equals("null")) continue;
                     double d = durMs > 0 ? Math.abs(r.optDouble("duration", 0) - durMs / 1000.0) : 0;
                     if (d < dif) { dif = d; mejor = sync; }
+                }
+                if (mejor != null && dif <= 10) try {
+                    gl.getParentFile().mkdirs();
+                    try (FileOutputStream o = new FileOutputStream(gl)) { o.write(mejor.getBytes("UTF-8")); }
+                } catch (Exception e) { gl.delete(); }
                 }
                 if (!id.equals(cancionId)) return;
                 if (mejor == null || dif > 10) { estadoLetra = cancionTexto + ": sin letra sincronizada (usa el micrófono)"; return; }
