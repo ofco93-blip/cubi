@@ -820,7 +820,13 @@ public class CubiService extends Service {
             String donde = "(around:360," + String.format(Locale.US, "%.5f,%.5f", lat, lon) + ");";
             String q = "[out:json][timeout:10];(way[highway~\"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street)(_link)?$\"]" + donde
                     + "way[natural=water]" + donde + "way[waterway~\"^(river|stream|canal)$\"]" + donde + "way[leisure~\"^(park|garden)$\"]" + donde + ");out geom;";
-            JSONArray els = new JSONObject(bajarTexto("https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(q, "UTF-8"))).getJSONArray("elements");
+            JSONArray els = null; Exception falla = null;   // el servidor principal se cae seguido: si no responde, el de respaldo
+            for (String sv : new String[]{"https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"}) try {
+                JSONObject r = new JSONObject(bajarTexto(sv + "?data=" + URLEncoder.encode(q, "UTF-8"), 12000, 1));
+                if (r.has("remark")) throw new java.io.IOException(r.optString("remark"));
+                els = r.getJSONArray("elements"); break;
+            } catch (Exception e) { falla = e; }
+            if (els == null) throw falla;
             java.util.ArrayList<String> ruta = new java.util.ArrayList<>(), avenidas = new java.util.ArrayList<>(), calles = new java.util.ArrayList<>(), zonas = new java.util.ArrayList<>();
             double[] rla = rutaLat, rlo = rutaLon;
             if (rla != null && rlo != null) tramos(rla, rlo, lat, lon, "2", ruta);

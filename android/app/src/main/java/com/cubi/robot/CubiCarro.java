@@ -669,8 +669,11 @@ public class CubiCarro extends CarAppService {
         // Todo en metros (x al este, y al norte), como las líneas del mapa.
         // ponytail: empate ingenuo por cercanía y rumbo; en glorietas o calles paralelas pegadas puede elegir mal. Si molesta,
         // pedir la ruta entera a OSRM con el destino (ya existe: pestaña Mapa).
-        private float[] giroM; private long giroDe; private CubiService.MapaCarro giroDatos;
+        private float[] giroM; private long giroDe, giroBueno; private CubiService.MapaCarro giroDatos;
         static float[] hastaGiro(float[][] ls, byte[] cl, float px, float py, double ra, float metros, int lado) {
+            // sin distancia (metros < 0): el primer cruce hacia ese lado en 400 m; si no hay, lo andado
+            boolean sabe = metros >= 0; float ven = sabe ? 60 : 400;
+            if (!sabe) metros = 0;
             float dx = (float) Math.sin(ra), dy = (float) Math.cos(ra), mejor = 35, qx = 0, qy = 0;
             int l = -1, i = 0, sg = 1;
             for (int m = 0; m < ls.length; m++) {                        // la calle por la que va
@@ -691,7 +694,7 @@ public class CubiCarro extends CarAppService {
             pts[0] = qx; pts[1] = qy;
             int n = 1, nMet = -1, corta = -1, rl = 0, rj = 0, rg = 0;
             float rec = 0, nota = 1e9f;
-            for (int pasos = 0; pasos < 250 && rec < metros + 60 && n < 300; pasos++) {
+            for (int pasos = 0; pasos < 250 && rec < metros + ven && n < 300; pasos++) {
                 float[] v = ls[l];
                 float ex = pts[2 * n - 2], ey = pts[2 * n - 1];
                 if (i < 0 || i * 2 >= v.length) {                        // se acabó este tramo: sigue por el que va más derecho
@@ -714,7 +717,7 @@ public class CubiCarro extends CarAppService {
                 if (sl > 0) { dx = (nx - ex) / sl; dy = (ny - ey) / sl; }
                 rec += sl; pts[2 * n] = nx; pts[2 * n + 1] = ny; n++;
                 if (nMet < 0 && rec >= metros) nMet = n;
-                if (lado != 0 && Math.abs(rec - metros) <= 60)           // ¿sale de aquí una calle hacia el lado del giro?
+                if (lado != 0 && Math.abs(rec - metros) <= ven)          // ¿sale de aquí una calle hacia el lado del giro?
                     for (int m = 0; m < ls.length; m++) {
                         if (m == l || cl[m] > 1) continue;
                         float[] o = ls[m];
@@ -738,7 +741,7 @@ public class CubiCarro extends CarAppService {
                     van += (float) Math.hypot(o[q] - pts[2 * n - 2], o[q + 1] - pts[2 * n - 1]);
                     pts[2 * n] = o[q]; pts[2 * n + 1] = o[q + 1]; n++;
                 }
-            } else if (nMet > 0) n = nMet;
+            } else if (nMet > 0 && sabe) n = nMet;
             return n < 2 ? null : java.util.Arrays.copyOf(pts, n * 2);
         }
         private void mapa(Canvas c, CubiService s, float x0, float y0, float x1, float y1, float u) {
@@ -775,9 +778,11 @@ public class CubiCarro extends CarAppService {
                 else if (giroDe != s.mapaCuando || giroDatos != d) {     // una vez por posición del GPS
                     giroDe = s.mapaCuando; giroDatos = d;
                     int lado = s.navDir.equals("maps_izq") ? -1 : s.navDir.equals("maps_der") ? 1 : 0;
-                    giroM = hastaGiro(d.lineas, d.clase, (float) ((s.posLon - d.lon0) * kx), (float) ((s.posLat - d.lat0) * 111320), ra,
-                            s.navMetros >= 0 ? (float) s.navMetros : lado == 0 ? 300 : 0, lado);
-                    s.giroEstado = giroM == null ? "Caminito: no encuentro en el mapa la calle por la que vas." : s.navMetros < 0 ? "Caminito: Maps no dio la distancia; marco el primer cruce." : "Caminito: dibujado.";
+                    float[] g = hastaGiro(d.lineas, d.clase, (float) ((s.posLon - d.lon0) * kx), (float) ((s.posLat - d.lat0) * 111320), ra,
+                            s.navMetros >= 0 ? (float) s.navMetros : lado == 0 ? 300 : -1, lado);
+                    // si en una posición no se logra (el GPS brinca, o va cruzando una esquina), se deja el anterior 10 s
+                    if (g != null) { giroM = g; giroBueno = giroDe; } else if (giroDe - giroBueno > 10000) giroM = null;
+                    s.giroEstado = g == null ? "Caminito: no encuentro en el mapa la calle por la que vas." : s.navMetros < 0 ? "Caminito: Maps no dio la distancia; marco el primer cruce." : "Caminito: dibujado.";
                 }
                 if (giroM != null) trazo(giroM, calles[2], false);
             }
