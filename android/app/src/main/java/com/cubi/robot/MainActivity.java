@@ -593,6 +593,13 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String paisEstado() { return CubiService.yo == null ? "" : CubiService.yo.estadoPais(); }
+        @JavascriptInterface
+        public void paisBajar() { if (CubiService.yo != null) CubiService.yo.bajarPais(); }
+        @JavascriptInterface
+        public void paisBorrar() { if (CubiService.yo != null) CubiService.yo.borrarPais(); }
+
+        @JavascriptInterface
         public String estadoNav() {
             return CubiService.yo == null ? "" : CubiService.yo.estadoNav();
         }

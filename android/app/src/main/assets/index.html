@@ -288,6 +288,12 @@ section[hidden] { display: none; }
     <p class="note">Google Maps no deja ver su línea azul desde otras apps. Para que el camino salga pintado en Cubi y en la pantalla del carro, escribe aquí el destino y toca “Trazar ruta”; luego “Ir con Google Maps” abre la navegación hacia ese mismo punto.</p>
     <p class="note">La ruta la calcula un servicio libre (OSRM), no Google: puede no ser la misma que te da Maps. Para buscar el destino y trazarla, el celular manda el destino y tu posición a nominatim.openstreetmap.org y router.project-osrm.org.</p>
   </div>
+  <h2>Mapa sin internet</h2>
+  <div class="card">
+    <div class="grid2"><button class="btn" id="paisBajar">Descargar mapa de Colombia</button><button class="btn" id="paisBorrar">Borrar</button></div>
+    <p class="note" id="paisEstado"></p>
+    <p class="note">Baja una vez las vías de todo el país y las guarda en el celular: así el mapa de la pantalla del carro sale al instante y sigue saliendo en carretera sin señal. Mejor bajarlo con wifi. Las indicaciones siguen viniendo de Google Maps o Waze, así que para viajar sin señal Maps también necesita su propio mapa descargado. Datos © colaboradores de OpenStreetMap.</p>
+  </div>
 </section>
 
 <!-- ================= MASCOTAS ================= -->
@@ -555,6 +561,12 @@ setInterval(navAhora, 3000);
 $('navCompleto').onchange = e => Android.navCompletoCubi(e.target.checked);
 $('trazar').onclick = () => { if (window.Android) { Android.destinoCubi($('destino').value); navAhora(); } };
 $('irMaps').onclick = () => { if (window.Android && Android.irMaps) Android.irMaps(); };
+if (window.Android && Android.paisEstado) {
+  const pais = () => { $('paisEstado').textContent = Android.paisEstado(); };
+  $('paisBajar').onclick = () => { Android.paisBajar(); pais(); };
+  $('paisBorrar').onclick = () => { Android.paisBorrar(); pais(); };
+  setInterval(pais, 1500);
+}
 $('quitarRuta').onclick = () => { $('destino').value = ''; if (window.Android) { Android.destinoCubi(''); navAhora(); } };
 if (window.Android && Android.navCompleto) setTimeout(() => { $('navCompleto').checked = Android.navCompleto(); $('destino').value = Android.destinoTexto(); }, 500);
 // la mascota de la pantalla del carro: las mismas opciones que se cambian desde Android Auto

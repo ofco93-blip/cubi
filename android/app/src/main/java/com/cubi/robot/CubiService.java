@@ -591,8 +591,95 @@ public class CubiService extends Service {
         return p;
     }
 
+    // ---------- el mapa del país guardado en el celular (sin internet) ----------
+    // Un solo archivo con las vías de Colombia, que arma herramientas/mapa/mapa_pais.py (ahí está el formato) y se baja
+    // una vez desde la pestaña Mapa. Con él, el mapa del carro no pide nada por internet.
+    static final String PAIS_URL = "https://github.com/ofco93-blip/cubi/releases/download/mapa-co/colombia.cubimapa";
+    private volatile String paisEstado = "";
+    private volatile boolean paisBajando;
+    private volatile int[] paisIndice; private volatile long paisDe;
+    File mapaPais() { return new File(getFilesDir(), "colombia.cubimapa"); }
+    String estadoPais() {
+        if (!paisEstado.isEmpty()) return paisEstado;
+        File f = mapaPais();
+        return f.exists() ? "Descargado (" + f.length() / 1000000 + " MB): el mapa del carro sale sin internet." : "Sin descargar.";
+    }
+    void borrarPais() { if (!paisBajando) { mapaPais().delete(); paisIndice = null; } }
+    void bajarPais() {
+        if (paisBajando) return;
+        paisBajando = true; paisEstado = "Descargando…";
+        new Thread(() -> {
+            File tmp = new File(getFilesDir(), "colombia.tmp");
+            try {
+                HttpURLConnection h = (HttpURLConnection) new URL(PAIS_URL).openConnection();
+                h.setConnectTimeout(15000); h.setReadTimeout(30000);
+                long total = h.getContentLengthLong(), van = 0;
+                try (InputStream in = h.getInputStream(); FileOutputStream o = new FileOutputStream(tmp)) {
+                    byte[] b = new byte[65536];
+                    for (int n; (n = in.read(b)) > 0; ) { o.write(b, 0, n); van += n; paisEstado = "Descargando: " + (total > 0 ? van * 100 / total + " %" : van / 1000000 + " MB"); }
+                }
+                if ((total > 0 && van != total) || !tmp.renameTo(mapaPais())) throw new java.io.IOException();   // a medias no sirve
+                paisIndice = null; paisEstado = "";
+            } catch (Exception e) { tmp.delete(); paisEstado = "No se pudo descargar (¿hay internet?). Toca otra vez para reintentar."; }
+            finally { paisBajando = false; }
+        }).start();
+    }
+    private static int varint(byte[] b, int[] p) { int v = 0; for (int s = 0; ; s += 7) { int x = b[p[0]++]; v |= (x & 127) << s; if (x >= 0) return v; } }
+    // las vías a menos de 1300 m de (clat, clon), en metros desde (lat, lon); null si no hay archivo o no cubre esa zona
+    private MapaCarro callesGuardadas(double clat, double clon, double lat, double lon) throws Exception {
+        File f = mapaPais();
+        if (!f.exists()) return null;
+        try (java.io.RandomAccessFile r = new java.io.RandomAccessFile(f, "r")) {
+            int[] ix = paisIndice;
+            if (ix == null || paisDe != f.lastModified()) {           // el índice se lee una vez
+                byte[] c = new byte[12]; r.readFully(c);
+                if (!new String(c, 0, 8, "US-ASCII").equals("CUBIMAP1")) return null;
+                byte[] b = new byte[java.nio.ByteBuffer.wrap(c, 8, 4).getInt() * 12]; r.readFully(b);
+                ix = new int[b.length / 4]; java.nio.ByteBuffer.wrap(b).asIntBuffer().get(ix);
+                paisIndice = ix; paisDe = f.lastModified();
+            }
+            double kx = 111320 * Math.cos(Math.toRadians(lat));
+            float cx = (float) ((clon - lon) * kx), cy = (float) ((clat - lat) * 111320);
+            ArrayList<float[]> ls = new ArrayList<>(); ArrayList<Byte> cs = new ArrayList<>();
+            int fy = (int) Math.floor((clat + 90) / 0.02), fx = (int) Math.floor((clon + 180) / 0.02);
+            byte[] t = new byte[8192]; int[] p = new int[1];
+            for (int y = fy - 1; y <= fy + 1; y++) for (int x = fx - 1; x <= fx + 1; x++) {
+                int k = y << 16 | x, a = 0, z = ix.length / 3 - 1, e = -1;
+                while (a <= z && e < 0) { int m = (a + z) >>> 1; if (ix[3 * m] < k) a = m + 1; else if (ix[3 * m] > k) z = m - 1; else e = m; }
+                if (e < 0) continue;
+                byte[] zb = new byte[ix[3 * e + 2]]; r.seek(ix[3 * e + 1]); r.readFully(zb);
+                java.util.zip.Inflater inf = new java.util.zip.Inflater(); inf.setInput(zb);
+                ByteArrayOutputStream o = new ByteArrayOutputStream();
+                while (!inf.finished()) { int q = inf.inflate(t); if (q == 0) break; o.write(t, 0, q); }
+                inf.end();
+                byte[] b = o.toByteArray();
+                for (p[0] = 0; p[0] < b.length; ) {
+                    byte cl = b[p[0]++]; int np = varint(b, p); boolean cerca = false;
+                    long pa = y * 20000L - 90000000L, po = x * 20000L - 180000000L;
+                    float[] v = new float[np * 2];
+                    for (int i = 0; i < np; i++) {
+                        int u = varint(b, p); pa += (u >>> 1) ^ -(u & 1);
+                        u = varint(b, p); po += (u >>> 1) ^ -(u & 1);
+                        v[2 * i] = (float) ((po / 1e6 - lon) * kx); v[2 * i + 1] = (float) ((pa / 1e6 - lat) * 111320);
+                        cerca |= Math.abs(v[2 * i] - cx) < 1300 && Math.abs(v[2 * i + 1] - cy) < 1300;
+                    }
+                    if (cerca && np >= 2) { ls.add(v); cs.add(cl); }
+                }
+            }
+            if (ls.isEmpty()) return null;
+            MapaCarro d = new MapaCarro();
+            d.lat0 = lat; d.lon0 = lon; d.lineas = ls.toArray(new float[0][]); d.clase = new byte[cs.size()];
+            for (int i = 0; i < d.clase.length; i++) d.clase[i] = cs.get(i);
+            return d;
+        }
+    }
+
     private void bajarCarro(double clat, double clon, double lat, double lon) {
         try {
+            try {                                                    // primero el mapa guardado: sale al instante y sin internet
+                MapaCarro g = callesGuardadas(clat, clon, lat, lon);
+                if (g != null) { carroDatos = g; carroEstado = ""; return; }
+            } catch (Exception e) { }                                // archivo dañado: por internet, como antes
             // El centro se ajusta a una cuadrícula de unos 440 m (por eso el radio es más grande): así la misma zona pide
             // siempre lo mismo y lo bajado se guarda en el celular (comprimido, 90 días). Por las rutas de siempre sale al instante.
             long ia = Math.round(clat / 0.004), io = Math.round(clon / 0.004);
