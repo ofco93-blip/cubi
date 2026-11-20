@@ -1,0 +1,25 @@
+name: Mapa
+
+# Arma el archivo de vías de Colombia (de OpenStreetMap, vía Geofabrik) que la app baja para el mapa del carro sin internet.
+# Queda en la versión "mapa-co" (aparte de las versiones de la app). Se corre a mano, o empujando a la rama mapa-pais.
+on:
+  push:
+    branches: [mapa-pais]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mapa:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install osmium
+      - run: curl -sSfL -o pais.osm.pbf https://download.geofabrik.de/south-america/colombia-latest.osm.pbf
+      - run: python herramientas/mapa/mapa_pais.py && python herramientas/mapa/mapa_pais.py pais.osm.pbf colombia.cubimapa && ls -l colombia.cubimapa
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view mapa-co >/dev/null 2>&1 || gh release create mapa-co --prerelease --latest=false --target main --title "Mapa de Colombia" --notes "Vías de Colombia para el mapa del carro sin internet. Datos © colaboradores de OpenStreetMap (ODbL)."
+          gh release upload mapa-co colombia.cubimapa --clobber
