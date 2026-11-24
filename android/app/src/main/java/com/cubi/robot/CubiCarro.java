@@ -64,13 +64,34 @@ public class CubiCarro extends CarAppService {
                 else if (q.indexOf('?') >= 0) q = q.substring(0, q.indexOf('?'));
                 q = q.trim();
                 if (q.isEmpty() || q.equals("0,0")) return;
-                if (CubiService.yo != null) CubiService.yo.destino(q);
-                try {
-                    getCarContext().startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("google.navigation:q=" + android.net.Uri.encode(q)))
-                            .setPackage("com.google.android.apps.maps").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
-                } catch (Exception e) { }
+                irA(getCarContext(), q);
             }
         };
+    }
+    // Cubi traza su ruta a ese sitio y trata de arrancar el viaje en Google Maps
+    static void irA(CarContext c, String q) {
+        if (CubiService.yo != null) CubiService.yo.destino(q);
+        try {
+            c.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("google.navigation:q=" + android.net.Uri.encode(q)))
+                    .setPackage("com.google.android.apps.maps").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (Exception e) { }
+    }
+
+    // El buscador de destino: se escribe o se dicta en la pantalla del carro.
+    static class Buscar extends Screen {
+        Buscar(CarContext c) { super(c); }
+        @NonNull @Override public Template onGetTemplate() {
+            return new androidx.car.app.model.SearchTemplate.Builder(new androidx.car.app.model.SearchTemplate.SearchCallback() {
+                @Override public void onSearchSubmitted(@NonNull String t) {
+                    String q = t.trim();
+                    if (q.isEmpty()) return;
+                    irA(getCarContext(), q);
+                    // y por la vía del carro, por si el celular no deja abrir Maps: se lo pide a la app de navegación del carro
+                    try { getCarContext().startCarApp(new Intent(CarContext.ACTION_NAVIGATE, android.net.Uri.parse("geo:0,0?q=" + android.net.Uri.encode(q)))); } catch (Exception e) { }
+                    getScreenManager().popToRoot();
+                }
+            }).setHeaderAction(Action.BACK).setSearchHint("¿A dónde vamos?").setShowKeyboardByDefault(true).build();
+        }
     }
 
     static class Pantalla extends Screen implements SurfaceCallback {
@@ -96,7 +117,10 @@ public class CubiCarro extends CarAppService {
         @NonNull @Override public Template onGetTemplate() {
             return new NavigationTemplate.Builder().setActionStrip(new ActionStrip.Builder()
                     .addAction(tecla(R.drawable.carro_antes, -1)).addAction(tecla(sonaba ? R.drawable.carro_pausa : R.drawable.carro_play, 0)).addAction(tecla(R.drawable.carro_sigue, 1))
-                    .addAction(new Action.Builder().setTitle("Opciones").setOnClickListener(() -> getScreenManager().push(new Opciones(getCarContext()))).build()).build()).build();
+                    .addAction(new Action.Builder().setTitle("Opciones").setOnClickListener(() -> getScreenManager().push(new Opciones(getCarContext()))).build()).build())
+                    // la lupa: buscar destino (va en la tira del mapa, que solo admite dibujitos; también está en Opciones)
+                    .setMapActionStrip(new ActionStrip.Builder().addAction(new Action.Builder().setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), R.drawable.carro_buscar)).build())
+                            .setOnClickListener(() -> getScreenManager().push(new Buscar(getCarContext()))).build()).build()).build();
         }
 
         private Action tecla(int icono, int cual) {
@@ -150,6 +174,7 @@ public class CubiCarro extends CarAppService {
             boolean zelda = p.getBoolean("carroZelda", true);
             int fondo = p.getInt("carroFondo", -1), vista = p.getInt("carroVista", p.getBoolean("carroSola", false) ? 1 : 0);
             ItemList lista = new ItemList.Builder()
+                    .addItem(new Row.Builder().setTitle("Buscar destino").addText("Traza la ruta y la abre en Google Maps").setOnClickListener(() -> getScreenManager().push(new Buscar(getCarContext()))).build())
                     .addItem(fila("Personaje en esta pantalla", zelda ? "Zelda" : "Cubi", () -> p.edit().putBoolean("carroZelda", !zelda).apply()))
                     .addItem(fila("Fondo de Zelda", FONDOS[fondo + 1], () -> p.edit().putInt("carroFondo", fondo >= 4 ? -1 : fondo + 1).apply()))
                     .addItem(fila("Vista", VISTAS[vista], () -> p.edit().putInt("carroVista", (vista + 1) % 3).apply()))
