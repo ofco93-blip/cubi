@@ -455,7 +455,7 @@ public class CubiService extends Service {
         new Thread(() -> {
             try {
                 HttpURLConnection c = (HttpURLConnection) new URL("https://api.open-meteo.com/v1/forecast?latitude=" + ll[0] + "&longitude=" + ll[1]
-                    + "&current=temperature_2m,weather_code,is_day&hourly=precipitation_probability&forecast_hours=6&timezone=auto").openConnection();
+                    + "&current=temperature_2m,weather_code,precipitation,is_day&hourly=precipitation_probability&forecast_hours=6&timezone=auto").openConnection();
                 c.setConnectTimeout(10000); c.setReadTimeout(10000);
                 ByteArrayOutputStream b = new ByteArrayOutputStream();
                 try (InputStream in = c.getInputStream()) { byte[] buf = new byte[4096]; int n; while ((n = in.read(buf)) > 0) b.write(buf, 0, n); }
@@ -467,6 +467,9 @@ public class CubiService extends Service {
                 // códigos de la OMM: 0-1 despejado, 2-3 nubes, 45-48 niebla, 51-67 y 80-82 lluvia, 71-77 y 85-86 nieve, 95-99 tormenta
                 String e = cod <= 1 ? "despejado" : cod <= 3 ? "nubes" : cod <= 48 ? "niebla" : cod <= 67 ? "lluvia"
                     : cod <= 77 ? "nieve" : cod <= 82 ? "lluvia" : cod <= 86 ? "nieve" : "tormenta";
+                // El código es un pronóstico y en el trópico dice "llovizna" a cada rato sin que caiga nada: solo cuenta
+                // como lluvia si además marca agua cayendo ahora (0,2 mm o más). Si no, nubes.
+                if (e.equals("lluvia") && cur.optDouble("precipitation", 1) < 0.2) e = "nubes";
                 climaOrden = "/clima?t=" + t + "&e=" + e + "&d=" + dia;
                 climaGrados = t; climaEstado = e;
                 if (todo.has("elevation")) climaAltura = (int) Math.round(todo.optDouble("elevation"));   // la del terreno, por si el GPS no da la suya
