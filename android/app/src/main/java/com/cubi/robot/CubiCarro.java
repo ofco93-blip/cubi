@@ -44,7 +44,32 @@ public class CubiCarro extends CarAppService {
 
     @NonNull @Override public Session onCreateSession() {
         return new Session() {
-            @NonNull @Override public Screen onCreateScreen(@NonNull Intent intent) { return new Pantalla(getCarContext()); }
+            @NonNull @Override public Screen onCreateScreen(@NonNull Intent intent) {
+                if (CubiService.yo != null) CubiService.yo.carroPrende();
+                navegar(intent);
+                return new Pantalla(getCarContext());
+            }
+            @Override public void onNewIntent(@NonNull Intent intent) { navegar(intent); }
+            // "Ok Google, llévame a tal parte": el carro se lo pide a la app de navegación que esté abierta, o sea a Cubi.
+            // Cubi traza su ruta a ese sitio y le pasa el viaje a Google Maps, que es quien da las indicaciones.
+            // ponytail: abrir Maps desde aquí depende de que el celular lo permita (permiso de mostrarse sobre otras apps);
+            // si no arranca, queda la ruta de Cubi y el botón "Ir con Google Maps" de la app.
+            private void navegar(Intent i) {
+                android.net.Uri d = i == null ? null : i.getData();
+                if (d == null || !androidx.car.app.CarContext.ACTION_NAVIGATE.equals(i.getAction())) return;
+                String q = d.getSchemeSpecificPart();                // "0,0?q=el sitio" o "lat,lon"
+                if (q == null) return;
+                int k = q.indexOf("q=");
+                if (k >= 0) { q = q.substring(k + 2); int f = q.indexOf('&'); if (f >= 0) q = q.substring(0, f); q = android.net.Uri.decode(q); }
+                else if (q.indexOf('?') >= 0) q = q.substring(0, q.indexOf('?'));
+                q = q.trim();
+                if (q.isEmpty() || q.equals("0,0")) return;
+                if (CubiService.yo != null) CubiService.yo.destino(q);
+                try {
+                    getCarContext().startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("google.navigation:q=" + android.net.Uri.encode(q)))
+                            .setPackage("com.google.android.apps.maps").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                } catch (Exception e) { }
+            }
         };
     }
 
@@ -158,6 +183,7 @@ public class CubiCarro extends CarAppService {
             boolean musica = s != null && !s.cancionTitulo.isEmpty(), suena = musica && s.musicaPlay;
             String cancion = !musica ? "" : "♪ " + s.cancionTitulo + (s.cancionArtista.isEmpty() ? "" : " · " + s.cancionArtista);
             boolean nav = s != null && !s.navDir.isEmpty() && ahora - s.navCuando < 120000;
+            boolean hayMapa = s != null && s.carroDatos != null && !Double.isNaN(s.posLat) && ahora - s.mapaCuando < 30000;   // calles y GPS al día: el mapa sale aunque no haya ruta
             boolean aLoAncho = a.width() >= a.height() * 1.5f;
             // angosta = la vista dividida de Android Auto: los botones quedan sobre la carita (se baja todo a la zona libre)
             // y al lado ya está la tarjeta de música, así que la franja de la canción sobra
@@ -173,7 +199,7 @@ public class CubiCarro extends CarAppService {
                 if (franja) texto(c, cancion, a.centerX(), a.bottom - 9 * u, 5.5f * u, GRIS, false, Paint.Align.CENTER, a.width() - 12 * u);
                 return;
             }
-            if (zelda && vista == 0 && !nav) { zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, 1); return; }   // sin ruta: Zelda en grande
+            if (zelda && vista == 0 && !nav && !hayMapa) { zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, 1); return; }   // sin ruta: Zelda en grande
             // la carita a un lado (arriba si la pantalla es angosta) y el panel con lo demás
             float corte = aLoAncho ? a.left + a.width() * 0.38f : a.top + a.height() * 0.46f, m = 3 * u;
             if (vista == 2) corte = aLoAncho ? a.left : a.top;                      // solo el mapa: el panel ocupa todo
@@ -202,7 +228,7 @@ public class CubiCarro extends CarAppService {
             float x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom, w = x1 - x0;
             recorte.rewind(); recorte.addRoundRect(r, 5 * u, 5 * u, Path.Direction.CW);
             c.save(); c.clipPath(recorte);
-            boolean conMapa = nav && s.carroDatos != null && !Double.isNaN(s.posLat);
+            boolean conMapa = hayMapa || (nav && s.carroDatos != null && !Double.isNaN(s.posLat));
             p.setStyle(Paint.Style.FILL); p.setColor(fundido ? VELO : PANEL); if (!(fundido && conMapa)) c.drawRect(r, p);   // fundido y con mapa: el velo lo pone el mapa, desvanecido
             if (conMapa) mapa(c, s, x0, y0, x1, y1, u);
             float pie = franja ? 22 * u : 0;
@@ -219,8 +245,8 @@ public class CubiCarro extends CarAppService {
                     texto(c, dist, tx, fy - (calle.isEmpty() ? -4 * u * k : 1 * u * k), 12 * u * k, TINTA, true, Paint.Align.LEFT, tw);
                     if (!calle.isEmpty()) texto(c, calle, tx, fy + 8 * u * k, 5.5f * u * k, GRIS, false, Paint.Align.LEFT, tw);
                 }
-            } else {
-                // sin ruta: la hora y, si hay GPS, la velocidad
+            } else if (!conMapa) {
+                // sin ruta ni mapa: la hora y, si hay GPS, la velocidad
                 java.util.Calendar cal = java.util.Calendar.getInstance();
                 float cy = (y0 + y1 - pie) / 2;
                 texto(c, String.format(Locale.US, "%d:%02d", cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE)), x0 + w / 2, cy + 4 * u, 28 * u, TINTA, true, Paint.Align.CENTER, w);
@@ -541,7 +567,7 @@ public class CubiCarro extends CarAppService {
                 texto(c, sv.navLlega.isEmpty() ? "al destino" : "llegamos " + sv.navLlega, cx, y0 + alto * 0.5f, alto * 0.12f, GRIS, false, Paint.Align.CENTER, w);
             }
             if (haySeg) texto(c, "giro en " + Math.round(sv.navMetros * 3.6 / sv.kmh) + " s", cx, y0 + alto * (hayDest ? 0.8f : 0.55f), alto * 0.15f, AZUL, true, Paint.Align.CENTER, w);
-            if (!hayDest && !haySeg) texto(c, "En ruta", cx, y0 + alto * 0.55f, alto * 0.16f, GRIS, true, Paint.Align.CENTER, w);
+            if (!hayDest && !haySeg && !sv.navDir.isEmpty() && System.currentTimeMillis() - sv.navCuando < 120000) texto(c, "En ruta", cx, y0 + alto * 0.55f, alto * 0.16f, GRIS, true, Paint.Align.CENTER, w);
         }
         private void ovalo(Canvas c, float cx, float cy, float rx, float ry) { gr.set(cx - rx, cy - ry, cx + rx, cy + ry); c.drawOval(gr, p); }
         private void tri(Canvas c, float ax, float ay, float bx, float by, float cx, float cy) { gp.rewind(); gp.moveTo(ax, ay); gp.lineTo(bx, by); gp.lineTo(cx, cy); gp.close(); c.drawPath(gp, p); }

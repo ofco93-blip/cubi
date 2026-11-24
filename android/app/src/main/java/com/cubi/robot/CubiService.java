@@ -520,6 +520,16 @@ public class CubiService extends Service {
     volatile long carroViendo;
     boolean carroMapa() { return System.currentTimeMillis() - carroViendo < 6000; }
     void carroEntra() { carroViendo = System.currentTimeMillis(); gps(); }
+    // al conectarse el carro: si a los 6 s no suena nada, le da "play" al último reproductor (como el botón del volante)
+    void carroPrende() {
+        ui.postDelayed(() -> {
+            AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
+            if (musicaPlay || am.isMusicActive()) return;
+            long t = android.os.SystemClock.uptimeMillis();
+            am.dispatchMediaKeyEvent(new android.view.KeyEvent(t, t, android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_MEDIA_PLAY, 0));
+            am.dispatchMediaKeyEvent(new android.view.KeyEvent(t, t, android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_MEDIA_PLAY, 0));
+        }, 6000);
+    }
     volatile java.util.List<String> mapaZonas;      // el agua, los parques y los ríos, para la pantalla del carro
     volatile long mapaCuando;                       // cuándo llegó la última posición y a qué velocidad (m/s): el carro estima el avance entre una y otra
     volatile float mapaVel;
@@ -784,7 +794,7 @@ public class CubiService extends Service {
         // el destino guardado se vuelve a buscar al arrancar (una vez por minuto si falla)
         if (Double.isNaN(destLat) && !destinoTexto().isEmpty() && !destBuscando && ahora - destIntento > 60000) destino(destinoTexto());
         boolean hayDestino = !Double.isNaN(destLat);
-        if (ahora - navCuando > 120000 && !hayDestino) return;   // sin ruta en Maps ni destino propio no hay mapa
+        if (ahora - navCuando > 120000 && !hayDestino && !carroMapa()) return;   // sin ruta ni destino solo hay mapa para la pantalla del carro
         if (l.hasBearing() && l.hasSpeed() && l.getSpeed() > 1.5f) mapaRumbo = l.getBearing();   // parado, el rumbo del GPS no sirve
         final double lat = l.getLatitude(), lon = l.getLongitude();
         posLat = lat; posLon = lon;
