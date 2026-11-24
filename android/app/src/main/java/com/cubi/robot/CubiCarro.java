@@ -71,9 +71,13 @@ public class CubiCarro extends CarAppService {
     // Cubi traza su ruta a ese sitio y trata de arrancar el viaje en Google Maps
     static void irA(CarContext c, String q) {
         if (CubiService.yo != null) CubiService.yo.destino(q);
+        // Maps se abre en la pantalla del celular (y el carro lo proyecta). Desde el contexto del carro Android lo intenta
+        // abrir en la pantalla virtual del carro y lo niega ("Permission Denial ... launchDisplayId"): visto en el registro.
         try {
-            c.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("google.navigation:q=" + android.net.Uri.encode(q)))
-                    .setPackage("com.google.android.apps.maps").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            android.content.Context app = CubiService.yo != null ? CubiService.yo : c.getApplicationContext();
+            app.startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("google.navigation:q=" + android.net.Uri.encode(q)))
+                    .setPackage("com.google.android.apps.maps").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    android.app.ActivityOptions.makeBasic().setLaunchDisplayId(android.view.Display.DEFAULT_DISPLAY).toBundle());
         } catch (Exception e) { }
     }
 
