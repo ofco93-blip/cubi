@@ -157,6 +157,7 @@ public class CubiCarro extends CarAppService {
         @Override public void onVisibleAreaChanged(@NonNull Rect r) { zona.set(r); }
         // un toque en el dibujo (los carros con Android Auto reciente lo avisan): si cayó en un botón de música, lo manda
         @Override public void onClick(float x, float y) {
+            if (lienzo.tocaDestino(x, y)) { getScreenManager().push(new Buscar(getCarContext())); return; }   // el botón Destino del mapa
             int k = lienzo.boton(x, y);
             if (k != 2 && CubiService.yo != null) CubiService.yo.musicaTecla(k);
         }
@@ -325,6 +326,19 @@ public class CubiCarro extends CarAppService {
                     if (an > cabe) tamF = Math.max(4.2f * u, tamF * cabe / an);
                     texto(c, d, x0 + w / 2, y1 - 4.5f * u, tamF, TINTA, true, Paint.Align.CENTER, cabe);
                 }
+            }
+            // El botón Destino, siempre a la vista arriba a la derecha del mapa (si el carro avisa los toques): abre el
+            // buscador, donde se escribe o se dicta con el micrófono del teclado del carro.
+            destR.setEmpty();
+            if (conMapa && botones) {
+                float bh = 11 * u, bw = 36 * u;
+                destR.set(x1 - 3 * u - bw, y0 + 3 * u, x1 - 3 * u, y0 + 3 * u + bh);
+                p.setStyle(Paint.Style.FILL); p.setColor(0xd905070c); c.drawRoundRect(destR, bh / 2, bh / 2, p);
+                float lx = destR.left + 7 * u, ly = destR.centerY() - 0.6f * u, lr = 2.3f * u;
+                p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeWidth(0.9f * u); p.setColor(TINTA);
+                c.drawCircle(lx, ly, lr, p); c.drawLine(lx + lr * 0.75f, ly + lr * 0.75f, lx + lr * 1.7f, ly + lr * 1.7f, p);
+                p.setStyle(Paint.Style.FILL);
+                texto(c, "Destino", destR.left + 13 * u, destR.centerY() + 2 * u, 5.5f * u, TINTA, true, Paint.Align.LEFT, bw - 15 * u);
             }
             if (franja) {
                 p.setColor(0xe605070c); c.drawRect(x0, y1 - pie, x1, y1, p);
@@ -530,6 +544,8 @@ public class CubiCarro extends CarAppService {
         }
         // Los botones de música de la barra: dónde quedaron (para saber cuál se tocó). botones: el carro avisa los toques.
         boolean botones;
+        private final RectF destR = new RectF();                      // dónde quedó el botón Destino (vacío si no se pintó)
+        boolean tocaDestino(float x, float y) { return destR.contains(x, y); }
         private float panX, panY, zoom = 1; private long panCuando;   // el mapa corrido con el dedo (en puntos del suelo) y qué tan cerca
         void mover(float dx, float dy) { panX = Math.max(-1500, Math.min(1500, panX + dx)); panY = Math.max(-1500, Math.min(1500, panY + dy)); panCuando = System.currentTimeMillis(); }
         void acercar(float f) { if (f > 0) zoom = Math.max(0.45f, Math.min(3f, zoom * f)); panCuando = System.currentTimeMillis(); }
