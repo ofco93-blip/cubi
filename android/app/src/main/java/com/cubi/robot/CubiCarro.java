@@ -115,12 +115,14 @@ public class CubiCarro extends CarAppService {
         }
 
         @NonNull @Override public Template onGetTemplate() {
-            return new NavigationTemplate.Builder().setActionStrip(new ActionStrip.Builder()
+            NavigationTemplate.Builder b = new NavigationTemplate.Builder().setActionStrip(new ActionStrip.Builder()
                     .addAction(tecla(R.drawable.carro_antes, -1)).addAction(tecla(sonaba ? R.drawable.carro_pausa : R.drawable.carro_play, 0)).addAction(tecla(R.drawable.carro_sigue, 1))
-                    .addAction(new Action.Builder().setTitle("Opciones").setOnClickListener(() -> getScreenManager().push(new Opciones(getCarContext()))).build()).build())
+                    .addAction(new Action.Builder().setTitle("Opciones").setOnClickListener(() -> getScreenManager().push(new Opciones(getCarContext()))).build()).build());
                     // la lupa: buscar destino (va en la tira del mapa, que solo admite dibujitos; también está en Opciones)
-                    .setMapActionStrip(new ActionStrip.Builder().addAction(new Action.Builder().setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), R.drawable.carro_buscar)).build())
-                            .setOnClickListener(() -> getScreenManager().push(new Buscar(getCarContext()))).build()).build()).build();
+            int nivel = 1; try { nivel = getCarContext().getCarAppApiLevel(); } catch (Exception e) { }
+            if (nivel >= 2) b.setMapActionStrip(new ActionStrip.Builder().addAction(new Action.Builder().setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), R.drawable.carro_buscar)).build())
+                            .setOnClickListener(() -> getScreenManager().push(new Buscar(getCarContext()))).build()).build());
+            return b.build();
         }
 
         private Action tecla(int icono, int cual) {
