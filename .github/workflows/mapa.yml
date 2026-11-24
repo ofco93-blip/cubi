@@ -17,9 +17,9 @@ jobs:
       - uses: actions/checkout@v4
       - run: pip install osmium
       - run: curl -sSfL -o pais.osm.pbf https://download.geofabrik.de/south-america/colombia-latest.osm.pbf
-      - run: python herramientas/mapa/mapa_pais.py && python herramientas/mapa/mapa_pais.py pais.osm.pbf colombia.cubimapa && ls -l colombia.cubimapa
+      - run: python herramientas/mapa/mapa_pais.py && python herramientas/mapa/mapa_pais.py pais.osm.pbf colombia2.cubimapa && ls -l colombia2.cubimapa
       - env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view mapa-co >/dev/null 2>&1 || gh release create mapa-co --prerelease --latest=false --target main --title "Mapa de Colombia" --notes "Vías de Colombia para el mapa del carro sin internet. Datos © colaboradores de OpenStreetMap (ODbL)."
-          gh release upload mapa-co colombia.cubimapa --clobber
+          gh release upload mapa-co colombia2.cubimapa --clobber
