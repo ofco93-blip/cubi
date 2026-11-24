@@ -158,6 +158,7 @@ public class CubiCarro extends CarAppService {
             try { c = s.lockHardwareCanvas(); } catch (Exception e) { return; }
             try {
                 Rect a = zona.isEmpty() ? new Rect(0, 0, ancho, alto) : zona;
+                lienzo.zEsc = new float[]{1f, 0.8f, 0.62f}[prefs.getInt("carroZeldaTam", 0) % 3];
                 lienzo.dibujar(c, a, firme, CubiService.yo, prefs.getInt("carroVista", prefs.getBoolean("carroSola", false) ? 1 : 0), prefs.getInt("ojos", 0xffffff), prefs.getBoolean("carroZelda", true), prefs.getInt("carroFondo", -1));
             } catch (Throwable t) {
                 // un error al dibujar no puede tumbar la app: se apagan los clips (queda la Zelda dibujada) y el error
@@ -172,6 +173,7 @@ public class CubiCarro extends CarAppService {
     // Las opciones: tres renglones; cada toque pasa a la siguiente opción de ese renglón. El personaje es solo de esta pantalla: el robot sigue con el suyo.
     static class Opciones extends Screen {
         static final String[] FONDOS = {"Automático (oscuro)", "Cielo", "Chicle", "Menta", "Lila", "Noche"};
+        static final String[] TAMANOS = {"Grande", "Mediana", "Pequeña (mapa más amplio)"};
         static final String[] VISTAS = {"Personaje, y mapa cuando hay ruta", "Solo el personaje", "Solo el mapa"};
         Opciones(CarContext c) { super(c); }
 
@@ -183,6 +185,7 @@ public class CubiCarro extends CarAppService {
                     .addItem(new Row.Builder().setTitle("Buscar destino").addText("Traza la ruta y la abre en Google Maps").setOnClickListener(() -> getScreenManager().push(new Buscar(getCarContext()))).build())
                     .addItem(fila("Personaje en esta pantalla", zelda ? "Zelda" : "Cubi", () -> p.edit().putBoolean("carroZelda", !zelda).apply()))
                     .addItem(fila("Fondo de Zelda", FONDOS[fondo + 1], () -> p.edit().putInt("carroFondo", fondo >= 4 ? -1 : fondo + 1).apply()))
+                    .addItem(fila("Tamaño de Zelda junto al mapa", TAMANOS[p.getInt("carroZeldaTam", 0) % 3], () -> p.edit().putInt("carroZeldaTam", (p.getInt("carroZeldaTam", 0) + 1) % 3).apply()))
                     .addItem(fila("Vista", VISTAS[vista], () -> p.edit().putInt("carroVista", (vista + 1) % 3).apply()))
                     .build();
             return new ListTemplate.Builder().setTitle("Opciones de Cubi").setHeaderAction(Action.BACK).setSingleList(lista).build();
@@ -240,7 +243,7 @@ public class CubiCarro extends CarAppService {
                 fundido = true;
                 if (aLoAncho) {                                                     // Zelda a la izquierda, el mapa en lo que queda libre y la cajita abajo
                     zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, 2);
-                    float izq = Math.max(zLibre, a.left + a.width() * 0.3f) + m, abajo = a.bottom - Math.max(a.height() * 0.16f, 30) - m, parte = suena ? a.top + m + (abajo - a.top - m) * 0.68f : abajo;
+                    float izq = Math.max(zLibre, a.left + a.width() * 0.3f * zEsc) + m, abajo = a.bottom - Math.max(a.height() * 0.16f, 30) - m, parte = suena ? a.top + m + (abajo - a.top - m) * 0.68f : abajo;
                     if (suena) {                                                    // la letra, sobre una tarjeta oscura para que se lea
                         gr.set(izq, parte + m / 2, a.right - m, abajo); p.setStyle(Paint.Style.FILL); p.setColor(0x73000000); c.drawRoundRect(gr, 5 * u, 5 * u, p);
                         letra(c, s, gr.left + gr.width() * 0.05f, gr.top + gr.height() * 0.06f, gr.width() * 0.9f, gr.height() * 0.9f);
@@ -398,7 +401,8 @@ public class CubiCarro extends CarAppService {
             int c0 = tinte == null ? TEMA[tm][0] : mezcla(TEMA[tm][0], tinte[0], ft), c1 = tinte == null ? TEMA[tm][1] : mezcla(TEMA[tm][1], tinte[1], ft), c2 = tinte == null ? TEMA[tm][2] : mezcla(TEMA[tm][2], tinte[2], ft);
             c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); if (!lleno) c.clipPath(gp);
             // el fondo y la repisa. El clip es de 1280x720; aquí se ajusta al alto: "sc" pasa de sus puntos a la pantalla.
-            float sc = vh / 720f, libre = x0 + 1280 * sc * 0.62f, repisa = y0 + 688 * sc;   // libre: donde termina ella y empieza el fondo vacío
+            float sc = vh / 720f, repisa = y0 + 688 * sc;
+            float ze = estilo == 2 ? zEsc : 1, scz = sc * ze, libre = x0 + 1280 * scz * 0.62f;   // ze: más chica junto al mapa. libre: donde termina ella y empieza el fondo vacío
             zLibre = libre;
             if (fondoSh == null || fondoT != c0 || fondoB != c1 || fondoY != y0 || fondoH != vh) {
                 fondoT = c0; fondoB = c1; fondoY = y0; fondoH = vh;
@@ -447,16 +451,16 @@ public class CubiCarro extends CarAppService {
                     if (th > cabe) { tam *= cabe / th; tp.setTextSize(tam); th = cabe; }
                     tp.setTextAlign(Paint.Align.LEFT); c.drawText(hora, libre - th * 0.2f, y0 + vh * 0.5f + tam * 0.36f, tp);
                 } else {
-                    tp.setTextSize(100); tp.setTextSize(Math.min(vh * 0.24f, 100 * (anchoZ ? libre - x0 : w) * 0.92f / tp.measureText(hora)));
-                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, anchoZ ? x0 + 1280 * sc * 0.36f : (x0 + x1) / 2, y0 + vh * 0.225f, tp);
+                    tp.setTextSize(100); tp.setTextSize(Math.min(vh * 0.24f * ze, 100 * (anchoZ ? libre - x0 : w) * 0.92f / tp.measureText(hora)));
+                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, anchoZ ? x0 + 1280 * scz * 0.36f : (x0 + x1) / 2, repisa - (repisa - (y0 + vh * 0.225f)) * ze, tp);
                 }
             }
             // ella: su cuadro (recortado del clip desde el punto rx,40; el de señalar es más ancho), dejando solo donde su
             // silueta es blanca. Va en espejo; al revés (sin espejo) queda en el mismo sitio, porque está centrada en x=784.
             float rx = clip.equals("senala") ? 80 : 360, bw = b.getWidth();
-            float izq = alReves ? x0 + (rx - 288) * sc : x0 + (1280 - rx - bw) * sc;
-            c.saveLayer(izq - 1, y0, izq + bw * sc + 1, repisa, null);
-            mz.setScale(alReves ? sc : -sc, sc); mz.postTranslate(alReves ? izq : izq + bw * sc, y0 + 40 * sc); c.concat(mz);
+            float izq = alReves ? x0 + (rx - 288) * scz : x0 + (1280 - rx - bw) * scz;
+            c.saveLayer(izq - 1, repisa - 648 * scz - 1, izq + bw * scz + 1, repisa, null);
+            mz.setScale(alReves ? scz : -scz, scz); mz.postTranslate(alReves ? izq : izq + bw * scz, repisa - 648 * scz); c.concat(mz);
             p.setFilterBitmap(true); p.setColor(0xffffffff); c.drawBitmap(b, 0, 0, p);
             android.graphics.BitmapShader sil = new android.graphics.BitmapShader(mascZ, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
             mm.setScale(b.getWidth() / (float) mascZ.getWidth(), b.getHeight() / (float) mascZ.getHeight()); sil.setLocalMatrix(mm);
@@ -498,6 +502,7 @@ public class CubiCarro extends CarAppService {
         }
         // Los botones de música de la barra: dónde quedaron (para saber cuál se tocó). botones: el carro avisa los toques.
         boolean botones;
+        float zEsc = 1;                                               // tamaño de Zelda junto al mapa (opción del carro)
         private final float[] botX = new float[3]; private float botY, botR;
         int boton(float x, float y) {                                 // -1 atrás, 0 pausa o seguir, 1 siguiente; 2 si no tocó ninguno
             for (int i = 0; i < 3; i++) if (botR > 0 && Math.hypot(x - botX[i], y - botY) < botR * 1.5f) return i - 1;
