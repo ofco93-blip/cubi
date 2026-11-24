@@ -130,7 +130,9 @@ public class CubiCarro extends CarAppService {
                     // la lupa: buscar destino (va en la tira del mapa, que solo admite dibujitos; también está en Opciones)
             int nivel = 1; try { nivel = getCarContext().getCarAppApiLevel(); } catch (Exception e) { }
             if (nivel >= 2) b.setMapActionStrip(new ActionStrip.Builder().addAction(new Action.Builder().setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), R.drawable.carro_buscar)).build())
-                            .setOnClickListener(() -> getScreenManager().push(new Buscar(getCarContext()))).build()).build());
+                            .setOnClickListener(() -> getScreenManager().push(new Buscar(getCarContext()))).build())
+                    // el botón de mover: en los carros que no mandan los dedos directo, activa el modo de arrastrar el mapa
+                    .addAction(new Action.Builder(Action.PAN).setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), R.drawable.carro_mover)).build()).build()).build());
             return b.build();
         }
 
@@ -150,6 +152,9 @@ public class CubiCarro extends CarAppService {
             if (k != 2 && CubiService.yo != null) CubiService.yo.musicaTecla(k);
         }
         @Override public void onStableAreaChanged(@NonNull Rect r) { firme.set(r); }
+        // arrastrar mueve el mapa y pellizcar lo acerca o aleja; a los 10 s sin tocar vuelve solo al carro
+        @Override public void onScroll(float dx, float dy) { lienzo.mover(-dx, -dy); }
+        @Override public void onScale(float fx, float fy, float factor) { lienzo.acercar(factor); }
         @Override public void onSurfaceDestroyed(@NonNull SurfaceContainer s) { sup = null; h.removeCallbacks(cuadro); }
 
         private void pintar() {
@@ -459,7 +464,7 @@ public class CubiCarro extends CarAppService {
                     tp.setTextAlign(Paint.Align.LEFT); c.drawText(hora, libre - th * 0.2f, y0 + vh * 0.5f + tam * 0.36f, tp);
                 } else {
                     tp.setTextSize(100); tp.setTextSize(Math.min(vh * 0.24f * ze, 100 * (anchoZ ? libre - x0 : w) * 0.92f / tp.measureText(hora)));
-                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, anchoZ ? x0 + 1280 * scz * 0.36f : (x0 + x1) / 2, repisa - (repisa - (y0 + vh * 0.225f)) * ze, tp);
+                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, anchoZ ? x0 + 1280 * scz * 0.36f : (x0 + x1) / 2, y0 + vh * 0.225f * (ze < 1 ? 0.9f : 1), tp);
                 }
             }
             // ella: su cuadro (recortado del clip desde el punto rx,40; el de señalar es más ancho), dejando solo donde su
@@ -509,6 +514,9 @@ public class CubiCarro extends CarAppService {
         }
         // Los botones de música de la barra: dónde quedaron (para saber cuál se tocó). botones: el carro avisa los toques.
         boolean botones;
+        private float panX, panY, zoom = 1; private long panCuando;   // el mapa corrido con el dedo (en puntos del suelo) y qué tan cerca
+        void mover(float dx, float dy) { panX = Math.max(-1500, Math.min(1500, panX + dx)); panY = Math.max(-1500, Math.min(1500, panY + dy)); panCuando = System.currentTimeMillis(); }
+        void acercar(float f) { if (f > 0) zoom = Math.max(0.45f, Math.min(3f, zoom * f)); panCuando = System.currentTimeMillis(); }
         float zEsc = 1;                                               // tamaño de Zelda junto al mapa (opción del carro)
         private final float[] botX = new float[3]; private float botY, botR;
         int boton(float x, float y) {                                 // -1 atrás, 0 pausa o seguir, 1 siguiente; 2 si no tocó ninguno
@@ -737,7 +745,7 @@ public class CubiCarro extends CarAppService {
             float ax = 0, ay = 0; boolean ad = false;
             for (int i = 0, fin = cerrado ? n + 1 : n; i < fin; i++) {
                 int j = (i % n) * 2;
-                float sx = mk * (v[j] - mpx), sy = -mk * (v[j + 1] - mpy), x = sx * mcos - sy * msin, y = sx * msin + sy * mcos;
+                float sx = mk * (v[j] - mpx), sy = -mk * (v[j + 1] - mpy), x = sx * mcos - sy * msin + panX, y = sx * msin + sy * mcos + panY;
                 boolean d = y <= mlim;
                 if (i > 0 && d != ad) {                                  // cruza la línea de corte: el punto justo en la línea
                     float t = (mlim - ay) / (y - ay), ix = ax + (x - ax) * t;
@@ -873,7 +881,8 @@ public class CubiCarro extends CarAppService {
             double ra = Math.toRadians(rumbo), kx = 111320 * Math.cos(Math.toRadians(d.lat0));
             // un rectángulo del suelo (ancho a, b hacia adelante, e hacia atrás) se pinta como trapecio: angosto y alto lo lejano
             float a = w * 0.6f, b = h * 1.7f, e = h * 0.3f;
-            mk = k; mlim = e; mcos = (float) Math.cos(Math.toRadians(-rumboS)); msin = (float) Math.sin(Math.toRadians(-rumboS));
+            if (System.currentTimeMillis() - panCuando > 10000) { panX *= 0.8f; panY *= 0.8f; if (Math.abs(panX) + Math.abs(panY) < 2) panX = panY = 0; }   // vuelve solo al carro
+            mk = k * zoom; mlim = e; mcos = (float) Math.cos(Math.toRadians(-rumboS)); msin = (float) Math.sin(Math.toRadians(-rumboS));
             mpx = (float) ((s.posLon - d.lon0) * kx + Math.sin(ra) * s.mapaVel * dt); mpy = (float) ((s.posLat - d.lat0) * 111320 + Math.cos(ra) * s.mapaVel * dt);
             for (Path q : calles) q.rewind();
             for (Path q : zonasP) q.rewind();
@@ -925,7 +934,7 @@ public class CubiCarro extends CarAppService {
             tp.setShadowLayer(3 * k, 0, 0, 0xff05070c);
             for (int i = 0; i < rotNom.length; i++) {
                 float ax = mk * (rotPos[4 * i] - mpx), ay = -mk * (rotPos[4 * i + 1] - mpy), bx = mk * (rotPos[4 * i + 2] - mpx), by = -mk * (rotPos[4 * i + 3] - mpy);
-                float xm = (ax + bx) / 2, ym = (ay + by) / 2, qx = xm * mcos - ym * msin, qy = xm * msin + ym * mcos;   // el centro del tramo, ya girado
+                float xm = (ax + bx) / 2, ym = (ay + by) / 2, qx = xm * mcos - ym * msin + panX, qy = xm * msin + ym * mcos + panY;   // el centro del tramo, ya girado
                 if (qy > mlim || qy < -b || Math.abs(qx) > a) continue;
                 float vx = (bx - ax) * mcos - (by - ay) * msin, vy = (bx - ax) * msin + (by - ay) * mcos, vl = (float) Math.hypot(vx, vy);
                 if (vl == 0) continue;
@@ -936,7 +945,8 @@ public class CubiCarro extends CarAppService {
             }
             tp.clearShadowLayer(); tp.setTextAlign(Paint.Align.LEFT);
             c.restore(); p.setStyle(Paint.Style.FILL);
-            // el carro: una flecha
+            // el carro: una flecha (corrida con el mapa, pasada por la misma inclinación)
+            if (panX != 0 || panY != 0) { float[] pt = {panX, panY}; inclina.mapPoints(pt); cx += pt[0]; cy += pt[1]; }
             p.setColor(0x40000000); c.drawCircle(cx, cy, 8 * u, p);
             gp.rewind(); gp.moveTo(cx, cy - 6 * u); gp.lineTo(cx + 4.6f * u, cy + 4.6f * u); gp.lineTo(cx, cy + 2 * u); gp.lineTo(cx - 4.6f * u, cy + 4.6f * u); gp.close();
             p.setColor(0xffffffff); c.drawPath(gp, p);
