@@ -485,6 +485,10 @@ public class CubiService extends Service {
                     if (n != null) climaLugar = n;
                 }
             } catch (Exception ignored) {}
+            if (climaLugar.isEmpty()) try {
+                JSONObject a = new JSONObject(bajarTexto("https://nominatim.openstreetmap.org/reverse?format=json&zoom=10&accept-language=es&lat=" + ll[0] + "&lon=" + ll[1])).optJSONObject("address");
+                if (a != null) for (String k : new String[]{"city", "town", "village", "municipality", "county"}) if (a.has(k)) { climaLugar = a.optString(k); break; }
+            } catch (Exception ignored) {}
         }).start();
     }
 
@@ -600,7 +604,7 @@ public class CubiService extends Service {
     // ---------- el mapa de la pantalla del carro ----------
     // Va aparte del del robot (que solo entiende 375 m a la redonda): 900 m alrededor de un punto adelantado hacia donde
     // va el carro, porque la respuesta puede tardar más de medio minuto. Las líneas van en metros desde (lat0, lon0).
-    static class MapaCarro { double lat0, lon0; float[][] lineas; byte[] clase; }   // clase: 0 calle, 1 avenida, 2 ruta, 3 agua, 4 parque, 5 río
+    static class MapaCarro { double lat0, lon0; float[][] lineas; byte[] clase; String[] nombre; }   // nombre: el de la calle, o null   // clase: 0 calle, 1 avenida, 2 ruta, 3 agua, 4 parque, 5 río
     volatile MapaCarro carroDatos;
     volatile String carroEstado = "Mapa: esperando el GPS.";
     volatile double posLat = Double.NaN, posLon;
@@ -616,7 +620,7 @@ public class CubiService extends Service {
     // ---------- el mapa del país guardado en el celular (sin internet) ----------
     // Un solo archivo con las vías de Colombia, que arma herramientas/mapa/mapa_pais.py (ahí está el formato) y se baja
     // una vez desde la pestaña Mapa. Con él, el mapa del carro no pide nada por internet.
-    static final String PAIS_URL = "https://github.com/ofco93-blip/cubi/releases/download/mapa-co/colombia.cubimapa";
+    static final String PAIS_URL = "https://github.com/ofco93-blip/cubi/releases/download/mapa-co/colombia2.cubimapa";   // el 2 trae los nombres de las calles; el primero no
     private volatile String paisEstado = "";
     private volatile boolean paisBajando;
     private volatile int[] paisIndice; private volatile long paisDe;
@@ -662,7 +666,7 @@ public class CubiService extends Service {
             }
             double kx = 111320 * Math.cos(Math.toRadians(lat));
             float cx = (float) ((clon - lon) * kx), cy = (float) ((clat - lat) * 111320);
-            ArrayList<float[]> ls = new ArrayList<>(); ArrayList<Byte> cs = new ArrayList<>();
+            ArrayList<float[]> ls = new ArrayList<>(); ArrayList<Byte> cs = new ArrayList<>(); ArrayList<String> ns = new ArrayList<>();
             int fy = (int) Math.floor((clat + 90) / 0.02), fx = (int) Math.floor((clon + 180) / 0.02);
             byte[] t = new byte[8192]; int[] p = new int[1];
             for (int y = fy - 1; y <= fy + 1; y++) for (int x = fx - 1; x <= fx + 1; x++) {
@@ -676,7 +680,9 @@ public class CubiService extends Service {
                 inf.end();
                 byte[] b = o.toByteArray();
                 for (p[0] = 0; p[0] < b.length; ) {
-                    byte cl = b[p[0]++]; int np = varint(b, p); boolean cerca = false;
+                    byte cl = b[p[0]++]; String nom = null;
+                    if (cl < 0) { int ln = varint(b, p); nom = new String(b, p[0], ln, "UTF-8"); p[0] += ln; cl &= 127; }   // +128: trae nombre
+                    int np = varint(b, p); boolean cerca = false;
                     long pa = y * 20000L - 90000000L, po = x * 20000L - 180000000L;
                     float[] v = new float[np * 2];
                     for (int i = 0; i < np; i++) {
@@ -685,12 +691,12 @@ public class CubiService extends Service {
                         v[2 * i] = (float) ((po / 1e6 - lon) * kx); v[2 * i + 1] = (float) ((pa / 1e6 - lat) * 111320);
                         cerca |= Math.abs(v[2 * i] - cx) < 1300 && Math.abs(v[2 * i + 1] - cy) < 1300;
                     }
-                    if (cerca && np >= 2) { ls.add(v); cs.add(cl); }
+                    if (cerca && np >= 2) { ls.add(v); cs.add(cl); ns.add(nom); }
                 }
             }
             if (ls.isEmpty()) return null;
             MapaCarro d = new MapaCarro();
-            d.lat0 = lat; d.lon0 = lon; d.lineas = ls.toArray(new float[0][]); d.clase = new byte[cs.size()];
+            d.lat0 = lat; d.lon0 = lon; d.lineas = ls.toArray(new float[0][]); d.clase = new byte[cs.size()]; d.nombre = ns.toArray(new String[0]);
             for (int i = 0; i < d.clase.length; i++) d.clase[i] = cs.get(i);
             return d;
         }
@@ -736,7 +742,8 @@ public class CubiService extends Service {
             double kx = 111320 * Math.cos(Math.toRadians(lat));
             java.util.ArrayList<float[]> ls = new java.util.ArrayList<>();
             java.util.ArrayList<Byte> cs = new java.util.ArrayList<>();
-            for (double[][] a : aguaGrande) { ls.add(aMetros(a[0], a[1], lat, lon, kx)); cs.add((byte) 3); }
+            java.util.ArrayList<String> ns = new java.util.ArrayList<>();
+            for (double[][] a : aguaGrande) { ls.add(aMetros(a[0], a[1], lat, lon, kx)); cs.add((byte) 3); ns.add(null); }
             for (int e = 0; e < els.length(); e++) {
                 JSONObject w = els.getJSONObject(e);
                 JSONArray g = w.optJSONArray("geometry");
@@ -748,10 +755,11 @@ public class CubiService extends Service {
                 for (int i = 0; i < g.length(); i++) { la[i] = g.getJSONObject(i).getDouble("lat"); lo[i] = g.getJSONObject(i).getDouble("lon"); }
                 ls.add(aMetros(la, lo, lat, lon, kx));
                 cs.add((byte) (!tipo.isEmpty() ? (grande ? 1 : 0) : tags.has("waterway") ? 5 : tags.has("natural") ? 3 : 4));
+                ns.add(tipo.isEmpty() ? null : tags.has("name") ? tags.optString("name") : tags.has("ref") ? tags.optString("ref") : null);
             }
             if (ls.isEmpty()) { carroEstado = "Mapa: no hay calles en el mapa por aquí."; return; }
             MapaCarro d = new MapaCarro();
-            d.lat0 = lat; d.lon0 = lon; d.lineas = ls.toArray(new float[0][]); d.clase = new byte[cs.size()];
+            d.lat0 = lat; d.lon0 = lon; d.lineas = ls.toArray(new float[0][]); d.clase = new byte[cs.size()]; d.nombre = ns.toArray(new String[0]);
             for (int i = 0; i < d.clase.length; i++) d.clase[i] = cs.get(i);
             carroDatos = d; carroEstado = "";
         } catch (Exception e) {

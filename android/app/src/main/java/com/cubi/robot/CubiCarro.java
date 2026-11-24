@@ -289,9 +289,10 @@ public class CubiCarro extends CarAppService {
             }
             if (nav && !conMapa)                                         // sin mapa: por qué (sin GPS, bajando las calles, sin internet…)
                 texto(c, s.gpsActivo() ? s.carroEstado : "Para ver el mapa, prende “Usar el GPS” en la app de Cubi", x0 + w / 2, y0 + (y1 - y0) * 0.9f, 4.5f * u, fundido ? 0xe6ffffff : GRIS, false, Paint.Align.CENTER, w - 8 * u);
-            if (nav && fundido && aLoAncho) {
-                String d = s.navDestM < 0 ? "" : metros(s.navDestM) + (s.navLlega.isEmpty() ? " al destino" : "  ·  llegamos " + s.navLlega);
-                boolean haySeg = s.navMetros >= 0 && s.kmh >= 8 && s.navMetros * 3.6 / s.kmh < 100;
+            if ((nav || conMapa) && fundido && aLoAncho) {
+                String d = conMapa ? calleAhora : "";
+                if (nav && s.navDestM >= 0) d += (d.isEmpty() ? "" : "  ·  ") + metros(s.navDestM) + (s.navLlega.isEmpty() ? " al destino" : "  ·  llegamos " + s.navLlega);
+                boolean haySeg = nav && s.navMetros >= 0 && s.kmh >= 8 && s.navMetros * 3.6 / s.kmh < 100;
                 if (haySeg) d += (d.isEmpty() ? "" : "  ·  ") + "giro en " + Math.round(s.navMetros * 3.6 / s.kmh) + " s";
                 if (!d.isEmpty()) {
                     p.setColor(0x8005070c); c.drawRect(x0, y1 - 13 * u, x1, y1, p);
@@ -822,6 +823,39 @@ public class CubiCarro extends CarAppService {
             } else if (nMet > 0 && sabe) n = nMet;
             return n < 2 ? null : java.util.Arrays.copyOf(pts, n * 2);
         }
+        // Los nombres de las calles: una vez por posición del GPS se eligen los 10 más cercanos de adelante (uno por nombre,
+        // primero las avenidas) y se anota la calle por la que va (calleAhora). rotPos: los dos puntos del tramo, en metros.
+        private String[] rotNom = new String[0]; private float[] rotPos = new float[0];
+        private long rotDe; private CubiService.MapaCarro rotDatos; private String calleAhora = "";
+        private void rotulos(CubiService.MapaCarro d, float px, float py, double ra) {
+            java.util.HashMap<String, float[]> mejor = new java.util.HashMap<>();   // nombre -> {nota, ax, ay, bx, by}
+            float dx = (float) Math.sin(ra), dy = (float) Math.cos(ra), cerca = 30;
+            calleAhora = "";
+            for (int m = 0; d.nombre != null && m < d.lineas.length && m < d.nombre.length; m++) {
+                String nm = d.nombre[m];
+                if (nm == null || nm.isEmpty() || d.clase[m] > 1) continue;
+                float[] v = d.lineas[m];
+                for (int j = 2; j < v.length; j += 2) {
+                    float ax = v[j - 2], ay = v[j - 1], bx = v[j], by = v[j + 1], vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy;
+                    if (l2 < 100) continue;                           // pedacitos de menos de 10 m no
+                    float largo = (float) Math.sqrt(l2), t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / l2));
+                    float lejos = (float) Math.hypot(px - ax - t * vx, py - ay - t * vy);
+                    if (lejos < cerca && Math.abs(vx * dx + vy * dy) > 0.7f * largo) { cerca = lejos; calleAhora = nm; }
+                    float mx = (ax + bx) / 2 - px, my = (ay + by) / 2 - py, ade = mx * dx + my * dy, lado = mx * dy - my * dx;
+                    if (ade < -40 || ade > 450 || Math.abs(lado) > 280) continue;
+                    float nota = (float) Math.hypot(mx, my) - (d.clase[m] == 1 ? 80 : 0) - Math.min(60, largo * 0.5f);
+                    float[] o = mejor.get(nm);
+                    if (o == null || nota < o[0]) mejor.put(nm, new float[]{nota, ax, ay, bx, by});
+                }
+            }
+            mejor.remove(calleAhora);                                 // la suya va escrita abajo, no encima del carro
+            java.util.ArrayList<java.util.Map.Entry<String, float[]>> l = new java.util.ArrayList<>(mejor.entrySet());
+            java.util.Collections.sort(l, (a, b) -> Float.compare(a.getValue()[0], b.getValue()[0]));
+            int n = Math.min(10, l.size());
+            String[] nom = new String[n]; float[] pos = new float[n * 4];
+            for (int i = 0; i < n; i++) { nom[i] = l.get(i).getKey(); System.arraycopy(l.get(i).getValue(), 1, pos, 4 * i, 4); }
+            rotNom = nom; rotPos = pos;
+        }
         private void mapa(Canvas c, CubiService s, float x0, float y0, float x1, float y1, float u) {
             CubiService.MapaCarro d = s.carroDatos;
             float w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + h * 0.66f, k = w / 400f;
@@ -847,6 +881,7 @@ public class CubiCarro extends CarAppService {
                 rutaDe = rla; rutaDatos = d; rutaM = new float[Math.min(rla.length, rlo.length) * 2];
                 for (int i = 0; i * 2 < rutaM.length; i++) { rutaM[2 * i] = (float) ((rlo[i] - d.lon0) * kx); rutaM[2 * i + 1] = (float) ((rla[i] - d.lat0) * 111320); }
             }
+            if (rotDe != s.mapaCuando || rotDatos != d) { rotDe = s.mapaCuando; rotDatos = d; rotulos(d, (float) ((s.posLon - d.lon0) * kx), (float) ((s.posLat - d.lat0) * 111320), ra); }
             if (rutaM != null) trazo(rutaM, calles[2], false);
             else {                                                       // sin destino propio: el tramo hasta el próximo giro
                 // mientras haya flecha hay caminito (los mismos 2 min). Si Maps no dio la distancia: derecho 300 m, o el
@@ -879,6 +914,20 @@ public class CubiCarro extends CarAppService {
             // la ruta: azul con borde blanco
             p.setColor(0xffffffff); p.setStrokeWidth(11 * k); c.drawPath(calles[2], p);
             p.setColor(0xff2f7bff); p.setStrokeWidth(7 * k); c.drawPath(calles[2], p);
+            tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(12 * k); tp.setTextAlign(Paint.Align.CENTER); tp.setColor(0xf2ffffff);
+            tp.setShadowLayer(3 * k, 0, 0, 0xff05070c);
+            for (int i = 0; i < rotNom.length; i++) {
+                float ax = mk * (rotPos[4 * i] - mpx), ay = -mk * (rotPos[4 * i + 1] - mpy), bx = mk * (rotPos[4 * i + 2] - mpx), by = -mk * (rotPos[4 * i + 3] - mpy);
+                float xm = (ax + bx) / 2, ym = (ay + by) / 2, qx = xm * mcos - ym * msin, qy = xm * msin + ym * mcos;   // el centro del tramo, ya girado
+                if (qy > mlim || qy < -b || Math.abs(qx) > a) continue;
+                float vx = (bx - ax) * mcos - (by - ay) * msin, vy = (bx - ax) * msin + (by - ay) * mcos, vl = (float) Math.hypot(vx, vy);
+                if (vl == 0) continue;
+                if (vx < 0) { vx = -vx; vy = -vy; }                   // siempre de izquierda a derecha: nunca queda de cabeza
+                float medio = tp.measureText(rotNom[i]) / 2 + 4 * k;
+                gp.rewind(); gp.moveTo(qx - vx / vl * medio, qy - vy / vl * medio); gp.lineTo(qx + vx / vl * medio, qy + vy / vl * medio);
+                c.drawTextOnPath(rotNom[i], gp, 0, 4 * k, tp);
+            }
+            tp.clearShadowLayer(); tp.setTextAlign(Paint.Align.LEFT);
             c.restore(); p.setStyle(Paint.Style.FILL);
             // el carro: una flecha
             p.setColor(0x40000000); c.drawCircle(cx, cy, 8 * u, p);
