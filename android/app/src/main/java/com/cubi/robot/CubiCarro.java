@@ -57,24 +57,33 @@ public class CubiCarro extends CarAppService {
             private void navegar(Intent i) {
                 android.net.Uri d = i == null ? null : i.getData();
                 if (d == null || !androidx.car.app.CarContext.ACTION_NAVIGATE.equals(i.getAction())) return;
-                String q = d.getSchemeSpecificPart();                // "0,0?q=el sitio" o "lat,lon"
+                String q = d.getSchemeSpecificPart();                // "0,0?q=el sitio", "lat,lon", "lat,lon?q=lat,lon(nombre)"…
                 if (q == null) return;
+                String antes = q.indexOf('?') >= 0 ? q.substring(0, q.indexOf('?')) : q.indexOf("q=") >= 0 ? "" : q;
                 int k = q.indexOf("q=");
                 if (k >= 0) { q = q.substring(k + 2); int f = q.indexOf('&'); if (f >= 0) q = q.substring(0, f); q = android.net.Uri.decode(q); }
-                else if (q.indexOf('?') >= 0) q = q.substring(0, q.indexOf('?'));
-                q = q.trim();
-                if (q.isEmpty() || q.equals("0,0")) return;
-                irA(getCarContext(), q);
+                else q = "";
+                q = q.trim(); antes = antes.trim();
+                String punto = null, PUNTO = "-?\\d+(\\.\\d+)?\\s*,\\s*-?\\d+(\\.\\d+)?";
+                if (antes.matches(PUNTO) && !antes.matches("0+(\\.0+)?\\s*,\\s*0+(\\.0+)?")) punto = antes;
+                int par = q.indexOf('(');                             // "lat,lon(nombre)": el punto y, entre paréntesis, el nombre
+                if (par > 0 && q.endsWith(")") && q.substring(0, par).trim().matches(PUNTO)) { if (punto == null) punto = q.substring(0, par).trim(); q = q.substring(par + 1, q.length() - 1).trim(); }
+                else if (q.matches(PUNTO)) { if (punto == null) punto = q; }
+                if (q.isEmpty()) q = punto;
+                if (q == null || q.isEmpty()) return;
+                irA(getCarContext(), q, punto != null ? punto : q);
             }
         };
     }
     // Cubi traza su ruta a ese sitio y trata de arrancar el viaje en Google Maps
     private static String irQ = ""; private static long irCuando;
-    static void irA(CarContext c, String q) {
+    static void irA(CarContext c, String q) { irA(c, q, q); }
+    // q: lo que se le pide a Maps (el nombre). paraCubi: lo que busca Cubi (el punto exacto si el carro lo mandó).
+    static void irA(CarContext c, String q, String paraCubi) {
         long ya = System.currentTimeMillis();
         if (q.equalsIgnoreCase(irQ) && ya - irCuando < 15000) return;   // el mismo pedido que vuelve (ver abajo)
         irQ = q; irCuando = ya;
-        if (CubiService.yo != null) CubiService.yo.destino(q);
+        if (CubiService.yo != null) CubiService.yo.destino(paraCubi);
         // Por la vía del carro: se le pide a la app de navegación del carro. No depende de que el celular esté desbloqueado.
         // Si el carro se lo devuelve a Cubi, llega aquí otra vez y lo frena la línea de arriba.
         try { c.startCarApp(new Intent(CarContext.ACTION_NAVIGATE, android.net.Uri.parse("geo:0,0?q=" + android.net.Uri.encode(q)))); } catch (Exception e) { }
@@ -301,8 +310,9 @@ public class CubiCarro extends CarAppService {
                 texto(c, s.gpsActivo() ? s.carroEstado : "Para ver el mapa, prende “Usar el GPS” en la app de Cubi", x0 + w / 2, y0 + (y1 - y0) * 0.9f, 4.5f * u, fundido ? 0xe6ffffff : GRIS, false, Paint.Align.CENTER, w - 8 * u);
             if ((nav || conMapa) && fundido && aLoAncho) {
                 String d = conMapa ? calleAhora : "";
-                String f = falta(s, nav);
+                String f = falta(s, nav), av = s.rutaAviso();
                 if (!f.isEmpty()) d += (d.isEmpty() ? "" : "  ·  ") + f;
+                else if (!av.isEmpty()) d = av;
                 boolean haySeg = nav && s.navMetros >= 0 && s.kmh >= 8 && s.navMetros * 3.6 / s.kmh < 100;
                 if (haySeg) d += (d.isEmpty() ? "" : "  ·  ") + "giro en " + Math.round(s.navMetros * 3.6 / s.kmh) + " s";
                 if (!d.isEmpty()) {

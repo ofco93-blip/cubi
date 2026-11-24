@@ -576,29 +576,48 @@ public class CubiService extends Service {
         destLat = Double.NaN; rutaLat = null; rutaLon = null; rutaPedida = 0; mapaForzar = true;
         rutaFaltaM = -1; rutaFaltaMin = -1; rutaLlega = "";
         if (q.isEmpty()) { rutaEstado = ""; destNombre = ""; return; }
-        if (destBuscando) return;
+        final int turno = ++destTurno;                       // un pedido nuevo deja sin efecto la búsqueda anterior que siga andando
+        Matcher punto = Pattern.compile("^(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)$").matcher(q);
+        if (punto.matches()) {                               // ya viene el punto exacto (lat,lon): no hay nada que buscar
+            destNombre = "el destino"; destLat = Double.parseDouble(punto.group(1)); destLon = Double.parseDouble(punto.group(2));
+            rutaEstado = "Ruta: destino marcado; se traza cuando el GPS diga dónde estás."; return;
+        }
         destBuscando = true; destIntento = System.currentTimeMillis();
         rutaEstado = "Ruta: buscando “" + q + "”…";
         new Thread(() -> {
             try {
-                String u = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + URLEncoder.encode(q, "UTF-8");
-                Location aqui = antesGps;   // cerca de donde está el carro primero
-                if (aqui != null) u += String.format(Locale.US, "&viewbox=%.3f,%.3f,%.3f,%.3f", aqui.getLongitude() - 0.6, aqui.getLatitude() + 0.6,
-                        aqui.getLongitude() + 0.6, aqui.getLatitude() - 0.6);
-                JSONArray r = new JSONArray(bajarTexto(u));
-                if (r.length() == 0) { rutaEstado = "Ruta: no encontré “" + q + "”. Prueba con la dirección o agrega la ciudad."; return; }
+                // Primero SOLO cerca del carro (unos 65 km a la redonda), luego en el país y por último en todo el mundo:
+                // sin eso "Campanario" lo encontraba en España y la ruta no salía.
+                String base = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + URLEncoder.encode(q, "UTF-8");
+                ArrayList<String> us = new ArrayList<>();
+                Location aqui = antesGps;
+                if (aqui != null) us.add(base + String.format(Locale.US, "&bounded=1&viewbox=%.3f,%.3f,%.3f,%.3f", aqui.getLongitude() - 0.6, aqui.getLatitude() + 0.6,
+                        aqui.getLongitude() + 0.6, aqui.getLatitude() - 0.6));
+                String pais = null;
+                try { pais = ((android.telephony.TelephonyManager) getSystemService(TELEPHONY_SERVICE)).getNetworkCountryIso(); } catch (Exception e) { }
+                if (pais != null && pais.length() == 2) us.add(base + "&countrycodes=" + pais.toLowerCase(Locale.ROOT));
+                us.add(base);
+                JSONArray r = null;
+                for (int i = 0; i < us.size() && (r == null || r.length() == 0); i++) {
+                    if (i > 0) Thread.sleep(1100);                    // ese servicio pide no más de una consulta por segundo
+                    r = new JSONArray(bajarTexto(us.get(i)));
+                }
+                if (turno != destTurno) return;
+                if (r == null || r.length() == 0) { rutaEstado = "Ruta: no encontré “" + q + "”. Prueba con la dirección o agrega la ciudad."; return; }
                 JSONObject o = r.getJSONObject(0);
                 String nombre = o.optString("display_name", q);
                 destNombre = nombre.contains(",") ? nombre.substring(0, nombre.indexOf(',')) : nombre;
                 destLon = o.getDouble("lon"); destLat = o.getDouble("lat");
                 rutaEstado = "Ruta: destino “" + destNombre + "”; se traza cuando el GPS diga dónde estás.";
             } catch (Exception e) {
-                rutaEstado = "Ruta: no pude buscar el destino (¿hay internet?).";
+                if (turno == destTurno) rutaEstado = "Ruta: no pude buscar el destino (¿hay internet?).";
             } finally {
-                destBuscando = false;
+                if (turno == destTurno) destBuscando = false;
             }
         }).start();
     }
+    private volatile int destTurno;
+    String rutaAviso() { return rutaLat != null ? "" : rutaEstado; }   // para la pantalla del carro: qué pasa mientras no hay ruta pintada
 
     private static String bajarTexto(String u) throws Exception { return bajarTexto(u, 30000, 2); }
 
