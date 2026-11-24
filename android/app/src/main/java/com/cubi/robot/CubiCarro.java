@@ -287,7 +287,7 @@ public class CubiCarro extends CarAppService {
                 if (dist.isEmpty()) texto(c, calle, tx, fy + 2.5f * u * k, 6.5f * u * k, TINTA, true, Paint.Align.LEFT, tw);   // indicación sin metros
                 else {
                     texto(c, dist, tx, fy - (calle.isEmpty() ? -4 * u * k : 1 * u * k), 12 * u * k, TINTA, true, Paint.Align.LEFT, tw);
-                    if (!calle.isEmpty()) texto(c, calle, tx, fy + 8 * u * k, 5.5f * u * k, GRIS, false, Paint.Align.LEFT, tw);
+                    if (!calle.isEmpty()) texto(c, calle, tx, fy + 8 * u * k, 5.5f * u * k, fundido ? 0xffdbe4f7 : GRIS, false, Paint.Align.LEFT, tw);
                 }
             } else if (!conMapa) {
                 // sin ruta ni mapa: la hora y, si hay GPS, la velocidad
@@ -307,7 +307,13 @@ public class CubiCarro extends CarAppService {
                 if (haySeg) d += (d.isEmpty() ? "" : "  ·  ") + "giro en " + Math.round(s.navMetros * 3.6 / s.kmh) + " s";
                 if (!d.isEmpty()) {
                     p.setColor(0x8005070c); c.drawRect(x0, y1 - 13 * u, x1, y1, p);
-                    texto(c, d, x0 + w / 2, y1 - 4.5f * u, 6 * u, TINTA, true, Paint.Align.CENTER, w - 8 * u);
+                    // que nunca se corte: si no cabe, primero se va la calle (5 = el separador) y después se achica la letra
+                    float cabe = w - 8 * u, tamF = 6 * u;
+                    tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(tamF);
+                    if (tp.measureText(d) > cabe && conMapa && !calleAhora.isEmpty() && d.length() > calleAhora.length() + 5) d = d.substring(calleAhora.length() + 5);
+                    float an = tp.measureText(d);
+                    if (an > cabe) tamF = Math.max(4.2f * u, tamF * cabe / an);
+                    texto(c, d, x0 + w / 2, y1 - 4.5f * u, tamF, TINTA, true, Paint.Align.CENTER, cabe);
                 }
             }
             if (franja) {
@@ -935,7 +941,13 @@ public class CubiCarro extends CarAppService {
             for (int i = 0; i < rotNom.length; i++) {
                 float ax = mk * (rotPos[4 * i] - mpx), ay = -mk * (rotPos[4 * i + 1] - mpy), bx = mk * (rotPos[4 * i + 2] - mpx), by = -mk * (rotPos[4 * i + 3] - mpy);
                 float xm = (ax + bx) / 2, ym = (ay + by) / 2, qx = xm * mcos - ym * msin + panX, qy = xm * msin + ym * mcos + panY;   // el centro del tramo, ya girado
-                if (qy > mlim || qy < -b || Math.abs(qx) > a) continue;
+                if (qy > mlim || qy < -b * 0.72f || Math.abs(qx) > a) continue;   // muy lejos quedan diminutos
+                if (Math.hypot(qx - panX, qy - panY) < 42 * k) continue;          // debajo del carrito
+                if (!s.navDir.isEmpty() && System.currentTimeMillis() - s.navCuando < 120000) {   // detrás de la tarjeta del giro
+                    float[] pt = {qx, qy}; inclina.mapPoints(pt);
+                    float kk = h < 62 * u ? 0.72f : 1f;
+                    if (pt[0] + cx < x0 + 82 * u * kk && pt[1] + cy < y0 + 34 * u * kk) continue;
+                }
                 float vx = (bx - ax) * mcos - (by - ay) * msin, vy = (bx - ax) * msin + (by - ay) * mcos, vl = (float) Math.hypot(vx, vy);
                 if (vl == 0) continue;
                 if (vx < 0) { vx = -vx; vy = -vy; }                   // siempre de izquierda a derecha: nunca queda de cabeza
