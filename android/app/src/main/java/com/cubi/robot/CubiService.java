@@ -547,6 +547,21 @@ public class CubiService extends Service {
     private volatile double destLat = Double.NaN, destLon;
     private volatile String destNombre = "", rutaEstado = "";
     volatile double[] rutaLat, rutaLon;
+    // Lo que falta del viaje según la ruta propia (la de OSRM): sirve cuando Maps no lo dice. rutaAcum: metros desde la
+    // salida hasta cada punto; rutaDura: segundos de toda la ruta, sin tráfico.
+    private volatile float[] rutaAcum; private volatile double rutaDura;
+    volatile int rutaFaltaM = -1, rutaFaltaMin = -1;
+    volatile String rutaLlega = "";
+    private void faltaRuta(double lat, double lon) {
+        double[] la = rutaLat, lo = rutaLon; float[] ac = rutaAcum;
+        if (la == null || lo == null || ac == null || ac.length != la.length || la.length < 2) { rutaFaltaM = -1; rutaFaltaMin = -1; rutaLlega = ""; return; }
+        double kx = Math.cos(Math.toRadians(lat)), mejor = 1e18; int k = 0;
+        for (int i = 0; i < la.length; i++) { double dx = (lo[i] - lon) * kx, dy = la[i] - lat, d2 = dx * dx + dy * dy; if (d2 < mejor) { mejor = d2; k = i; } }
+        float total = ac[ac.length - 1], falta = total - ac[k];
+        int min = total <= 0 ? 0 : (int) Math.round(rutaDura * falta / total / 60);
+        rutaFaltaM = Math.round(falta); rutaFaltaMin = min;
+        rutaLlega = new java.text.SimpleDateFormat(android.text.format.DateFormat.is24HourFormat(this) ? "H:mm" : "h:mm", Locale.US).format(new java.util.Date(System.currentTimeMillis() + min * 60000L));
+    }
     private volatile boolean rutaCalculando, destBuscando;
     private long rutaPedida, destIntento;
 
@@ -559,6 +574,7 @@ public class CubiService extends Service {
         final String q = txt == null ? "" : txt.trim();
         getSharedPreferences("cubi", 0).edit().putString("destino", q).apply();
         destLat = Double.NaN; rutaLat = null; rutaLon = null; rutaPedida = 0; mapaForzar = true;
+        rutaFaltaM = -1; rutaFaltaMin = -1; rutaLlega = "";
         if (q.isEmpty()) { rutaEstado = ""; destNombre = ""; return; }
         if (destBuscando) return;
         destBuscando = true; destIntento = System.currentTimeMillis();
@@ -777,6 +793,9 @@ public class CubiService extends Service {
             JSONArray c = ruta.getJSONObject("geometry").getJSONArray("coordinates");
             double[] la = new double[c.length()], lo = new double[c.length()];
             for (int i = 0; i < c.length(); i++) { lo[i] = c.getJSONArray(i).getDouble(0); la[i] = c.getJSONArray(i).getDouble(1); }
+            float[] ac = new float[la.length];
+            for (int i = 1; i < la.length; i++) ac[i] = ac[i - 1] + (float) Math.hypot((lo[i] - lo[i - 1]) * 111320 * Math.cos(Math.toRadians(la[i])), (la[i] - la[i - 1]) * 111320);
+            rutaAcum = ac; rutaDura = ruta.optDouble("duration", 0);
             rutaLat = la; rutaLon = lo; mapaForzar = true;
             rutaEstado = String.format(Locale.US, "Ruta: %.1f km hasta “%s”.", ruta.optDouble("distance", 0) / 1000, destNombre);
         } catch (Exception e) {
@@ -824,6 +843,7 @@ public class CubiService extends Service {
             rutaPedida = ahora; rutaCalculando = true;
             new Thread(() -> calcularRuta(lat, lon)).start();
         }
+        faltaRuta(lat, lon);
         double dy = (lat - mapaLat0) * 111320, dx = (lon - mapaLon0) * 111320 * Math.cos(Math.toRadians(mapaLat0));
         double lejos = Math.hypot(dx, dy);
         mapaDx = dx; mapaDy = dy; mapaCuando = ahora; mapaVel = l.hasSpeed() ? l.getSpeed() : 0;

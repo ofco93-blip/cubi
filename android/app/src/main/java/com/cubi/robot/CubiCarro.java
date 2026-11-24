@@ -69,8 +69,15 @@ public class CubiCarro extends CarAppService {
         };
     }
     // Cubi traza su ruta a ese sitio y trata de arrancar el viaje en Google Maps
+    private static String irQ = ""; private static long irCuando;
     static void irA(CarContext c, String q) {
+        long ya = System.currentTimeMillis();
+        if (q.equalsIgnoreCase(irQ) && ya - irCuando < 15000) return;   // el mismo pedido que vuelve (ver abajo)
+        irQ = q; irCuando = ya;
         if (CubiService.yo != null) CubiService.yo.destino(q);
+        // Por la vía del carro: se le pide a la app de navegación del carro. No depende de que el celular esté desbloqueado.
+        // Si el carro se lo devuelve a Cubi, llega aquí otra vez y lo frena la línea de arriba.
+        try { c.startCarApp(new Intent(CarContext.ACTION_NAVIGATE, android.net.Uri.parse("geo:0,0?q=" + android.net.Uri.encode(q)))); } catch (Exception e) { }
         // Maps se abre en la pantalla del celular (y el carro lo proyecta). Desde el contexto del carro Android lo intenta
         // abrir en la pantalla virtual del carro y lo niega ("Permission Denial ... launchDisplayId"): visto en el registro.
         try {
@@ -90,8 +97,6 @@ public class CubiCarro extends CarAppService {
                     String q = t.trim();
                     if (q.isEmpty()) return;
                     irA(getCarContext(), q);
-                    // y por la vía del carro, por si el celular no deja abrir Maps: se lo pide a la app de navegación del carro
-                    try { getCarContext().startCarApp(new Intent(CarContext.ACTION_NAVIGATE, android.net.Uri.parse("geo:0,0?q=" + android.net.Uri.encode(q)))); } catch (Exception e) { }
                     getScreenManager().popToRoot();
                 }
             }).setHeaderAction(Action.BACK).setSearchHint("¿A dónde vamos?").setShowKeyboardByDefault(true).build();
@@ -291,7 +296,8 @@ public class CubiCarro extends CarAppService {
                 texto(c, s.gpsActivo() ? s.carroEstado : "Para ver el mapa, prende “Usar el GPS” en la app de Cubi", x0 + w / 2, y0 + (y1 - y0) * 0.9f, 4.5f * u, fundido ? 0xe6ffffff : GRIS, false, Paint.Align.CENTER, w - 8 * u);
             if ((nav || conMapa) && fundido && aLoAncho) {
                 String d = conMapa ? calleAhora : "";
-                if (nav && s.navDestM >= 0) d += (d.isEmpty() ? "" : "  ·  ") + metros(s.navDestM) + (s.navLlega.isEmpty() ? " al destino" : "  ·  llegamos " + s.navLlega);
+                String f = falta(s, nav);
+                if (!f.isEmpty()) d += (d.isEmpty() ? "" : "  ·  ") + f;
                 boolean haySeg = nav && s.navMetros >= 0 && s.kmh >= 8 && s.navMetros * 3.6 / s.kmh < 100;
                 if (haySeg) d += (d.isEmpty() ? "" : "  ·  ") + "giro en " + Math.round(s.navMetros * 3.6 / s.kmh) + " s";
                 if (!d.isEmpty()) {
@@ -598,10 +604,11 @@ public class CubiCarro extends CarAppService {
             p.setStyle(Paint.Style.FILL); p.setColor(fundido ? VELO : PANEL); gr.set(x0, y0, x1, y1); c.drawRoundRect(gr, 5 * u, 5 * u, p);
             float cx = (x0 + x1) / 2, alto = y1 - y0, w = x1 - x0 - 4 * u;
             final int GRIS = fundido ? 0xe6ffffff : Lienzo.GRIS, AZUL = fundido ? 0xffffffff : Lienzo.AZUL;
-            boolean hayDest = sv.navDestM >= 0, haySeg = sv.navMetros >= 0 && sv.kmh >= 8 && sv.navMetros * 3.6 / sv.kmh < 100;
+            int dm = sv.navDestM >= 0 ? sv.navDestM : sv.rutaFaltaM; String dl = sv.navDestM >= 0 ? sv.navLlega : sv.rutaLlega;
+            boolean hayDest = dm >= 0, haySeg = sv.navMetros >= 0 && sv.kmh >= 8 && sv.navMetros * 3.6 / sv.kmh < 100;
             if (hayDest) {
-                texto(c, metros(sv.navDestM), cx, y0 + alto * 0.3f, alto * 0.24f, TINTA, true, Paint.Align.CENTER, w);
-                texto(c, sv.navLlega.isEmpty() ? "al destino" : "llegamos " + sv.navLlega, cx, y0 + alto * 0.5f, alto * 0.12f, GRIS, false, Paint.Align.CENTER, w);
+                texto(c, metros(dm), cx, y0 + alto * 0.3f, alto * 0.24f, TINTA, true, Paint.Align.CENTER, w);
+                texto(c, dl.isEmpty() ? "al destino" : "llegamos " + dl, cx, y0 + alto * 0.5f, alto * 0.12f, GRIS, false, Paint.Align.CENTER, w);
             }
             if (haySeg) texto(c, "giro en " + Math.round(sv.navMetros * 3.6 / sv.kmh) + " s", cx, y0 + alto * (hayDest ? 0.8f : 0.55f), alto * 0.15f, AZUL, true, Paint.Align.CENTER, w);
             if (!hayDest && !haySeg && !sv.navDir.isEmpty() && System.currentTimeMillis() - sv.navCuando < 120000) texto(c, "En ruta", cx, y0 + alto * 0.55f, alto * 0.16f, GRIS, true, Paint.Align.CENTER, w);
@@ -946,6 +953,13 @@ public class CubiCarro extends CarAppService {
             c.restore();
         }
 
+        static String falta(CubiService s, boolean nav) {
+            boolean deMaps = nav && s.navDestM >= 0;
+            int m = deMaps ? s.navDestM : s.rutaFaltaM, min = deMaps ? -1 : s.rutaFaltaMin;
+            if (m < 0) return "";
+            String ll = deMaps ? s.navLlega : s.rutaLlega;
+            return metros(m) + (min < 0 ? "" : "  ·  " + (min < 60 ? min + " min" : min / 60 + " h " + min % 60 + " min")) + (ll.isEmpty() ? " al destino" : "  ·  llegamos " + ll);
+        }
         static String metros(double m) {
             if (m < 0) return "";
             if (m >= 1000) return String.format(Locale.US, "%.1f km", m / 1000).replace('.', ',');
