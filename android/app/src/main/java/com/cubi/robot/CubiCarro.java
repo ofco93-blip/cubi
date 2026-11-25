@@ -97,18 +97,50 @@ public class CubiCarro extends CarAppService {
         } catch (Exception e) { }
     }
 
-    // El buscador de destino: se escribe o se dicta en la pantalla del carro.
+    // El buscador de destino. Abre con el teclado guardado y la lista de los últimos destinos; al buscar (escrito o
+    // dictado) muestra los sitios que se llaman así, del más cercano al más lejano, para escoger uno.
     static class Buscar extends Screen {
-        Buscar(CarContext c) { super(c); }
+        private java.util.List<String[]> ops;                         // {nombre, dónde queda, "lat,lon", "12 km"}
+        private boolean buscando; private String aviso = "";
+        Buscar(CarContext c) { super(c); ops = recientes(c); }
+        static java.util.List<String[]> recientes(android.content.Context c) {
+            java.util.ArrayList<String[]> l = new java.util.ArrayList<>();
+            for (String r : c.getSharedPreferences("cubi", 0).getString("destinosUsados", "").split("\n")) { String[] p = r.split("\t"); if (p.length == 3) l.add(new String[]{p[0], p[1], p[2], ""}); }
+            return l;
+        }
+        private void escoger(String[] o) {
+            SharedPreferences p = getCarContext().getSharedPreferences("cubi", 0);
+            StringBuilder sb = new StringBuilder(o[0] + "\t" + o[1] + "\t" + o[2]); int n = 1;
+            for (String[] r : recientes(getCarContext())) if (!r[2].equals(o[2]) && n++ < 6) sb.append('\n').append(r[0]).append('\t').append(r[1]).append('\t').append(r[2]);
+            p.edit().putString("destinosUsados", sb.toString()).apply();
+            irA(getCarContext(), o[0] + (o[1].isEmpty() ? "" : ", " + o[1]), o[2]);
+            getScreenManager().popToRoot();
+        }
         @NonNull @Override public Template onGetTemplate() {
-            return new androidx.car.app.model.SearchTemplate.Builder(new androidx.car.app.model.SearchTemplate.SearchCallback() {
+            androidx.car.app.model.SearchTemplate.Builder b = new androidx.car.app.model.SearchTemplate.Builder(new androidx.car.app.model.SearchTemplate.SearchCallback() {
                 @Override public void onSearchSubmitted(@NonNull String t) {
-                    String q = t.trim();
-                    if (q.isEmpty()) return;
-                    irA(getCarContext(), q);
-                    getScreenManager().popToRoot();
+                    final String q = t.trim();
+                    if (q.isEmpty() || buscando) return;
+                    buscando = true; aviso = ""; invalidate();
+                    new Thread(() -> {
+                        java.util.List<String[]> r = null; String a = "";
+                        try { r = CubiService.yo == null ? null : CubiService.yo.sitios(q); if (r == null || r.isEmpty()) a = "No encontré “" + q + "”. Prueba con otro nombre o agrega la ciudad."; }
+                        catch (Exception e) { a = "No pude buscar (¿hay internet?)."; }
+                        final java.util.List<String[]> rr = r; final String aa = a;
+                        new Handler(Looper.getMainLooper()).post(() -> { buscando = false; aviso = aa; if (rr != null && !rr.isEmpty()) ops = rr; invalidate(); });
+                    }).start();
                 }
-            }).setHeaderAction(Action.BACK).setSearchHint("¿A dónde vamos?").setShowKeyboardByDefault(true).build();
+            }).setHeaderAction(Action.BACK).setSearchHint("¿A dónde vamos?").setShowKeyboardByDefault(false);
+            if (buscando) return b.setLoading(true).build();
+            ItemList.Builder l = new ItemList.Builder().setNoItemsMessage(aviso.isEmpty() ? "Toca arriba para escribir o dictar el destino" : aviso);
+            int n = 0;
+            if (aviso.isEmpty()) for (String[] o : ops) {
+                if (n++ >= 6) break;
+                Row.Builder f = new Row.Builder().setTitle(o[0] + (o[3].isEmpty() ? "" : "  ·  " + o[3])).setOnClickListener(() -> escoger(o));
+                if (!o[1].isEmpty()) f.addText(o[1]);
+                l.addItem(f.build());
+            }
+            return b.setItemList(l.build()).build();
         }
     }
 
