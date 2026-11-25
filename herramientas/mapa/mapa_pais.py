@@ -34,6 +34,7 @@ def meter(cuadros, clase, pts, nombre=""):
         i = j
 
 def punto(cuadros, clase, la, lo, nombre):
+    nombre = nombre or {9: "Peaje", 10: "Cámara"}.get(clase, "")      # un peaje o una cámara sin nombre igual se marcan
     nb = nombre.encode("utf-8")[:60].decode("utf-8", "ignore").encode("utf-8")
     if not nb: return
     k = cuadro(la, lo); o = cuadros.setdefault(k, bytearray())
@@ -87,6 +88,9 @@ def demo():
     import os, tempfile
     via = [(4_650_000, -74_060_000), (4_655_000, -74_058_000), (4_661_000, -74_057_000), (4_662_000, -74_020_500), (4_662_100, -74_020_400)]
     c = {}; meter(c, 1, via, "Avenida Boyacá"); meter(c, 0, via[:2]); punto(c, 8, 4_651_000, -74_059_000, "Centro Comercial")
+    sin = {}; punto(sin, 9, 4_651_000, -74_059_000, None); punto(sin, 8, 4_651_000, -74_059_000, None)
+    f0 = os.path.join(tempfile.mkdtemp(), "q"); escribir(sin, f0)
+    assert leer(f0, cuadro(4_651_000, -74_059_000)) == [(9, [(4_651_000, -74_059_000)], "Peaje")]   # sin nombre: el peaje sí, el sitio no
     assert clase_sitio({"barrier": "toll_booth"}) == 9 and clase_sitio({"highway": "speed_camera"}) == 10 and clase_sitio({"name": "X", "place": "town"}) == 6 and clase_sitio({"name": "X", "shop": "mall"}) == 8 and clase_sitio({"shop": "mall"}) == 0
     f = os.path.join(tempfile.mkdtemp(), "p"); escribir(c, f)
     vuelta = [p for k in sorted(c) for cl, pts, nom in leer(f, k) for p in pts if cl < 6]
