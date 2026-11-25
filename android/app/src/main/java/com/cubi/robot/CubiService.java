@@ -806,8 +806,23 @@ public class CubiService extends Service {
 
     private void calcularRuta(double lat, double lon) {
         try {
-            JSONObject r = new JSONObject(bajarTexto(String.format(Locale.US,
-                    "https://router.project-osrm.org/route/v1/driving/%.5f,%.5f;%.5f,%.5f?overview=full&geometries=geojson", lon, lat, destLon, destLat)));
+            // Se lee también la respuesta de error: el servicio dice por qué no hay ruta (NoRoute, NoSegment, muy seguido…)
+            HttpURLConnection h = (HttpURLConnection) new URL(String.format(Locale.US,
+                    "https://router.project-osrm.org/route/v1/driving/%.5f,%.5f;%.5f,%.5f?overview=full&geometries=geojson", lon, lat, destLon, destLat)).openConnection();
+            h.setConnectTimeout(8000); h.setReadTimeout(30000); h.setRequestProperty("User-Agent", "robot-app");
+            int cod = h.getResponseCode();
+            ByteArrayOutputStream bo = new ByteArrayOutputStream();
+            try (InputStream in = cod < 400 ? h.getInputStream() : h.getErrorStream()) { byte[] b = new byte[8192]; for (int n; in != null && (n = in.read(b)) > 0; ) bo.write(b, 0, n); }
+            String txt = bo.toString("UTF-8");
+            JSONObject r = txt.startsWith("{") ? new JSONObject(txt) : new JSONObject();
+            if (cod >= 400 || !"Ok".equals(r.optString("code"))) {
+                String por = r.optString("code", "");
+                boolean sinCamino = por.equals("NoRoute") || por.equals("NoSegment");
+                rutaEstado = sinCamino ? "No hay camino por carretera hasta “" + destNombre + "”. Prueba con el nombre completo o la ciudad."
+                        : "Ruta a “" + destNombre + "”: el servicio de rutas respondió " + cod + (por.isEmpty() ? "" : " (" + por + ")") + "; reintento.";
+                if (sinCamino) rutaPedida = System.currentTimeMillis() + 100000;   // insistir no lo arregla: otro intento en 2 min
+                return;
+            }
             JSONObject ruta = r.getJSONArray("routes").getJSONObject(0);
             JSONArray c = ruta.getJSONObject("geometry").getJSONArray("coordinates");
             double[] la = new double[c.length()], lo = new double[c.length()];
@@ -818,7 +833,7 @@ public class CubiService extends Service {
             rutaLat = la; rutaLon = lo; mapaForzar = true;
             rutaEstado = String.format(Locale.US, "Ruta: %.1f km hasta “%s”.", ruta.optDouble("distance", 0) / 1000, destNombre);
         } catch (Exception e) {
-            rutaEstado = "Ruta: no pude calcularla (¿hay internet?).";
+            rutaEstado = "Ruta a “" + destNombre + "”: sin respuesta del servicio de rutas (" + e.getClass().getSimpleName() + "); reintento.";
         } finally {
             rutaCalculando = false;
         }
