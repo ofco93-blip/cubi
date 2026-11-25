@@ -471,7 +471,7 @@ public class CubiService extends Service {
                 // como lluvia si además marca agua cayendo ahora (0,2 mm o más). Si no, nubes.
                 if (e.equals("lluvia") && cur.optDouble("precipitation", 1) < 0.2) e = "nubes";
                 climaOrden = "/clima?t=" + t + "&e=" + e + "&d=" + dia;
-                climaGrados = t; climaEstado = e;
+                climaGrados = t; climaEstado = e; climaNoche = dia == 0;
                 if (todo.has("elevation")) climaAltura = (int) Math.round(todo.optDouble("elevation"));   // la del terreno, por si el GPS no da la suya
                 enviar("clima|" + climaOrden);
                 climaTexto = "Ahora: " + e + ", " + t + " grados" + (llueve < 0 ? "" : ". Probabilidad de lluvia en las próximas 6 horas: " + llueve + " por ciento");
@@ -560,6 +560,7 @@ public class CubiService extends Service {
         float total = ac[ac.length - 1], falta = total - ac[k];
         int min = total <= 0 ? 0 : (int) Math.round(rutaDura * falta / total / 60);
         rutaFaltaM = Math.round(falta); rutaFaltaMin = min;
+        if (falta < 60 && Math.hypot((la[la.length - 1] - lat) * 111320, (lo[lo.length - 1] - lon) * 111320 * kx) < 120) { destino(""); return; }   // llegó: se acaba la ruta
         rutaLlega = new java.text.SimpleDateFormat(android.text.format.DateFormat.is24HourFormat(this) ? "H:mm" : "h:mm", Locale.US).format(new java.util.Date(System.currentTimeMillis() + min * 60000L));
     }
     private volatile boolean rutaCalculando, destBuscando;
@@ -570,7 +571,10 @@ public class CubiService extends Service {
     String destinoTexto() { return getSharedPreferences("cubi", 0).getString("destino", ""); }
 
     // el destino escrito en la app ("" lo quita)
-    void destino(String txt) {
+    String destinoNombre() { return destinoTexto().isEmpty() ? "" : destNombre; }
+    void destino(String txt) { destino(txt, null); }
+    // nombre: cómo se llama el sitio cuando txt es solo el punto (lat,lon), para mostrarlo
+    void destino(String txt, String nombre) {
         final String q = txt == null ? "" : txt.trim();
         getSharedPreferences("cubi", 0).edit().putString("destino", q).apply();
         destLat = Double.NaN; rutaLat = null; rutaLon = null; rutaPedida = 0; mapaForzar = true;
@@ -579,35 +583,21 @@ public class CubiService extends Service {
         final int turno = ++destTurno;                       // un pedido nuevo deja sin efecto la búsqueda anterior que siga andando
         Matcher punto = Pattern.compile("^(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)$").matcher(q);
         if (punto.matches()) {                               // ya viene el punto exacto (lat,lon): no hay nada que buscar
-            destNombre = "el destino"; destLat = Double.parseDouble(punto.group(1)); destLon = Double.parseDouble(punto.group(2));
+            destNombre = nombre == null || nombre.trim().isEmpty() || nombre.trim().equals(q) ? "el destino" : nombre.contains(",") ? nombre.substring(0, nombre.indexOf(',')).trim() : nombre.trim();
+            destLat = Double.parseDouble(punto.group(1)); destLon = Double.parseDouble(punto.group(2));
             rutaEstado = "Ruta: destino marcado; se traza cuando el GPS diga dónde estás."; return;
         }
         destBuscando = true; destIntento = System.currentTimeMillis();
         rutaEstado = "Ruta: buscando “" + q + "”…";
         new Thread(() -> {
             try {
-                // Primero SOLO cerca del carro (unos 65 km a la redonda), luego en el país y por último en todo el mundo:
-                // sin eso "Campanario" lo encontraba en España y la ruta no salía.
-                String base = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + URLEncoder.encode(q, "UTF-8");
-                ArrayList<String> us = new ArrayList<>();
-                Location aqui = antesGps;
-                if (aqui != null) us.add(base + String.format(Locale.US, "&bounded=1&viewbox=%.3f,%.3f,%.3f,%.3f", aqui.getLongitude() - 0.6, aqui.getLatitude() + 0.6,
-                        aqui.getLongitude() + 0.6, aqui.getLatitude() - 0.6));
-                String pais = null;
-                try { pais = ((android.telephony.TelephonyManager) getSystemService(TELEPHONY_SERVICE)).getNetworkCountryIso(); } catch (Exception e) { }
-                if (pais != null && pais.length() == 2) us.add(base + "&countrycodes=" + pais.toLowerCase(Locale.ROOT));
-                us.add(base);
-                JSONArray r = null;
-                for (int i = 0; i < us.size() && (r == null || r.length() == 0); i++) {
-                    if (i > 0) Thread.sleep(1100);                    // ese servicio pide no más de una consulta por segundo
-                    r = new JSONArray(bajarTexto(us.get(i)));
-                }
+                java.util.List<String[]> ops = sitios(q);
                 if (turno != destTurno) return;
-                if (r == null || r.length() == 0) { rutaEstado = "Ruta: no encontré “" + q + "”. Prueba con la dirección o agrega la ciudad."; return; }
-                JSONObject o = r.getJSONObject(0);
-                String nombre = o.optString("display_name", q);
-                destNombre = nombre.contains(",") ? nombre.substring(0, nombre.indexOf(',')) : nombre;
-                destLon = o.getDouble("lon"); destLat = o.getDouble("lat");
+                if (ops.isEmpty()) { rutaEstado = "Ruta: no encontré “" + q + "”. Prueba con la dirección o agrega la ciudad."; return; }
+                String[] o = ops.get(0);                              // el más cercano de los que se llaman así
+                String[] ll = o[2].split(",");
+                destNombre = o[0];
+                destLat = Double.parseDouble(ll[0]); destLon = Double.parseDouble(ll[1]);
                 rutaEstado = "Ruta: destino “" + destNombre + "”; se traza cuando el GPS diga dónde estás.";
             } catch (Exception e) {
                 if (turno == destTurno) rutaEstado = "Ruta: no pude buscar el destino (¿hay internet?).";
@@ -617,6 +607,39 @@ public class CubiService extends Service {
         }).start();
     }
     private volatile int destTurno;
+    // Los sitios que se llaman así, del más cercano al más lejano: {nombre, dónde queda, "lat,lon", "12 km"}.
+    // Primero SOLO cerca del carro (unos 65 km a la redonda); si no hay, en el país; y por último en todo el mundo. Y de
+    // lo que salga gana el más cercano: el primero de la lista de ese servicio puede quedar a 150 km (pasó con "Campanario").
+    java.util.List<String[]> sitios(String q) throws Exception {
+        String base = "https://nominatim.openstreetmap.org/search?format=json&limit=8&accept-language=es&q=" + URLEncoder.encode(q, "UTF-8");
+        ArrayList<String> us = new ArrayList<>();
+        final Location aqui = antesGps;
+        if (aqui != null) us.add(base + String.format(Locale.US, "&bounded=1&viewbox=%.3f,%.3f,%.3f,%.3f", aqui.getLongitude() - 0.6, aqui.getLatitude() + 0.6,
+                aqui.getLongitude() + 0.6, aqui.getLatitude() - 0.6));
+        String pais = null;
+        try { pais = ((android.telephony.TelephonyManager) getSystemService(TELEPHONY_SERVICE)).getNetworkCountryIso(); } catch (Exception e) { }
+        if (pais != null && pais.length() == 2) us.add(base + "&countrycodes=" + pais.toLowerCase(Locale.ROOT));
+        us.add(base);
+        JSONArray r = null;
+        for (int i = 0; i < us.size() && (r == null || r.length() == 0); i++) {
+            if (i > 0) Thread.sleep(1100);                            // ese servicio pide no más de una consulta por segundo
+            r = new JSONArray(bajarTexto(us.get(i)));
+        }
+        ArrayList<String[]> ops = new ArrayList<>(); final ArrayList<Double> lejos = new ArrayList<>();
+        for (int i = 0; r != null && i < r.length(); i++) {
+            JSONObject o = r.getJSONObject(i);
+            String todo = o.optString("display_name", q); int coma = todo.indexOf(',');
+            double la = o.getDouble("lat"), lo = o.getDouble("lon");
+            double km = aqui == null ? -1 : Math.hypot((la - aqui.getLatitude()) * 111.32, (lo - aqui.getLongitude()) * 111.32 * Math.cos(Math.toRadians(la)));
+            int en = 0;
+            while (en < ops.size() && (km < 0 || lejos.get(en) <= km)) en++;      // se mete en su puesto: del más cercano al más lejano
+            String donde = coma < 0 ? "" : todo.substring(coma + 1).trim();
+            ops.add(en, new String[]{coma < 0 ? todo : todo.substring(0, coma), donde.length() > 60 ? donde.substring(0, 60) : donde,
+                    String.format(Locale.US, "%.6f,%.6f", la, lo), km < 0 ? "" : km < 10 ? String.format(Locale.US, "%.1f km", km).replace('.', ',') : Math.round(km) + " km"});
+            lejos.add(en, km);
+        }
+        return ops;
+    }
     String rutaAviso() { return rutaLat != null ? "" : rutaEstado; }   // para la pantalla del carro: qué pasa mientras no hay ruta pintada
 
     private static String bajarTexto(String u) throws Exception { return bajarTexto(u, 30000, 2); }
@@ -639,7 +662,8 @@ public class CubiService extends Service {
     // ---------- el mapa de la pantalla del carro ----------
     // Va aparte del del robot (que solo entiende 375 m a la redonda): 900 m alrededor de un punto adelantado hacia donde
     // va el carro, porque la respuesta puede tardar más de medio minuto. Las líneas van en metros desde (lat0, lon0).
-    static class MapaCarro { double lat0, lon0; float[][] lineas; byte[] clase; String[] nombre; }   // nombre: el de la calle, o null   // clase: 0 calle, 1 avenida, 2 ruta, 3 agua, 4 parque, 5 río
+    static class MapaCarro { double lat0, lon0; float[][] lineas; byte[] clase; String[] nombre;   // nombre: el de la calle, o null
+        float[] sitios; String[] sitioNom; byte[] sitioCl; }   // los sitios con nombre (x, y en metros): 6 ciudad o pueblo, 7 barrio, 8 sitio de interés   // clase: 0 calle, 1 avenida, 2 ruta, 3 agua, 4 parque, 5 río
     volatile MapaCarro carroDatos;
     volatile String carroEstado = "Mapa: esperando el GPS.";
     volatile double posLat = Double.NaN, posLon;
@@ -702,6 +726,7 @@ public class CubiService extends Service {
             double kx = 111320 * Math.cos(Math.toRadians(lat));
             float cx = (float) ((clon - lon) * kx), cy = (float) ((clat - lat) * 111320);
             ArrayList<float[]> ls = new ArrayList<>(); ArrayList<Byte> cs = new ArrayList<>(); ArrayList<String> ns = new ArrayList<>();
+            ArrayList<Float> sx = new ArrayList<>(); ArrayList<String> sn = new ArrayList<>(); ArrayList<Byte> sc = new ArrayList<>();
             int fy = (int) Math.floor((clat + 90) / 0.02), fx = (int) Math.floor((clon + 180) / 0.02);
             byte[] t = new byte[8192]; int[] p = new int[1];
             for (int y = fy - 1; y <= fy + 1; y++) for (int x = fx - 1; x <= fx + 1; x++) {
@@ -726,13 +751,17 @@ public class CubiService extends Service {
                         v[2 * i] = (float) ((po / 1e6 - lon) * kx); v[2 * i + 1] = (float) ((pa / 1e6 - lat) * 111320);
                         cerca |= Math.abs(v[2 * i] - cx) < 1300 && Math.abs(v[2 * i + 1] - cy) < 1300;
                     }
-                    if (cerca && np >= 2) { ls.add(v); cs.add(cl); ns.add(nom); }
+                    if (cerca && np >= 2 && cl < 6) { ls.add(v); cs.add(cl); ns.add(nom); }
+                    else if (cerca && np == 1 && cl >= 6 && nom != null) { sx.add(v[0]); sx.add(v[1]); sn.add(nom); sc.add(cl); }   // un sitio
                 }
             }
             if (ls.isEmpty()) return null;
             MapaCarro d = new MapaCarro();
             d.lat0 = lat; d.lon0 = lon; d.lineas = ls.toArray(new float[0][]); d.clase = new byte[cs.size()]; d.nombre = ns.toArray(new String[0]);
             for (int i = 0; i < d.clase.length; i++) d.clase[i] = cs.get(i);
+            d.sitios = new float[sx.size()]; d.sitioNom = sn.toArray(new String[0]); d.sitioCl = new byte[sc.size()];
+            for (int i = 0; i < d.sitios.length; i++) d.sitios[i] = sx.get(i);
+            for (int i = 0; i < d.sitioCl.length; i++) d.sitioCl[i] = sc.get(i);
             return d;
         }
     }
@@ -1739,6 +1768,7 @@ public class CubiService extends Service {
                 && ahora - llegadaAvisada > 60000) {
             llegadaAvisada = ahora;
             navDecision = "¡llegamos!"; navDir = "llegamos";
+            if (!destinoTexto().isEmpty()) destino("");               // Maps dijo que llegó: la ruta propia también se acaba
             enviar("asis|/r?n=llegamos");
             return;
         }
@@ -1967,6 +1997,7 @@ public class CubiService extends Service {
 
     volatile int climaGrados = Integer.MIN_VALUE;   // el clima de ahora, para la cajita de la pantalla del carro
     volatile String climaEstado = "";
+    volatile boolean climaNoche;                   // de noche el dibujo del clima lleva luna en vez de sol
     volatile String climaLugar = "";               // la ciudad o el pueblo de donde es ese clima
     volatile int climaAltura = Integer.MIN_VALUE;  // metros sobre el mar del terreno ahí
     volatile String ritmoCancion = "";   // el instrumento de la canción (por su género)
