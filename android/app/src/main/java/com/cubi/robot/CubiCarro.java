@@ -257,7 +257,12 @@ public class CubiCarro extends CarAppService {
             SharedPreferences p = getCarContext().getSharedPreferences("cubi", 0);
             boolean zelda = p.getBoolean("carroZelda", true);
             int fondo = p.getInt("carroFondo", -1), vista = p.getInt("carroVista", p.getBoolean("carroSola", false) ? 1 : 0);
-            ItemList lista = new ItemList.Builder()
+            ItemList.Builder lb = new ItemList.Builder();
+            if (CubiGoogle.puede(getCarContext())) {                    // con llave de Google: cuál de los dos mapas sale
+                boolean g = CubiGoogle.elegido(getCarContext());
+                lb.addItem(fila("Mapa", g ? "Google (cambia al volver a conectar el carro)" : "El de Cubi (cambia al volver a conectar el carro)", () -> p.edit().putBoolean("mapaGoogle", !g).apply()));
+            }
+            ItemList lista = lb
                     .addItem(new Row.Builder().setTitle("Buscar destino").addText("Traza la ruta y la abre en Google Maps").setOnClickListener(() -> getScreenManager().push(new Buscar(getCarContext()))).build())
                     .addItem(fila("Personaje en esta pantalla", zelda ? "Zelda" : "Cubi", () -> p.edit().putBoolean("carroZelda", !zelda).apply()))
                     .addItem(fila("Fondo de Zelda", FONDOS[fondo + 1], () -> p.edit().putInt("carroFondo", fondo >= 4 ? -1 : fondo + 1).apply()))

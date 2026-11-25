@@ -609,6 +609,10 @@ public class MainActivity extends Activity {
             if (k != null && !k.trim().isEmpty()) runOnUiThread(() -> CubiGoogle.aceptar(MainActivity.this));
         }
         @JavascriptInterface
+        public boolean googleUsa() { return CubiGoogle.elegido(MainActivity.this); }
+        @JavascriptInterface
+        public void googleUsar(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("mapaGoogle", si).apply(); }
+        @JavascriptInterface
         public void googleAbrir() {
             try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://console.cloud.google.com/google/maps-apis/start"))); }
             catch (Exception e) { js("toast('No pude abrir el navegador')"); }

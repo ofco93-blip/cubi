@@ -304,6 +304,8 @@ section[hidden] { display: none; }
     <div class="grid2"><button class="btn" id="googleGuardar">Guardar llave</button><button class="btn" id="googleQuitar">Quitar</button></div>
     <button class="btn" id="googleAbrir" style="width:100%;margin-top:10px">Abrir Google Cloud para sacar la llave</button>
     <p class="note" id="googleEstado"></p>
+    <div class="row"><span>Mapa que sale en el carro</span></div>
+    <select id="googleUsar" aria-label="Mapa que sale en el carro"><option value="1">El de Google (con mi llave)</option><option value="0">El de Cubi</option></select>
     <p class="note">Con tu propia llave, el recuadro del mapa en la pantalla del carro pasa a ser la navegación de Google: ruta completa, tráfico, giros y voz. El destino se pide desde Cubi (por voz o con el buscador). Pasos en Google Cloud: crear un proyecto, activar la facturación (pide una tarjeta), activar “Navigation SDK” y crear una llave de API. Google regala los primeros 1.000 destinos al mes; lo que pase de ahí lo cobra a tu cuenta. La llave se guarda solo en este celular. Para volver al mapa de Cubi, toca Quitar y vuelve a conectar el carro.</p>
   </div>
   <h2>Mapa sin internet</h2>
@@ -588,6 +590,8 @@ if (window.Android && Android.googleEstado) {
   $('googleGuardar').onclick = () => { const k = $('googleLlave').value.trim(); if (k) { Android.googleLlave(k); $('googleLlave').value = ''; } goo(); };
   $('googleQuitar').onclick = () => { Android.googleLlave(''); goo(); };
   $('googleAbrir').onclick = () => Android.googleAbrir();
+  $('googleUsar').onchange = e => Android.googleUsar(e.target.value === '1');
+  setTimeout(() => { $('googleUsar').value = Android.googleUsa() ? '1' : '0'; }, 500);
   setInterval(goo, 1500);
 }
 if (window.Android && Android.paisEstado) {

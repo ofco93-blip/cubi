@@ -43,7 +43,10 @@ final class CubiGoogle {
     private static boolean terminos(Context c) {
         try { return NavigationApi.areTermsAccepted((Application) c.getApplicationContext()); } catch (Throwable t) { return false; }
     }
-    static boolean lista(Context c) { return !llave(c).isEmpty() && terminos(c); }
+    // Los dos mapas siguen sirviendo: con la llave puesta, el usuario escoge cuál sale (se aplica al volver a conectar el carro)
+    static boolean elegido(Context c) { return c.getSharedPreferences("cubi", 0).getBoolean("mapaGoogle", true); }
+    static boolean puede(Context c) { return !llave(c).isEmpty() && terminos(c); }
+    static boolean lista(Context c) { return puede(c) && elegido(c); }
 
     // pide el navegador a Google (en el hilo principal); no hace nada si falta la llave o aceptar los términos
     static void preparar(Context c) {
