@@ -277,7 +277,7 @@ public class CubiCarro extends CarAppService {
             // ponytail: una pantalla vertical a pantalla completa también cae aquí y se queda sin franja; darle su propio caso si aparece
             if (!aLoAncho && !firme.isEmpty()) a = firme;
             boolean franja = musica && aLoAncho && !(zelda && vista == 0);   // con Zelda la canción ya va en su cajita
-            fundido = false; sinCaja = false;
+            fundido = false; sinCaja = false; letraR.setEmpty();
             float u = Math.min(a.height(), a.width() * (aLoAncho ? 0.5f : 1f)) / 100f;
             int modo = suena ? 2 : nav ? 1 : (ahora / 1000) % 34 >= 28 ? 1 : 0;   // Zelda: canta con música, va despierta manejando y, si no, duerme (y cada rato se despierta)
             if (vista == 1) {
@@ -297,12 +297,11 @@ public class CubiCarro extends CarAppService {
                 if (aLoAncho) {                                                     // Zelda a la izquierda, el mapa en lo que queda libre y la cajita abajo
                     zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, 2);
                     float izq = Math.max(zLibre, a.left + a.width() * 0.3f * zEsc) + m, abajo = a.bottom - Math.max(a.height() * 0.16f, 30) - m, parte = suena ? a.top + m + (abajo - a.top - m) * 0.68f : abajo;
-                    if (suena) {                                                    // la letra, sobre una tarjeta oscura para que se lea
-                        gr.set(izq, parte + m / 2, a.right - m, abajo); p.setStyle(Paint.Style.FILL); p.setColor(0x73000000); c.drawRoundRect(gr, 5 * u, 5 * u, p);
-                        letra(c, s, gr.left + gr.width() * 0.05f, gr.top + gr.height() * 0.06f, gr.width() * 0.9f, gr.height() * 0.9f);
-                    }
-                    r.set(izq - m, a.top, a.right, suena ? parte - m / 2 : abajo + m);   // sin márgenes: hasta los bordes y hasta la barra
-                    sinCaja = true;
+                    // El mapa es el fondo de todo lo que deja libre Zelda, hasta los bordes y hasta la barra. La letra va
+                    // encima, en su tarjeta (se pinta después del mapa); "corte" es hasta dónde queda el mapa a la vista.
+                    if (suena) letraR.set(izq, parte + m / 2, a.right - m, abajo);
+                    r.set(izq - m, a.top, a.right, abajo + m);
+                    sinCaja = true; corte = suena ? parte - m / 2 : abajo + m;
                 } else {                                                            // angosta: el mapa arriba; abajo Zelda y los datos del viaje
                     float cy = a.top + a.height() * 0.62f, cx = a.left + a.width() * 0.42f;
                     zelda(c, a.left, cy, cx, a.bottom, 0, ahora, modo, fondo, s, 3); viaje(c, cx + m / 2, cy, a.right - m, a.bottom - m, s, u);
@@ -319,12 +318,17 @@ public class CubiCarro extends CarAppService {
             boolean conMapa = hayMapa || (nav && s.carroDatos != null && !Double.isNaN(s.posLat));
             p.setStyle(Paint.Style.FILL); p.setColor(fundido ? VELO : PANEL); if (!(fundido && conMapa)) c.drawRect(r, p);   // fundido y con mapa: el velo lo pone el mapa, desvanecido
             if (conMapa) mapa(c, s, x0, y0, x1, y1, u);
+            if (!letraR.isEmpty()) {                                     // la letra, sobre una tarjeta oscura para que se lea encima del mapa
+                p.setStyle(Paint.Style.FILL); p.setColor(0x99000000); c.drawRoundRect(letraR, 5 * u, 5 * u, p);
+                letra(c, s, letraR.left + letraR.width() * 0.05f, letraR.top + letraR.height() * 0.06f, letraR.width() * 0.9f, letraR.height() * 0.9f);
+            }
+            final float yf = sinCaja ? corte : y1;                       // el pie del mapa a la vista (encima de la letra, si la hay)
             float pie = franja ? 22 * u : 0;
             if (nav) {
                 // el giro: sobre el mapa va en una tarjeta arriba a la izquierda; sin mapa, grande y al centro
                 boolean llego = s.navDir.equals("llegamos");
                 String dist = llego ? "Llegaste" : metros(s.navMetros), calle = llego ? "" : s.navCalle;
-                float k = conMapa ? (y1 - y0 < 62 * u ? 0.72f : 1f) : 1.5f, fx = x0 + 15 * u * k, fy = conMapa ? y0 + 3 * u + 14 * u * k : (y0 + y1 - pie) / 2;
+                float k = conMapa ? (yf - y0 < 62 * u ? 0.72f : 1f) : 1.5f, fx = x0 + 15 * u * k, fy = conMapa ? y0 + 3 * u + 14 * u * k : (y0 + y1 - pie) / 2;
                 if (conMapa) { p.setColor(fundido ? 0x8005070c : 0xd905070c); r.set(x0 + 3 * u, y0 + 3 * u, x0 + Math.min(w - 3 * u, 78 * u * k), y0 + 3 * u + 28 * u * k); c.drawRoundRect(r, 4 * u, 4 * u, p); }
                 if (!llego) flecha(c, fx, fy, 9 * u * k, s.navDir, s.navForma);
                 float tx = llego ? x0 + 8 * u * k : fx + 15 * u * k, tw = (conMapa ? x0 + 76 * u * k : x1 - 4 * u) - tx;
@@ -353,7 +357,7 @@ public class CubiCarro extends CarAppService {
                 if (haySeg) d += (d.isEmpty() ? "" : "  ·  ") + "giro en " + Math.round(s.navMetros * 3.6 / s.kmh) + " s";
                 if (!d.isEmpty()) {
                     p.setColor(0x8005070c);
-                    if (sinCaja) { gr.set(x0 + 6 * u, y1 - 14 * u, x1 - 4 * u, y1 - 2 * u); c.drawRoundRect(gr, 6 * u, 6 * u, p); }
+                    if (sinCaja) { gr.set(x0 + 6 * u, yf - 14 * u, x1 - 4 * u, yf - 2 * u); c.drawRoundRect(gr, 6 * u, 6 * u, p); }
                     else c.drawRect(x0, y1 - 13 * u, x1, y1, p);
                     // que nunca se corte: si no cabe, primero se va la calle (5 = el separador) y después se achica la letra
                     float cabe = w - (sinCaja ? 18 : 8) * u, tamF = 6 * u;
@@ -361,7 +365,7 @@ public class CubiCarro extends CarAppService {
                     if (tp.measureText(d) > cabe && !pre.isEmpty() && pre.equals(calleAhora) && d.length() > pre.length() + 5) d = d.substring(pre.length() + 5);
                     float an = tp.measureText(d);
                     if (an > cabe) tamF = Math.max(4.2f * u, tamF * cabe / an);
-                    texto(c, d, x0 + w / 2 + (sinCaja ? u : 0), y1 - (sinCaja ? 6f : 4.5f) * u, tamF, TINTA, true, Paint.Align.CENTER, cabe);
+                    texto(c, d, x0 + w / 2 + (sinCaja ? u : 0), yf - (sinCaja ? 6f : 4.5f) * u, tamF, TINTA, true, Paint.Align.CENTER, cabe);
                 }
             }
             // El botón Destino, siempre a la vista arriba a la derecha del mapa (si el carro avisa los toques): abre el
@@ -593,6 +597,7 @@ public class CubiCarro extends CarAppService {
         boolean botones;
         private final RectF cancR = new RectF();                      // dónde quedó la X de cancelar el destino
         boolean tocaCancelar(float x, float y) { return cancR.contains(x, y); }
+        private final RectF letraR = new RectF(); private float corte;   // la tarjeta de la letra sobre el mapa, y dónde empieza
         private boolean sinCaja, noche;                               // sinCaja: el mapa va sin recuadro, fundido con el fondo
         private final Paint pdL = new Paint(), pdB = new Paint(); private float degrX = -1, degrB = -1;
         private final RectF destR = new RectF();                      // dónde quedó el botón Destino (vacío si no se pintó)
@@ -977,7 +982,7 @@ public class CubiCarro extends CarAppService {
         }
         private void mapa(Canvas c, CubiService s, float x0, float y0, float x1, float y1, float u) {
             CubiService.MapaCarro d = s.carroDatos;
-            float w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + h * 0.66f, k = w / 400f;
+            float w = x1 - x0, h = y1 - y0, cx = x0 + w / 2, cy = y0 + (sinCaja ? corte - y0 : h) * 0.66f, k = w / 400f;
             float rumbo = s.mapaRumbo;
             if (Float.isNaN(rumboS)) rumboS = rumbo;
             rumboS = (rumboS + (((rumbo - rumboS + 540) % 360) - 180) * 0.12f + 360) % 360;
@@ -1043,7 +1048,7 @@ public class CubiCarro extends CarAppService {
                 if (Math.hypot(qx - panX, qy - panY) < 42 * k) continue;          // debajo del carrito
                 if (!s.navDir.isEmpty() && System.currentTimeMillis() - s.navCuando < 120000) {   // detrás de la tarjeta del giro
                     float[] pt = {qx, qy}; inclina.mapPoints(pt);
-                    float kk = h < 62 * u ? 0.72f : 1f;
+                    float kk = (sinCaja ? corte - y0 : h) < 62 * u ? 0.72f : 1f;
                     if (pt[0] + cx < x0 + 82 * u * kk && pt[1] + cy < y0 + 34 * u * kk) continue;
                 }
                 float vx = (bx - ax) * mcos - (by - ay) * msin, vy = (bx - ax) * msin + (by - ay) * mcos, vl = (float) Math.hypot(vx, vy);
