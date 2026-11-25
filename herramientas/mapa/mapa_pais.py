@@ -6,7 +6,7 @@
 #   (varint) y el nombre en UTF-8), cuántos puntos (varint) y los puntos como saltos
 #   (varint zigzag, en millonésimas de grado) desde el punto anterior; el primero, desde la esquina del cuadro.
 # Los sitios (ciudades, barrios, centros comerciales, hospitales…) van igual, como un "tramo" de UN solo punto con nombre y
-# clase 6 (ciudad o pueblo), 7 (barrio, vereda) u 8 (sitio de interés). Una app vieja los salta sola: solo toma tramos de 2 o más.
+# clase 6 (ciudad o pueblo), 7 (barrio, vereda), 8 (sitio de interés), 9 (peaje) o 10 (cámara de velocidad). Una app vieja los salta sola: solo toma tramos de 2 o más.
 # Una vía que cruza cuadros se parte: cada pedazo termina en el primer punto del cuadro siguiente, y el que sigue arranca ahí.
 import re, struct, sys, zlib
 T = 20000
@@ -44,7 +44,9 @@ LUGAR = {"city": 6, "town": 6, "village": 7, "suburb": 7, "neighbourhood": 7, "h
 INTERES = {("shop", "mall"), ("amenity", "hospital"), ("amenity", "fuel"), ("amenity", "university"), ("amenity", "bus_station"),
            ("aeroway", "aerodrome"), ("leisure", "stadium"), ("tourism", "attraction"), ("amenity", "police"), ("amenity", "charging_station")}
 def clase_sitio(tags):
-    """6, 7 u 8 si es un sitio que vale la pena rotular; 0 si no"""
+    """6, 7, 8, 9 o 10 si es un sitio que vale la pena rotular; 0 si no"""
+    if tags.get("barrier", "") == "toll_booth": return 9
+    if tags.get("highway", "") == "speed_camera": return 10
     if "name" not in tags: return 0
     if tags.get("place", "") in LUGAR: return LUGAR[tags.get("place")]
     return 8 if any(tags.get(k, "") == v for k, v in INTERES) else 0
@@ -85,7 +87,7 @@ def demo():
     import os, tempfile
     via = [(4_650_000, -74_060_000), (4_655_000, -74_058_000), (4_661_000, -74_057_000), (4_662_000, -74_020_500), (4_662_100, -74_020_400)]
     c = {}; meter(c, 1, via, "Avenida Boyacá"); meter(c, 0, via[:2]); punto(c, 8, 4_651_000, -74_059_000, "Centro Comercial")
-    assert clase_sitio({"name": "X", "place": "town"}) == 6 and clase_sitio({"name": "X", "shop": "mall"}) == 8 and clase_sitio({"shop": "mall"}) == 0
+    assert clase_sitio({"barrier": "toll_booth"}) == 9 and clase_sitio({"highway": "speed_camera"}) == 10 and clase_sitio({"name": "X", "place": "town"}) == 6 and clase_sitio({"name": "X", "shop": "mall"}) == 8 and clase_sitio({"shop": "mall"}) == 0
     f = os.path.join(tempfile.mkdtemp(), "p"); escribir(c, f)
     vuelta = [p for k in sorted(c) for cl, pts, nom in leer(f, k) for p in pts if cl < 6]
     assert set(vuelta) == set(via), vuelta
@@ -100,7 +102,7 @@ if __name__ == "__main__":
     class H(osmium.SimpleHandler):
         def node(self, n):
             cs = clase_sitio(n.tags)
-            if cs and n.location.valid(): punto(cuadros, cs, round(n.location.lat * 1e6), round(n.location.lon * 1e6), n.tags.get("name")); cuenta[2] += 1
+            if cs and n.location.valid(): punto(cuadros, cs, round(n.location.lat * 1e6), round(n.location.lon * 1e6), n.tags.get("name") or ("Peaje" if cs == 9 else "Cámara")); cuenta[2] += 1
         def way(self, w):
             t = w.tags.get("highway", "")
             if not VIA.match(t):

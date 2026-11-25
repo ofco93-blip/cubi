@@ -618,6 +618,23 @@ public class MainActivity extends Activity {
             catch (Exception e) { js("toast('No pude abrir el navegador')"); }
         }
 
+        // los destinos favoritos de la pantalla del carro: renglones "nombre<tab>destino"
+        @JavascriptInterface
+        public String favLista() { return getSharedPreferences("cubi", 0).getString("destinosFav", ""); }
+        @JavascriptInterface
+        public void favPon(String nombre, String destino) {
+            String n = nombre == null ? "" : nombre.replaceAll("[\\t\\n]", " ").trim(), d = destino == null ? "" : destino.replaceAll("[\\t\\n]", " ").trim();
+            if (n.isEmpty() || d.isEmpty()) return;
+            String antes = favLista();
+            getSharedPreferences("cubi", 0).edit().putString("destinosFav", (antes.isEmpty() ? "" : antes + "\n") + n + "\t" + d).apply();
+        }
+        @JavascriptInterface
+        public void favQuita(int cual) {
+            java.util.ArrayList<String> l = new java.util.ArrayList<>(java.util.Arrays.asList(favLista().split("\n")));
+            if (cual >= 0 && cual < l.size()) l.remove(cual);
+            getSharedPreferences("cubi", 0).edit().putString("destinosFav", android.text.TextUtils.join("\n", l)).apply();
+        }
+
         @JavascriptInterface
         public String paisEstado() { return CubiService.yo == null ? "" : CubiService.yo.estadoPais(); }
         @JavascriptInterface

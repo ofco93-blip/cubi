@@ -560,7 +560,7 @@ public class CubiService extends Service {
         float total = ac[ac.length - 1], falta = total - ac[k];
         int min = total <= 0 ? 0 : (int) Math.round(rutaDura * falta / total / 60);
         rutaFaltaM = Math.round(falta); rutaFaltaMin = min;
-        if (falta < 60 && Math.hypot((la[la.length - 1] - lat) * 111320, (lo[lo.length - 1] - lon) * 111320 * kx) < 120) { destino(""); return; }   // llegó: se acaba la ruta
+        if (falta < 60 && Math.hypot((la[la.length - 1] - lat) * 111320, (lo[lo.length - 1] - lon) * 111320 * kx) < 120) { llegue(); return; }   // llegó: se acaba la ruta y queda el resumen
         rutaLlega = new java.text.SimpleDateFormat(android.text.format.DateFormat.is24HourFormat(this) ? "H:mm" : "h:mm", Locale.US).format(new java.util.Date(System.currentTimeMillis() + min * 60000L));
     }
     private volatile boolean rutaCalculando, destBuscando;
@@ -572,6 +572,18 @@ public class CubiService extends Service {
 
     // el destino escrito en la app ("" lo quita)
     String destinoNombre() { return destinoTexto().isEmpty() ? "" : destNombre; }
+    // El viaje: lo andado y el tiempo desde que se puso el destino; al llegar queda el resumen un rato en la pantalla del carro.
+    private double viajeM; private long viajeDesde; private Location viajeAntes;
+    volatile String resumen = ""; volatile long resumenCuando;
+    private void llegue() {
+        if (viajeDesde > 0 && viajeM > 200) {
+            long min = Math.max(1, (System.currentTimeMillis() - viajeDesde) / 60000);
+            resumen = "Llegaste" + (destNombre.isEmpty() || destNombre.equals("el destino") ? "" : " a " + destNombre) + "  ·  " + String.format(Locale.US, "%.1f km", viajeM / 1000).replace('.', ',')
+                    + " en " + (min < 60 ? min + " min" : min / 60 + " h " + min % 60 + " min");
+        } else resumen = "Llegaste";
+        resumenCuando = System.currentTimeMillis();
+        destino("");
+    }
     void destino(String txt) { destino(txt, null); }
     // nombre: cómo se llama el sitio cuando txt es solo el punto (lat,lon), para mostrarlo
     void destino(String txt, String nombre) {
@@ -579,6 +591,7 @@ public class CubiService extends Service {
         getSharedPreferences("cubi", 0).edit().putString("destino", q).apply();
         destLat = Double.NaN; rutaLat = null; rutaLon = null; rutaPedida = 0; mapaForzar = true;
         rutaFaltaM = -1; rutaFaltaMin = -1; rutaLlega = "";
+        viajeM = 0; viajeAntes = null; viajeDesde = q.isEmpty() ? 0 : System.currentTimeMillis();
         if (q.isEmpty()) { rutaEstado = ""; destNombre = ""; return; }
         final int turno = ++destTurno;                       // un pedido nuevo deja sin efecto la búsqueda anterior que siga andando
         Matcher punto = Pattern.compile("^(-?\\d+(?:\\.\\d+)?)\\s*,\\s*(-?\\d+(?:\\.\\d+)?)$").matcher(q);
@@ -910,6 +923,10 @@ public class CubiService extends Service {
         double dy = (lat - mapaLat0) * 111320, dx = (lon - mapaLon0) * 111320 * Math.cos(Math.toRadians(mapaLat0));
         double lejos = Math.hypot(dx, dy);
         mapaDx = dx; mapaDy = dy; mapaCuando = ahora; mapaVel = l.hasSpeed() ? l.getSpeed() : 0;
+        if (viajeDesde > 0) {                                // lo andado del viaje (quieto no suma: el GPS brinca)
+            if (viajeAntes != null && l.hasSpeed() && l.getSpeed() > 1) viajeM += l.distanceTo(viajeAntes);
+            viajeAntes = l;
+        }
         if (navMapa() && (!mapaListo || lejos > 130 || mapaForzar) && !mapaCargando && (ahora - mapaPedido > 8000 || mapaForzar)) {
             mapaPedido = ahora; mapaCargando = true; mapaForzar = false;
             new Thread(() -> bajarCalles(lat, lon)).start();
@@ -1768,7 +1785,7 @@ public class CubiService extends Service {
                 && ahora - llegadaAvisada > 60000) {
             llegadaAvisada = ahora;
             navDecision = "¡llegamos!"; navDir = "llegamos";
-            if (!destinoTexto().isEmpty()) destino("");               // Maps dijo que llegó: la ruta propia también se acaba
+            if (!destinoTexto().isEmpty()) llegue();                  // Maps dijo que llegó: la ruta propia también se acaba
             enviar("asis|/r?n=llegamos");
             return;
         }

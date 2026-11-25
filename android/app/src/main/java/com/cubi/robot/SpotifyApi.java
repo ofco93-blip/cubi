@@ -197,6 +197,28 @@ class SpotifyApi {
         }
     }
 
+    /** Las listas del usuario: {nombre, uri, "42 canciones"} */
+    java.util.List<String[]> listas() throws Exception {
+        java.util.ArrayList<String[]> l = new java.util.ArrayList<>();
+        Object[] r = api("GET", "/me/playlists?limit=40", null);
+        if ((int) r[0] != 200) throw new java.io.IOException("Spotify respondió " + r[0]);
+        JSONArray a = new JSONObject((String) r[1]).optJSONArray("items");
+        for (int i = 0; a != null && i < a.length(); i++) {
+            JSONObject o = a.optJSONObject(i);
+            if (o == null) continue;
+            JSONObject t = o.optJSONObject("tracks");
+            l.add(new String[]{o.optString("name"), o.optString("uri"), t == null ? "" : t.optInt("total") + " canciones"});
+        }
+        return l;
+    }
+    /** Pone a sonar una lista (o un álbum o artista) por su uri. */
+    boolean poner(String uri) {
+        try {
+            String dev = dispositivo();
+            return dev != null && (int) api("PUT", "/me/player/play?device_id=" + dev, new JSONObject().put("context_uri", uri))[0] < 300;
+        } catch (Exception e) { return false; }
+    }
+
     private static JSONObject primero(JSONObject j, String tipo) {
         JSONObject t = j.optJSONObject(tipo);
         JSONArray a = t == null ? null : t.optJSONArray("items");

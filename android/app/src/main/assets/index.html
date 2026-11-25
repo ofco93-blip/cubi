@@ -298,6 +298,14 @@ section[hidden] { display: none; }
     <p class="note">Google Maps no deja ver su línea azul desde otras apps. Para que el camino salga pintado en Cubi y en la pantalla del carro, escribe aquí el destino y toca “Trazar ruta”; luego “Ir con Google Maps” abre la navegación hacia ese mismo punto.</p>
     <p class="note">La ruta la calcula un servicio libre (OSRM), no Google: puede no ser la misma que te da Maps. Para buscar el destino y trazarla, el celular manda el destino y tu posición a nominatim.openstreetmap.org y router.project-osrm.org.</p>
   </div>
+  <h2>Destinos favoritos</h2>
+  <div class="card">
+    <input type="text" id="favNombre" placeholder="Nombre (ej: Casa)" autocomplete="off">
+    <input type="text" id="favDestino" placeholder="Dirección o sitio (ej: Carrera 9 # 20-15, Popayán)" autocomplete="off" style="margin-top:8px">
+    <button class="btn" id="favGuardar" style="width:100%;margin-top:10px">Guardar favorito</button>
+    <div id="favLista"></div>
+    <p class="note">Salen con una estrella arriba del todo al tocar “Destino” en la pantalla del carro: un toque y traza la ruta. Entre más completa la dirección, mejor lo encuentra.</p>
+  </div>
   <h2>Mapa de Google (opcional)</h2>
   <div class="card">
     <input type="password" id="googleLlave" placeholder="Pega aquí tu llave de Google Cloud" autocomplete="off">
@@ -593,6 +601,20 @@ if (window.Android && Android.googleEstado) {
   $('googleUsar').onchange = e => Android.googleUsar(e.target.value === '1');
   setTimeout(() => { $('googleUsar').value = Android.googleUsa() ? '1' : '0'; }, 500);
   setInterval(goo, 1500);
+}
+if (window.Android && Android.favLista) {
+  const favs = () => {
+    const caja = $('favLista'); caja.textContent = '';
+    Android.favLista().split('
+').filter(r => r.includes('	')).forEach((r, i) => {
+      const [n, d] = r.split('	'), fila = document.createElement('div'), t = document.createElement('span'), b = document.createElement('button');
+      fila.className = 'row'; t.textContent = '★ ' + n + ' — ' + d; b.className = 'btn'; b.textContent = 'Quitar';
+      b.onclick = () => { Android.favQuita(i); favs(); };
+      fila.append(t, b); caja.append(fila);
+    });
+  };
+  $('favGuardar').onclick = () => { const n = $('favNombre').value.trim(), d = $('favDestino').value.trim(); if (n && d) { Android.favPon(n, d); $('favNombre').value = ''; $('favDestino').value = ''; favs(); } };
+  setTimeout(favs, 500);
 }
 if (window.Android && Android.paisEstado) {
   const pais = () => { $('paisEstado').textContent = Android.paisEstado(); };

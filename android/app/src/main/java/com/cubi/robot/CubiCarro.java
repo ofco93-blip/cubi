@@ -98,18 +98,56 @@ public class CubiCarro extends CarAppService {
         } catch (Exception e) { }
     }
 
+    // Las listas de Spotify del usuario (con Spotify conectado en la app): tocar una la pone a sonar. De a 5 por pantalla.
+    static class Listas extends Screen {
+        private java.util.List<String[]> ls; private String aviso = ""; private int desde;
+        Listas(CarContext c) {
+            super(c);
+            new Thread(() -> {
+                java.util.List<String[]> r = null; String a = "";
+                try { SpotifyApi sp = new SpotifyApi(c); if (!sp.conectado()) a = "Conecta Spotify en la app de Cubi (pestaña Voz, Conexiones)."; else r = sp.listas(); }
+                catch (Exception e) { a = "No pude traer tus listas (¿hay internet?)."; }
+                final java.util.List<String[]> rr = r == null ? new java.util.ArrayList<>() : r; final String aa = a;
+                new Handler(Looper.getMainLooper()).post(() -> { ls = rr; aviso = aa; invalidate(); });
+            }).start();
+        }
+        @NonNull @Override public Template onGetTemplate() {
+            ListTemplate.Builder b = new ListTemplate.Builder().setTitle("Tus listas de Spotify").setHeaderAction(Action.BACK);
+            if (ls == null) return b.setLoading(true).build();
+            ItemList.Builder l = new ItemList.Builder().setNoItemsMessage(aviso.isEmpty() ? "No tienes listas guardadas." : aviso);
+            for (int i = desde; i < ls.size() && i < desde + 5; i++) {
+                final String[] o = ls.get(i);
+                Row.Builder f = new Row.Builder().setTitle(o[0].isEmpty() ? "Lista" : o[0]).setOnClickListener(() -> {
+                    new Thread(() -> new SpotifyApi(getCarContext()).poner(o[1])).start();
+                    getScreenManager().popToRoot();
+                });
+                if (!o[2].isEmpty()) f.addText(o[2]);
+                l.addItem(f.build());
+            }
+            if (ls.size() > 5) l.addItem(new Row.Builder().setTitle(desde + 5 < ls.size() ? "Más listas…" : "Volver al principio").setOnClickListener(() -> { desde = desde + 5 < ls.size() ? desde + 5 : 0; invalidate(); }).build());
+            return b.setSingleList(l.build()).build();
+        }
+    }
+
     // El buscador de destino. Abre con el teclado guardado y la lista de los últimos destinos; al buscar (escrito o
     // dictado) muestra los sitios que se llaman así, del más cercano al más lejano, para escoger uno.
     static class Buscar extends Screen {
         private java.util.List<String[]> ops;                         // {nombre, dónde queda, "lat,lon", "12 km"}
         private boolean buscando; private String aviso = "";
-        Buscar(CarContext c) { super(c); ops = recientes(c); }
+        Buscar(CarContext c) { super(c); ops = favoritos(c); ops.addAll(recientes(c)); }
+        // los favoritos se guardan desde la app (pestaña Mapa): nombre y destino escrito; van con estrella y sin punto fijo
+        static java.util.List<String[]> favoritos(android.content.Context c) {
+            java.util.ArrayList<String[]> l = new java.util.ArrayList<>();
+            for (String r : c.getSharedPreferences("cubi", 0).getString("destinosFav", "").split("\n")) { String[] p = r.split("\t"); if (p.length == 2) l.add(new String[]{"★ " + p[0], p[1], "", ""}); }
+            return l;
+        }
         static java.util.List<String[]> recientes(android.content.Context c) {
             java.util.ArrayList<String[]> l = new java.util.ArrayList<>();
             for (String r : c.getSharedPreferences("cubi", 0).getString("destinosUsados", "").split("\n")) { String[] p = r.split("\t"); if (p.length == 3) l.add(new String[]{p[0], p[1], p[2], ""}); }
             return l;
         }
         private void escoger(String[] o) {
+            if (o[2].isEmpty()) { irA(getCarContext(), o[1]); getScreenManager().popToRoot(); return; }   // un favorito: se busca por su texto, el más cercano
             SharedPreferences p = getCarContext().getSharedPreferences("cubi", 0);
             StringBuilder sb = new StringBuilder(o[0] + "\t" + o[1] + "\t" + o[2]); int n = 1;
             for (String[] r : recientes(getCarContext())) if (!r[2].equals(o[2]) && n++ < 6) sb.append('\n').append(r[0]).append('\t').append(r[1]).append('\t').append(r[2]);
@@ -174,6 +212,8 @@ public class CubiCarro extends CarAppService {
             if (nivel >= 2) b.setMapActionStrip(new ActionStrip.Builder().addAction(new Action.Builder().setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), R.drawable.carro_buscar)).build())
                             .setOnClickListener(() -> getScreenManager().push(new Buscar(getCarContext()))).build())
                     // el botón de mover: en los carros que no mandan los dedos directo, activa el modo de arrastrar el mapa
+                    .addAction(new Action.Builder().setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), R.drawable.carro_listas)).build())
+                            .setOnClickListener(() -> getScreenManager().push(new Listas(getCarContext()))).build())   // tus listas de Spotify
                     .addAction(new Action.Builder(Action.PAN).setIcon(new CarIcon.Builder(IconCompat.createWithResource(getCarContext(), R.drawable.carro_mover)).build()).build()).build());
             return b.build();
         }
@@ -199,6 +239,7 @@ public class CubiCarro extends CarAppService {
         @Override public void onVisibleAreaChanged(@NonNull Rect r) { zona.set(r); }
         // un toque en el dibujo (los carros con Android Auto reciente lo avisan): si cayó en un botón de música, lo manda
         @Override public void onClick(float x, float y) {
+            if (lienzo.tocaListas(x, y)) { getScreenManager().push(new Listas(getCarContext())); return; }   // la pastilla de la canción: tus listas de Spotify
             if (lienzo.tocaCancelar(x, y)) { if (CubiService.yo != null) CubiService.yo.destino(""); return; }   // la X: quita el destino y su ruta
             if (lienzo.tocaDestino(x, y)) { getScreenManager().push(new Buscar(getCarContext())); return; }   // el botón Destino del mapa
             int k = lienzo.boton(x, y);
@@ -306,7 +347,7 @@ public class CubiCarro extends CarAppService {
             // ponytail: una pantalla vertical a pantalla completa también cae aquí y se queda sin franja; darle su propio caso si aparece
             if (!aLoAncho && !firme.isEmpty()) a = firme;
             boolean franja = musica && aLoAncho && !(zelda && vista == 0);   // con Zelda la canción ya va en su cajita
-            fundido = false; sinCaja = false; letraR.setEmpty();
+            fundido = false; sinCaja = false; letraR.setEmpty(); listaR.setEmpty();
             float u = Math.min(a.height(), a.width() * (aLoAncho ? 0.5f : 1f)) / 100f;
             int modo = suena ? 2 : nav ? 1 : (ahora / 1000) % 34 >= 28 ? 1 : 0;   // Zelda: canta con música, va despierta manejando y, si no, duerme (y cada rato se despierta)
             if (vista == 1) {
@@ -382,6 +423,8 @@ public class CubiCarro extends CarAppService {
                 String f = falta(s, nav), av = s.rutaAviso(), dn = s.destinoNombre();
                 final String pre = !dn.isEmpty() && !f.isEmpty() ? "→ " + dn : conMapa ? calleAhora : "";   // con destino va su nombre; sin destino, la calle por la que va
                 String d = pre;
+                if (ahora - s.resumenCuando < 45000 && !s.resumen.isEmpty()) { d = s.resumen; f = ""; av = ""; }
+                else if (!avisoVia.isEmpty()) { d = avisoVia; f = ""; av = ""; }
                 if (!f.isEmpty()) d += (d.isEmpty() ? "" : "  ·  ") + f;
                 else if (!av.isEmpty()) d = av;
                 boolean haySeg = nav && s.navMetros >= 0 && s.kmh >= 8 && s.navMetros * 3.6 / s.kmh < 100;
@@ -502,6 +545,7 @@ public class CubiCarro extends CarAppService {
             long cuadros = ahora * 24 / 1000;
             int j = (int) (cuadros % vuelta), semilla = (int) (cuadros / vuelta) * 7919 + (sv == null ? 0 : sv.cancionTitulo.hashCode());
             String clip = lista[(semilla & 0x7fffffff) % lista.length];
+            if (sv != null && ahora - sv.resumenCuando < 20000) clip = "baile";   // llegamos: festeja
             long ciclo = cuadros / vuelta;
             int[] tinte = null; boolean alReves = false;
             // El clima: lluvia, calor o frío. Reacciona en los dos bucles siguientes a que cambie, y luego uno de cada seis.
@@ -523,6 +567,27 @@ public class CubiCarro extends CarAppService {
             // el color del fondo: el del tema o, durante una reacción al clima, teñido (entra y sale suave con el bucle)
             float ft = tinte == null ? 0 : Math.max(0, Math.min(1, Math.min(j, vuelta - j) / 14f));
             int c0 = tinte == null ? TEMA[tm][0] : mezcla(TEMA[tm][0], tinte[0], ft), c1 = tinte == null ? TEMA[tm][1] : mezcla(TEMA[tm][1], tinte[1], ft), c2 = tinte == null ? TEMA[tm][2] : mezcla(TEMA[tm][2], tinte[2], ft);
+            // Con música el fondo se tiñe con el color de la carátula (cambia suave de una canción a otra) y late despacio.
+            // ponytail: late a un pulso fijo (unos 100 por minuto), no al de la canción; usar el pulso real cuando el robot lo mande.
+            android.graphics.Bitmap car0 = sv == null || !musicaZ ? null : sv.cancionCaratula;
+            if (car0 != null && !car0.isRecycled() && tinte == null) {
+                if (car0 != colDe) {
+                    colDe = car0;
+                    try {
+                        android.graphics.Bitmap uno = android.graphics.Bitmap.createScaledBitmap(car0.getConfig() == android.graphics.Bitmap.Config.HARDWARE ? car0.copy(android.graphics.Bitmap.Config.ARGB_8888, false) : car0, 1, 1, true);
+                        float[] hsv = new float[3]; android.graphics.Color.colorToHSV(uno.getPixel(0, 0), hsv);
+                        hsv[1] = Math.min(1, hsv[1] * 1.5f + 0.15f); hsv[2] = 0.5f;          // más vivo y a media luz: que se lean las letras
+                        colCar = android.graphics.Color.HSVToColor(hsv);
+                    } catch (Throwable t) { colCar = 0; }
+                }
+                if (colCar != 0) {
+                    float tr = (colCar >> 16) & 255, tg = (colCar >> 8) & 255, tb = colCar & 255;
+                    if (colR < 0) { colR = tr; colG = tg; colB = tb; } else { colR += (tr - colR) * 0.04f; colG += (tg - colG) * 0.04f; colB += (tb - colB) * 0.04f; }
+                    float late = (float) Math.pow(Math.max(0, Math.sin(ahora / 600.0 * Math.PI)), 6) * 0.12f;   // un golpecito de luz
+                    int cc = 0xff000000 | (int) colR << 16 | (int) colG << 8 | (int) colB;
+                    c0 = mezcla(mezcla(c0, cc, 0.62f), 0xffffffff, late); c1 = mezcla(c1, cc, 0.28f); c2 = mezcla(mezcla(c2, cc, 0.5f), 0xffffffff, late * 0.6f);
+                }
+            } else if (car0 == null) colR = -1;
             if (google && estilo == 2) { c0 = c1 = CubiGoogle.TONO; c2 = mezcla(CubiGoogle.TONO, 0xffffffff, 0.07f); }   // con el mapa de Google: fondo liso del mismo tono que su mapa, para que se funda
             c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); if (!lleno) c.clipPath(gp);
             // el fondo y la repisa. El clip es de 1280x720; aquí se ajusta al alto: "sc" pasa de sus puntos a la pantalla.
@@ -629,6 +694,10 @@ public class CubiCarro extends CarAppService {
         boolean botones;
         boolean google;                                               // el recuadro del mapa lo pinta Google (CubiGoogle)
         final RectF googleR = new RectF();                            // dónde quedó ese recuadro en este cuadro (vacío = no hay)
+        private final RectF listaR = new RectF();                     // la pastilla naranja de la canción: al tocarla, las listas
+        boolean tocaListas(float x, float y) { return listaR.contains(x, y); }
+        private String avisoVia = "";                                 // "Peaje en 400 m", "Cámara en 300 m"
+        private android.graphics.Bitmap colDe; private int colCar; private float colR = -1, colG, colB;   // el color de la carátula, para el fondo
         private final RectF cancR = new RectF();                      // dónde quedó la X de cancelar el destino
         boolean tocaCancelar(float x, float y) { return cancR.contains(x, y); }
         private final RectF letraR = new RectF(); private float corte;   // la tarjeta de la letra sobre el mapa, y dónde empieza
@@ -709,6 +778,7 @@ public class CubiCarro extends CarAppService {
             float wt = tit.isEmpty() || cabe < ph ? 0 : Math.min(tp.measureText(tit), cabe);
             float ini = fin - (hayCar ? lado + mg : ph * 0.4f) - (wt > 0 ? wt + ph * 0.75f : mg * 0.5f);
             p.setStyle(Paint.Style.FILL); p.setColor(NARANJA); c.drawRoundRect(ini, t, fin, bm, ph / 2, ph / 2, p);
+            if (botones) listaR.set(ini, t, fin, bm);
             if (wt > 0) texto(c, tit, ini + ph * 0.45f, base - tam * 0.03f, tam * 0.86f, CAFE, true, Paint.Align.LEFT, wt + 2);
             if (hayCar) {
                 gr.set(fin - mg * 0.5f - lado, t + mg * 0.5f, fin - mg * 0.5f, bm - mg * 0.5f); gp.rewind(); gp.addRoundRect(gr, lado / 2, lado / 2, Path.Direction.CW);
@@ -1003,16 +1073,19 @@ public class CubiCarro extends CarAppService {
             // Los sitios de adelante, hasta 8: primero ciudades y pueblos, luego sitios de interés y por último barrios;
             // y de cada grupo los más cercanos.
             java.util.ArrayList<float[]> cand = new java.util.ArrayList<>();      // {nota, cuál}
+            float viaM = 1e9f; String via = "";
             for (int i = 0; d.sitios != null && 2 * i + 1 < d.sitios.length; i++) {
                 float mx = d.sitios[2 * i] - px, my = d.sitios[2 * i + 1] - py, ade = mx * dx + my * dy, lado = mx * dy - my * dx;
                 if (ade < -40 || ade > 650 || Math.abs(lado) > 380) continue;
-                cand.add(new float[]{(d.sitioCl[i] == 6 ? 0 : d.sitioCl[i] == 8 ? 500 : 1100) + (float) Math.hypot(mx, my), i});
+                int sc0 = d.sitioCl[i];
+                if (sc0 >= 9 && ade > 20 && ade < 700 && Math.abs(lado) < 45 && ade < viaM) { viaM = ade; via = (sc0 == 9 ? "Peaje" : "Cámara de velocidad") + " en " + metros(ade); }
+                cand.add(new float[]{(sc0 >= 9 ? -2000 : sc0 == 6 ? 0 : sc0 == 8 ? 500 : 1100) + (float) Math.hypot(mx, my), i});
             }
             java.util.Collections.sort(cand, (x, y) -> Float.compare(x[0], y[0]));
             int ns = Math.min(8, cand.size());
             String[] sn = new String[ns]; float[] sp = new float[ns * 2]; byte[] sc = new byte[ns];
             for (int i = 0; i < ns; i++) { int j = (int) cand.get(i)[1]; sn[i] = d.sitioNom[j]; sp[2 * i] = d.sitios[2 * j]; sp[2 * i + 1] = d.sitios[2 * j + 1]; sc[i] = d.sitioCl[j]; }
-            sitNom = sn; sitPos = sp; sitCl = sc;
+            sitNom = sn; sitPos = sp; sitCl = sc; avisoVia = via;
         }
         private void mapa(Canvas c, CubiService s, float x0, float y0, float x1, float y1, float u) {
             CubiService.MapaCarro d = s.carroDatos;
@@ -1095,8 +1168,8 @@ public class CubiCarro extends CarAppService {
             for (int i = 0; i < sitNom.length; i++) {                    // los sitios: un punto y su nombre encima
                 float sx = mk * (sitPos[2 * i] - mpx), sy = -mk * (sitPos[2 * i + 1] - mpy), qx = sx * mcos - sy * msin + panX, qy = sx * msin + sy * mcos + panY;
                 if (qy > mlim || qy < -b * 0.8f || Math.abs(qx) > a || Math.hypot(qx - panX, qy - panY) < 42 * k) continue;
-                int col = sitCl[i] == 8 ? 0xffffe2a0 : 0xffffffff;
-                p.setStyle(Paint.Style.FILL); p.setColor(col); c.drawCircle(qx, qy, 2.4f * k, p);
+                int col = sitCl[i] == 9 ? 0xffffc93d : sitCl[i] == 10 ? 0xffff6b5e : sitCl[i] == 8 ? 0xffffe2a0 : 0xffffffff;   // peaje amarillo, cámara roja
+                p.setStyle(Paint.Style.FILL); p.setColor(col); c.drawCircle(qx, qy, (sitCl[i] >= 9 ? 4.2f : 2.4f) * k, p);
                 tp.setColor(col); tp.setTextSize((sitCl[i] == 6 ? 12 : 9.5f) * k);
                 c.drawText(sitNom[i], qx, qy - 5 * k, tp);
             }
