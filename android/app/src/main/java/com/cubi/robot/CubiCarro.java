@@ -496,14 +496,14 @@ public class CubiCarro extends CarAppService {
                 gp.rewind(); gp.moveTo(bx, by + br * 0.78f); gp.lineTo(bx + br * 0.28f, by); gp.lineTo(bx - br * 0.28f, by); gp.close(); p.setColor(0xffffffff); c.drawPath(gp, p);
                 c.restore();
                 if (botones && (panX != 0 || panY != 0 || zoom != 1)) {  // el mapa está corrido o acercado: botón para volver al carro
-                    float my = by + br * 2 + 3 * u, ar = br * 0.45f;
-                    centR.set(bx - br, my - br, bx + br, my + br);
-                    p.setColor(0xf22f7bff); c.drawCircle(bx, my, br, p);
+                    float my = by, ar = br * 0.45f, cxb = bx - br * 2 - 3 * u;   // a la izquierda de la brújula (debajo taparía la franja del destino)
+                    centR.set(cxb - br, my - br, cxb + br, my + br);
+                    p.setColor(0xf22f7bff); c.drawCircle(cxb, my, br, p);
                     p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeWidth(0.9f * u); p.setColor(0xffffffff);
-                    c.drawCircle(bx, my, ar, p);
-                    c.drawLine(bx, my - br * 0.78f, bx, my - ar, p); c.drawLine(bx, my + ar, bx, my + br * 0.78f, p);
-                    c.drawLine(bx - br * 0.78f, my, bx - ar, my, p); c.drawLine(bx + ar, my, bx + br * 0.78f, my, p);
-                    p.setStyle(Paint.Style.FILL); c.drawCircle(bx, my, br * 0.14f, p);
+                    c.drawCircle(cxb, my, ar, p);
+                    c.drawLine(cxb, my - br * 0.78f, cxb, my - ar, p); c.drawLine(cxb, my + ar, cxb, my + br * 0.78f, p);
+                    c.drawLine(cxb - br * 0.78f, my, cxb - ar, my, p); c.drawLine(cxb + ar, my, cxb + br * 0.78f, my, p);
+                    p.setStyle(Paint.Style.FILL); c.drawCircle(cxb, my, br * 0.14f, p);
                 }
             }
             if (franja) {
