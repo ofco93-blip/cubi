@@ -1018,7 +1018,7 @@ public class CubiCarro extends CarAppService {
             double ra = Math.toRadians(rumbo), kx = 111320 * Math.cos(Math.toRadians(d.lat0));
             // un rectángulo del suelo (ancho a, b hacia adelante, e hacia atrás) se pinta como trapecio: angosto y alto lo lejano
             float a = w * 0.6f, b = h * 1.7f, e = h * 0.3f;
-            if (System.currentTimeMillis() - panCuando > 10000) { panX *= 0.8f; panY *= 0.8f; if (Math.abs(panX) + Math.abs(panY) < 2) panX = panY = 0; }   // vuelve solo al carro
+            if (System.currentTimeMillis() - panCuando > 10000) { panX *= 0.8f; panY *= 0.8f; if (Math.abs(panX) + Math.abs(panY) < 2) panX = panY = 0; zoom += (1 - zoom) * 0.2f; if (Math.abs(zoom - 1) < 0.01f) zoom = 1; }   // vuelve solo al carro y a su tamaño (un pellizco sin querer lo dejaba perdido)
             mk = k * zoom; mlim = e; mcos = (float) Math.cos(Math.toRadians(-rumboS)); msin = (float) Math.sin(Math.toRadians(-rumboS));
             mpx = (float) ((s.posLon - d.lon0) * kx + Math.sin(ra) * s.mapaVel * dt); mpy = (float) ((s.posLat - d.lat0) * 111320 + Math.cos(ra) * s.mapaVel * dt);
             for (Path q : calles) q.rewind();
