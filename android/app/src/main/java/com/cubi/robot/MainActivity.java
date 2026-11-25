@@ -550,6 +550,7 @@ public class MainActivity extends Activity {
         public int carroOpcion(String k) {
             android.content.SharedPreferences p = getSharedPreferences("cubi", 0);
             if (k.equals("carroZelda")) return p.getBoolean(k, true) ? 1 : 0;
+            if (k.equals("carroZeldaTam")) return p.getInt(k, 0) % 3;
             return k.equals("carroFondo") ? p.getInt(k, -1) : p.getInt("carroVista", p.getBoolean("carroSola", false) ? 1 : 0);
         }
 
@@ -559,6 +560,7 @@ public class MainActivity extends Activity {
             if (k.equals("carroZelda")) e.putBoolean(k, v != 0);
             else if (k.equals("carroFondo")) e.putInt(k, Math.max(-1, Math.min(4, v)));
             else if (k.equals("carroVista")) e.putInt(k, Math.max(0, Math.min(2, v)));
+            else if (k.equals("carroZeldaTam")) e.putInt(k, Math.max(0, Math.min(2, v)));
             e.apply();
         }
 

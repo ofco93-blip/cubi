@@ -50,6 +50,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); ou
 .sw input:checked + i { background: var(--accent); }
 .sw input:checked + i::after { left: 23px; }
 .note { color: var(--muted); font-size: 14px; }
+/* los dos mundos de la app, bien separados: el robot (morado) y la pantalla del carro (azul) */
+.grupo { margin: 30px 0 -8px; padding: 12px 16px; border-radius: 14px; border-left: 5px solid; }
+.grupo b { display: block; font-size: 17px; } .grupo small { display: block; font-size: 13px; opacity: .8; margin-top: 2px; }
+.grupo.robot { background: rgba(140, 110, 255, .16); border-color: #8c6eff; }
+.grupo.auto { background: rgba(46, 160, 255, .16); border-color: #2ea0ff; }
 /* las explicaciones largas van guardadas: se abren al tocarlas */
 .ayuda { color: var(--muted); font-size: 14px; }
 .ayuda summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 13px; font-weight: 600; padding: 2px 0; }
@@ -266,15 +271,15 @@ section[hidden] { display: none; }
 
 <!-- ================= MAPA ================= -->
 <section id="tab-mapa" hidden>
-  <h2>Mapa en Cubi</h2>
+  <div class="grupo robot"><b>El robot</b><small>La pantalla chiquita que va sobre el tablero</small></div>
+  <h2>Mapa en el robot</h2>
   <div class="card">
-    <div class="row"><span>Con una ruta, Cubi muestra</span></div>
+    <div class="row"><span>Con una ruta, el robot muestra</span></div>
     <select id="navModo" aria-label="Qué muestra Cubi con una ruta">
       <option value="avisos">Solo los avisos de giro</option>
       <option value="mapa">Solo el mapa</option>
       <option value="nada">Nada del mapa</option>
     </select>
-    <p class="note">Con Cubi abierto en la pantalla del carro (Android Auto) y una ruta puesta, el mapa sale allá en cualquiera de los modos; para eso el celular le manda tu posición a OpenStreetMap (overpass-api.de), igual que en “Solo el mapa”, y necesita “Usar el GPS” prendido.<br><br>Solo los avisos: muestra la flecha cuando se acerca un giro y sigue cantando y reaccionando a lo demás. Solo el mapa: se queda fijo en el mapa mientras haya ruta. Sirve con Google Maps o con Waze; si los dos tienen ruta a la vez, manda Google Maps.</p>
     <div class="row"><span>Mapa completo (sin el muñequito)</span><label class="sw"><input type="checkbox" id="navCompleto"><i></i></label></div>
     <div class="log"><div id="navAhora"></div></div>
     <details class="ayuda"><summary>Cómo funciona</summary>
@@ -282,6 +287,11 @@ section[hidden] { display: none; }
       Modo mapa: mientras haya una ruta, Cubi se queda en la pantalla de giro (flecha, metros y calle) en vez de bailar, sin sonar, y la música no lo quita. Con “Usar el GPS” prendido, además sale un mini mapa con las calles de alrededor: para eso el celular le manda tu posición a OpenStreetMap (overpass-api.de y, si ese está ocupado, el de respaldo overpass.kumi.systems) mientras haya una ruta. Las calles ya bajadas quedan guardadas en el celular para que la próxima vez salgan al instante. La línea azul de Maps no se puede sacar; para ver una ruta, escribe el destino aquí abajo.<br><br>
       Mapa completo apagado: Cubi con la manito o el volante y la tarjeta con el mini mapa. Prendido: el mapa en toda la pantalla, con el carrito, la ruta y arriba la barra con el giro, los metros y la calle.</p>
     </details>
+  </div>
+  <div class="grupo auto"><b>La pantalla del carro</b><small>Android Auto: lo que sale al abrir Cubi en la pantalla grande</small></div>
+  <h2>Destino y ruta</h2>
+  <div class="card">
+    <p class="note">Con Cubi abierto en la pantalla del carro (Android Auto) y una ruta puesta, el mapa sale allá en cualquiera de los modos; para eso el celular le manda tu posición a OpenStreetMap (overpass-api.de), igual que en “Solo el mapa”, y necesita “Usar el GPS” prendido.<br><br>Solo los avisos: muestra la flecha cuando se acerca un giro y sigue cantando y reaccionando a lo demás. Solo el mapa: se queda fijo en el mapa mientras haya ruta. Sirve con Google Maps o con Waze; si los dos tienen ruta a la vez, manda Google Maps.</p>
     <input type="text" id="destino" placeholder="Destino (ej: Centro Comercial Andino, Bogotá)" autocomplete="off">
     <div class="grid2"><button class="btn" id="trazar">Trazar ruta</button><button class="btn" id="quitarRuta">Quitar ruta</button></div>
     <button class="btn" id="irMaps" style="width:100%;margin-top:10px">Ir con Google Maps a ese destino</button>
@@ -298,7 +308,8 @@ section[hidden] { display: none; }
 
 <!-- ================= MASCOTAS ================= -->
 <section id="tab-mascotas" hidden>
-  <h2>Mascota del carro (el robot)</h2>
+  <div class="grupo robot"><b>El robot</b><small>La pantalla chiquita que va sobre el tablero</small></div>
+  <h2>Mascota del robot</h2>
   <div class="card">
     <div class="paqs">
       <button class="paq" data-paq="1"><span class="eyes"><i></i><i></i></span><b>Cubi</b><small>Ojitos de píldora</small></button>
@@ -313,7 +324,8 @@ section[hidden] { display: none; }
       <p>Todos vienen blancos. Cubi y Pancho lo toman en los ojos y la boca (sus guantes y efectos siguen a color); Lino y Mochi lo toman en todo: ojos, boca, manitos e instrumentos.</p>
     </details>
   </div>
-  <h2>Mascota de la pantalla (Android Auto)</h2>
+  <div class="grupo auto"><b>La pantalla del carro</b><small>Android Auto: lo que sale al abrir Cubi en la pantalla grande</small></div>
+  <h2>Mascota de Android Auto</h2>
   <div class="card">
     <div class="row"><span>Personaje</span></div>
     <select id="carroZelda" aria-label="Personaje de la pantalla"><option value="1">Zelda, la gata</option><option value="0">Cubi (los ojitos)</option></select>
@@ -326,6 +338,8 @@ section[hidden] { display: none; }
     <select id="carroVista" aria-label="Vista de la pantalla">
       <option value="0">Personaje, y mapa cuando hay ruta</option><option value="1">Solo el personaje</option><option value="2">Solo el mapa</option>
     </select>
+    <div class="row"><span>Tamaño de Zelda junto al mapa</span></div>
+    <select id="carroZeldaTam" aria-label="Tamaño de Zelda junto al mapa"><option value="0">Grande</option><option value="1">Mediana</option><option value="2">Pequeña (mapa más amplio)</option></select>
     <p class="note">Es lo que sale al abrir Cubi en la pantalla del carro. Son las mismas opciones del botón “Opciones” de esa pantalla: lo que cambies aquí se ve allá al instante. El robot sigue con su propia cara.</p>
   </div>
 </section>
@@ -570,7 +584,7 @@ if (window.Android && Android.paisEstado) {
 $('quitarRuta').onclick = () => { $('destino').value = ''; if (window.Android) { Android.destinoCubi(''); navAhora(); } };
 if (window.Android && Android.navCompleto) setTimeout(() => { $('navCompleto').checked = Android.navCompleto(); $('destino').value = Android.destinoTexto(); }, 500);
 // la mascota de la pantalla del carro: las mismas opciones que se cambian desde Android Auto
-['carroZelda', 'carroFondo', 'carroVista'].forEach(k => {
+['carroZelda', 'carroFondo', 'carroVista', 'carroZeldaTam'].forEach(k => {
   $(k).onchange = e => { if (window.Android && Android.carroPon) Android.carroPon(k, +e.target.value); };
   if (window.Android && Android.carroOpcion) setTimeout(() => { $(k).value = Android.carroOpcion(k); }, 500);
 });
