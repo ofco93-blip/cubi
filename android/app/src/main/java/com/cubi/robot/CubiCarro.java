@@ -584,8 +584,8 @@ public class CubiCarro extends CarAppService {
                     float tr = (colCar >> 16) & 255, tg = (colCar >> 8) & 255, tb = colCar & 255;
                     if (colR < 0) { colR = tr; colG = tg; colB = tb; } else { colR += (tr - colR) * 0.04f; colG += (tg - colG) * 0.04f; colB += (tb - colB) * 0.04f; }
                     float late = (float) Math.pow(Math.max(0, Math.sin(ahora / 600.0 * Math.PI)), 6) * 0.12f;   // un golpecito de luz
-                    int cc = 0xff000000 | (int) colR << 16 | (int) colG << 8 | (int) colB;
-                    c0 = mezcla(mezcla(c0, cc, 0.62f), 0xffffffff, late); c1 = mezcla(c1, cc, 0.28f); c2 = mezcla(mezcla(c2, cc, 0.5f), 0xffffffff, late * 0.6f);
+                    int ccar = 0xff000000 | (int) colR << 16 | (int) colG << 8 | (int) colB;
+                    c0 = mezcla(mezcla(c0, ccar, 0.62f), 0xffffffff, late); c1 = mezcla(c1, ccar, 0.28f); c2 = mezcla(mezcla(c2, ccar, 0.5f), 0xffffffff, late * 0.6f);
                 }
             } else if (car0 == null) colR = -1;
             if (google && estilo == 2) { c0 = c1 = CubiGoogle.TONO; c2 = mezcla(CubiGoogle.TONO, 0xffffffff, 0.07f); }   // con el mapa de Google: fondo liso del mismo tono que su mapa, para que se funda
