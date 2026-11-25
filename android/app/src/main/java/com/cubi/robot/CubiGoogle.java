@@ -39,7 +39,9 @@ final class CubiGoogle {
 
     static String llave(Context c) { return c.getSharedPreferences("cubi", 0).getString("llaveGoogle", "").trim(); }
     private static boolean terminos(Context c) {
-        try { return NavigationApi.areTermsAccepted((Application) c.getApplicationContext()); } catch (Throwable t) { return false; }
+        // La llave va SIEMPRE antes de cualquier consulta a Google: sin ella, esa consulta arranca por dentro un hilo
+        // que la busca en el manifiesto, no la halla y tumba la app al abrir (pasó en la 2.0.340).
+        try { NavigationApi.setApiKey(llave(c)); return NavigationApi.areTermsAccepted((Application) c.getApplicationContext()); } catch (Throwable t) { return false; }
     }
     // Los dos mapas siguen sirviendo: con la llave puesta, el usuario escoge cuál sale (se aplica al volver a conectar el carro)
     static boolean elegido(Context c) { return c.getSharedPreferences("cubi", 0).getBoolean("mapaGoogle", true); }
