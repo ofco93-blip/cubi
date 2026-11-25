@@ -372,13 +372,13 @@ public class CubiCarro extends CarAppService {
                     final float abajo = a.bottom - Math.max(a.height() * 0.16f, 30) - m, parte = suena ? a.top + m + (abajo - a.top - m) * 0.78f : abajo;
                     final boolean suZ = suena, mapZ = !google && s != null && (hayMapa || (nav && s.carroDatos != null && !Double.isNaN(s.posLat))), navZ = mapZ && nav;
                     final Canvas cZ = c; final CubiService sZ = s;
-                    sinHora = navZ;                                                 // el aviso del giro ocupa el puesto de la hora
+                    sinHora = navZ && zEsc < 1;                                                 // el aviso del giro ocupa el puesto de la hora
                     detras = !mapZ ? null : () -> {
                         float iz = Math.max(zLibre, aL + aW * 0.3f * zEsc);
                         sinCaja = true; this.corte = suZ ? parte - mZ / 2 : abajo + mZ; mapaExt = iz - aL;
                         mapa(cZ, sZ, iz, aT, aR, abajo + mZ, uZ);
                         mapaExt = 0;
-                        if (navZ) tarjetaGiro(cZ, sZ, aL, aT, 81 * uZ, uZ, 1);
+                        if (navZ) tarjetaGiro(cZ, sZ, zEsc < 1 ? aL : iz, aT, 81 * uZ, uZ, 1);   // con Zelda grande no cabe encima de ella (le taparía los metros): va al lado
                     };
                     zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, 2); detras = null;
                     float izq = Math.max(zLibre, a.left + a.width() * 0.3f * zEsc) + m;
