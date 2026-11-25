@@ -388,6 +388,7 @@ public class CubiCarro extends CarAppService {
             boolean conMapa = google || hayMapa || (nav && s.carroDatos != null && !Double.isNaN(s.posLat));
             p.setStyle(Paint.Style.FILL); p.setColor(fundido ? VELO : PANEL); if (!(fundido && conMapa)) c.drawRect(r, p);   // fundido y con mapa: el velo lo pone el mapa, desvanecido
             final float yf = sinCaja ? corte : y1;                       // el pie del mapa a la vista (encima de la letra, si la hay)
+            this.corte = corte;                                          // mapa() lo lee: sin esto valía 0 y el carrito quedaba arriba, fuera de la vista
             if (google) googleR.set(x0, y0, x1, yf);
             else if (conMapa) mapa(c, s, x0, y0, x1, y1, u);
             if (google) nav = false;                                     // el giro y lo que falta los muestra Google dentro de su recuadro
