@@ -5,13 +5,11 @@ import android.app.Application;
 import android.app.Presentation;
 import android.content.Context;
 import android.graphics.Canvas;
-import android.graphics.Outline;
 import android.graphics.Point;
 import android.graphics.RectF;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.view.View;
-import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 
 import androidx.car.app.SurfaceContainer;
@@ -107,8 +105,22 @@ final class CubiGoogle {
     private GoogleMap mapa;
     private View lienzo;
     private final RectF donde = new RectF();
+    private View borde;                                               // encima del mapa: desvanece sus orillas hacia el fondo
+    // El mapa de Google es una imagen sólida: para que se funda, se le pone el MISMO tono al fondo de la pantalla y a la
+    // tierra del mapa (TONO), se pinta en oscuro y sus orillas se desvanecen hacia ese tono.
+    // ponytail: el estilo se pide al mapa; si la navegación de Google lo ignora, queda su oscuro de fábrica y solo
+    // coinciden las orillas. Ajustar TONO con una foto del carro.
+    static final int TONO = 0xff101b38;
+    private static final String ESTILO = "[{\"elementType\":\"geometry\",\"stylers\":[{\"color\":\"#101b38\"}]},"
+            + "{\"elementType\":\"labels.text.fill\",\"stylers\":[{\"color\":\"#c8d4f0\"}]},"
+            + "{\"elementType\":\"labels.text.stroke\",\"stylers\":[{\"color\":\"#0a1226\"}]},"
+            + "{\"featureType\":\"road\",\"elementType\":\"geometry\",\"stylers\":[{\"color\":\"#2a3a66\"}]},"
+            + "{\"featureType\":\"road.arterial\",\"elementType\":\"geometry\",\"stylers\":[{\"color\":\"#3a4d80\"}]},"
+            + "{\"featureType\":\"road.highway\",\"elementType\":\"geometry\",\"stylers\":[{\"color\":\"#4a62a0\"}]},"
+            + "{\"featureType\":\"water\",\"elementType\":\"geometry\",\"stylers\":[{\"color\":\"#0c2a55\"}]},"
+            + "{\"featureType\":\"poi.park\",\"elementType\":\"geometry\",\"stylers\":[{\"color\":\"#12303f\"}]}]";
 
-    boolean abrir(Context c, SurfaceContainer sc, final Pintor p, final float radio) {
+    boolean abrir(Context c, SurfaceContainer sc, final Pintor p, final float u) {
         try {
             if (sc.getSurface() == null || sc.getWidth() == 0 || sc.getHeight() == 0 || sc.getDpi() == 0) return false;
             vd = c.getSystemService(DisplayManager.class).createVirtualDisplay("CubiGoogle", sc.getWidth(), sc.getHeight(), sc.getDpi(),
@@ -118,16 +130,33 @@ final class CubiGoogle {
             lienzo = new View(pr.getContext()) { @Override protected void onDraw(Canvas k) { p.pintar(k); } };
             vista = new NavigationViewForAuto(c);
             vista.onCreate(null); vista.onStart(); vista.onResume();
-            vista.setOutlineProvider(new ViewOutlineProvider() {       // las esquinas redondas del recuadro
-                @Override public void getOutline(View v, Outline o) { o.setRoundRect(0, 0, v.getWidth(), v.getHeight(), radio); }
-            });
-            vista.setClipToOutline(true);
             vista.setVisibility(View.INVISIBLE);
+            borde = new View(pr.getContext()) {                        // las cuatro orillas, del tono del fondo a transparente
+                private final android.graphics.Paint q = new android.graphics.Paint();
+                private void lado(Canvas k, float x0, float y0, float x1, float y1, float gx0, float gy0, float gx1, float gy1) {
+                    q.setShader(new android.graphics.LinearGradient(gx0, gy0, gx1, gy1, TONO, TONO & 0x00ffffff, android.graphics.Shader.TileMode.CLAMP));
+                    k.drawRect(x0, y0, x1, y1, q);
+                }
+                @Override protected void onDraw(Canvas k) {
+                    float w = getWidth(), h = getHeight(), f = 10 * u;
+                    lado(k, 0, 0, f * 1.6f, h, 0, 0, f * 1.6f, 0);       // izquierda (hacia Zelda), más ancha
+                    lado(k, w - f, 0, w, h, w, 0, w - f, 0);
+                    lado(k, 0, 0, w, f * 1.3f, 0, 0, 0, f * 1.3f);
+                    lado(k, 0, h - f, w, h, 0, h, 0, h - f);
+                }
+            };
+            borde.setVisibility(View.INVISIBLE);
             raiz.addView(lienzo, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
             raiz.addView(vista, new FrameLayout.LayoutParams(1, 1));
+            raiz.addView(borde, new FrameLayout.LayoutParams(1, 1));
             pr.setContentView(raiz);
             pr.show();
-            vista.getMapAsync(m -> { mapa = m; try { m.followMyLocation(GoogleMap.CameraPerspective.TILTED); } catch (Throwable t) { } });
+            vista.getMapAsync(m -> {
+                mapa = m;
+                try { m.setMapColorScheme(com.google.android.gms.maps.model.MapColorScheme.DARK); } catch (Throwable t) { }
+                try { m.setMapStyle(new com.google.android.gms.maps.model.MapStyleOptions(ESTILO)); } catch (Throwable t) { }
+                try { m.followMyLocation(GoogleMap.CameraPerspective.TILTED); } catch (Throwable t) { }
+            });
             return true;
         } catch (Throwable t) {
             estado = "Google: no pude abrir el mapa en el carro (" + t + ").";
@@ -140,14 +169,15 @@ final class CubiGoogle {
     void cuadro(RectF r) {
         if (lienzo == null || vista == null) return;
         lienzo.invalidate();
-        if (r.isEmpty()) { if (vista.getVisibility() == View.VISIBLE) vista.setVisibility(View.INVISIBLE); donde.setEmpty(); return; }
+        if (r.isEmpty()) { if (vista.getVisibility() == View.VISIBLE) { vista.setVisibility(View.INVISIBLE); borde.setVisibility(View.INVISIBLE); } donde.setEmpty(); return; }
         if (!r.equals(donde)) {
             donde.set(r);
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(Math.round(r.width()), Math.round(r.height()));
             lp.leftMargin = Math.round(r.left); lp.topMargin = Math.round(r.top);
             vista.setLayoutParams(lp);
+            borde.setLayoutParams(new FrameLayout.LayoutParams(lp));
         }
-        if (vista.getVisibility() != View.VISIBLE) vista.setVisibility(View.VISIBLE);
+        if (vista.getVisibility() != View.VISIBLE) { vista.setVisibility(View.VISIBLE); borde.setVisibility(View.VISIBLE); }
     }
     void mover(float dx, float dy) { if (mapa != null) try { mapa.moveCamera(CameraUpdateFactory.scrollBy(dx, dy)); } catch (Throwable t) { } }
     void acercar(float f, float x, float y) {
@@ -157,6 +187,6 @@ final class CubiGoogle {
         try { if (vista != null) { vista.onPause(); vista.onStop(); vista.onDestroy(); } } catch (Throwable t) { }
         try { if (pr != null) pr.dismiss(); } catch (Throwable t) { }
         try { if (vd != null) vd.release(); } catch (Throwable t) { }
-        vista = null; pr = null; vd = null; mapa = null; lienzo = null;
+        vista = null; pr = null; vd = null; mapa = null; lienzo = null; borde = null;
     }
 }

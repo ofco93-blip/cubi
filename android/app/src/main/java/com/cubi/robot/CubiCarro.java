@@ -192,7 +192,7 @@ public class CubiCarro extends CarAppService {
             if (CubiGoogle.lista(getCarContext())) {
                 CubiGoogle.preparar(getCarContext());
                 CubiGoogle g = new CubiGoogle();
-                if (g.abrir(getCarContext(), s, this::dibujarEn, Math.min(alto, ancho * 0.5f) * 0.05f)) { goo = g; lienzo.google = true; }
+                if (g.abrir(getCarContext(), s, this::dibujarEn, Math.min(alto, ancho * 0.5f) / 100f)) { goo = g; lienzo.google = true; }
             }
             h.removeCallbacks(cuadro); h.post(cuadro);
         }
@@ -325,7 +325,7 @@ public class CubiCarro extends CarAppService {
                 fundido = true;
                 if (aLoAncho) {                                                     // Zelda a la izquierda, el mapa en lo que queda libre y la cajita abajo
                     zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, 2);
-                    float izq = Math.max(zLibre, a.left + a.width() * 0.3f * zEsc) + m, abajo = a.bottom - Math.max(a.height() * 0.16f, 30) - m, parte = suena ? a.top + m + (abajo - a.top - m) * 0.68f : abajo;
+                    float izq = Math.max(zLibre, a.left + a.width() * 0.3f * zEsc) + m, abajo = a.bottom - Math.max(a.height() * 0.16f, 30) - m, parte = suena ? a.top + m + (abajo - a.top - m) * (google ? 0.78f : 0.68f) : abajo;
                     // El mapa es el fondo de todo lo que deja libre Zelda, hasta los bordes y hasta la barra. La letra va
                     // encima, en su tarjeta (se pinta después del mapa); "corte" es hasta dónde queda el mapa a la vista.
                     if (suena) letraR.set(izq, parte + m / 2, a.right - m, abajo);
@@ -523,6 +523,7 @@ public class CubiCarro extends CarAppService {
             // el color del fondo: el del tema o, durante una reacción al clima, teñido (entra y sale suave con el bucle)
             float ft = tinte == null ? 0 : Math.max(0, Math.min(1, Math.min(j, vuelta - j) / 14f));
             int c0 = tinte == null ? TEMA[tm][0] : mezcla(TEMA[tm][0], tinte[0], ft), c1 = tinte == null ? TEMA[tm][1] : mezcla(TEMA[tm][1], tinte[1], ft), c2 = tinte == null ? TEMA[tm][2] : mezcla(TEMA[tm][2], tinte[2], ft);
+            if (google && estilo == 2) { c0 = c1 = CubiGoogle.TONO; c2 = mezcla(CubiGoogle.TONO, 0xffffffff, 0.07f); }   // con el mapa de Google: fondo liso del mismo tono que su mapa, para que se funda
             c.save(); gp.rewind(); gr.set(x0, y0, x1, y1); gp.addRoundRect(gr, radio, radio, Path.Direction.CW); if (!lleno) c.clipPath(gp);
             // el fondo y la repisa. El clip es de 1280x720; aquí se ajusta al alto: "sc" pasa de sus puntos a la pantalla.
             float sc = vh / 720f, repisa = y0 + 688 * sc;
