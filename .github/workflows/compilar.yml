@@ -29,6 +29,7 @@ jobs:
           CUBI_LLAVE: ${{ secrets.CUBI_LLAVE }}
           CUBI_CLAVE: ${{ secrets.CUBI_CLAVE }}
         run: |
+          python3 herramientas/revisar_pagina.py
           echo "$CUBI_LLAVE" | base64 -d > android/app/cubi.p12
           gradle -p android assembleRelease --no-daemon
           rm android/app/cubi.p12

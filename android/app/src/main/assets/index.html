@@ -605,9 +605,8 @@ if (window.Android && Android.googleEstado) {
 if (window.Android && Android.favLista) {
   const favs = () => {
     const caja = $('favLista'); caja.textContent = '';
-    Android.favLista().split('
-').filter(r => r.includes('	')).forEach((r, i) => {
-      const [n, d] = r.split('	'), fila = document.createElement('div'), t = document.createElement('span'), b = document.createElement('button');
+    Android.favLista().split('\n').filter(r => r.includes('\t')).forEach((r, i) => {
+      const [n, d] = r.split('\t'), fila = document.createElement('div'), t = document.createElement('span'), b = document.createElement('button');
       fila.className = 'row'; t.textContent = '★ ' + n + ' — ' + d; b.className = 'btn'; b.textContent = 'Quitar';
       b.onclick = () => { Android.favQuita(i); favs(); };
       fila.append(t, b); caja.append(fila);
