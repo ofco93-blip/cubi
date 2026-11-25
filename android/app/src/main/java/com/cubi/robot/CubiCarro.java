@@ -84,6 +84,7 @@ public class CubiCarro extends CarAppService {
         if (q.equalsIgnoreCase(irQ) && ya - irCuando < 15000) return;   // el mismo pedido que vuelve (ver abajo)
         irQ = q; irCuando = ya;
         if (CubiService.yo != null) CubiService.yo.destino(paraCubi);
+        if (CubiGoogle.lista(c)) return;                             // con la llave puesta navega Google dentro de Cubi: no se abre la app de Maps
         // Por la vía del carro: se le pide a la app de navegación del carro. No depende de que el celular esté desbloqueado.
         // Si el carro se lo devuelve a Cubi, llega aquí otra vez y lo frena la línea de arriba.
         try { c.startCarApp(new Intent(CarContext.ACTION_NAVIGATE, android.net.Uri.parse("geo:0,0?q=" + android.net.Uri.encode(q)))); } catch (Exception e) { }
@@ -150,8 +151,17 @@ public class CubiCarro extends CarAppService {
                     .setOnClickListener(() -> { if (CubiService.yo != null) CubiService.yo.musicaTecla(cual); }).build();
         }
 
+        private CubiGoogle goo;                                       // el mapa de Google, si el usuario puso su llave; null = el mapa propio
+        private double gLat = Double.NaN, gLon;                       // el destino que ya se le pasó a Google
         @Override public void onSurfaceAvailable(@NonNull SurfaceContainer s) {
             sup = s.getSurface(); ancho = s.getWidth(); alto = s.getHeight();
+            if (goo != null) { goo.cerrar(); goo = null; }
+            lienzo.google = false; gLat = Double.NaN;
+            if (CubiGoogle.lista(getCarContext())) {
+                CubiGoogle.preparar(getCarContext());
+                CubiGoogle g = new CubiGoogle();
+                if (g.abrir(getCarContext(), s, this::dibujarEn, Math.min(alto, ancho * 0.5f) * 0.05f)) { goo = g; lienzo.google = true; }
+            }
             h.removeCallbacks(cuadro); h.post(cuadro);
         }
         @Override public void onVisibleAreaChanged(@NonNull Rect r) { zona.set(r); }
@@ -163,9 +173,12 @@ public class CubiCarro extends CarAppService {
         }
         @Override public void onStableAreaChanged(@NonNull Rect r) { firme.set(r); }
         // arrastrar mueve el mapa y pellizcar lo acerca o aleja; a los 10 s sin tocar vuelve solo al carro
-        @Override public void onScroll(float dx, float dy) { lienzo.mover(-dx, -dy); }
-        @Override public void onScale(float fx, float fy, float factor) { lienzo.acercar(factor); }
-        @Override public void onSurfaceDestroyed(@NonNull SurfaceContainer s) { sup = null; h.removeCallbacks(cuadro); }
+        @Override public void onScroll(float dx, float dy) { if (goo != null) goo.mover(dx, dy); else lienzo.mover(-dx, -dy); }
+        @Override public void onScale(float fx, float fy, float factor) { if (goo != null) goo.acercar(factor, fx, fy); else lienzo.acercar(factor); }
+        @Override public void onSurfaceDestroyed(@NonNull SurfaceContainer s) {
+            sup = null; h.removeCallbacks(cuadro);
+            if (goo != null) { goo.cerrar(); goo = null; lienzo.google = false; }
+        }
 
         private void pintar() {
             boolean suena = CubiService.yo != null && CubiService.yo.musicaPlay;
@@ -174,8 +187,20 @@ public class CubiCarro extends CarAppService {
             if (s == null || !s.isValid()) return;
             CubiService sv = CubiService.yo;                       // le avisa al servicio que la pantalla del carro está a la vista (para el mapa)
             if (sv != null) { if (sv.carroMapa()) sv.carroViendo = System.currentTimeMillis(); else sv.carroEntra(); sv.navRefrescar(); }
+            if (goo != null) {                                     // con Google: el dibujo lo pide su capa; aquí solo se acomoda el mapa y se le pasa el destino
+                goo.cuadro(lienzo.googleR);
+                double[] d = sv == null ? null : sv.destinoPunto();
+                if (d != null && (d[0] != gLat || d[1] != gLon)) { gLat = d[0]; gLon = d[1]; CubiGoogle.ir(gLat, gLon); }
+                else if (d == null && !Double.isNaN(gLat)) { gLat = Double.NaN; CubiGoogle.parar(); }
+                return;
+            }
             Canvas c;
             try { c = s.lockHardwareCanvas(); } catch (Exception e) { return; }
+            try { dibujarEn(c); } finally {
+                try { s.unlockCanvasAndPost(c); } catch (Throwable t) { }
+            }
+        }
+        private void dibujarEn(Canvas c) {
             try {
                 Rect a = zona.isEmpty() ? new Rect(0, 0, ancho, alto) : zona;
                 lienzo.zEsc = new float[]{1f, 0.8f, 0.62f}[prefs.getInt("carroZeldaTam", 0) % 3];
@@ -184,8 +209,6 @@ public class CubiCarro extends CarAppService {
                 // un error al dibujar no puede tumbar la app: se apagan los clips (queda la Zelda dibujada) y el error
                 // sale en letra pequeña en la pantalla del carro, para poder verlo
                 lienzo.assets = null; lienzo.falla = String.valueOf(t);
-            } finally {
-                try { s.unlockCanvasAndPost(c); } catch (Throwable t) { }
             }
         }
     }
@@ -229,6 +252,7 @@ public class CubiCarro extends CarAppService {
         // vista: 0 personaje con mapa, 1 solo el personaje, 2 solo el mapa. zelda: el personaje es la gata (si no, los ojos de Cubi)
         void dibujar(Canvas c, Rect a, Rect firme, CubiService s, int vista, int ojos, boolean zelda, int fondo) {
             long ahora = System.currentTimeMillis();
+            googleR.setEmpty();
             c.drawColor(0xff000000);
             dibujarTodo(c, a, firme, s, vista, ojos, zelda, fondo, ahora);
             if (falla != null) texto(c, falla, a.left + 12, a.bottom - 10, 14, GRIS, false, Paint.Align.LEFT, a.width() - 24);
@@ -253,7 +277,7 @@ public class CubiCarro extends CarAppService {
                 if (franja) texto(c, cancion, a.centerX(), a.bottom - 9 * u, 5.5f * u, GRIS, false, Paint.Align.CENTER, a.width() - 12 * u);
                 return;
             }
-            if (zelda && vista == 0 && !nav && !hayMapa) { zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, 1); return; }   // sin ruta: Zelda en grande
+            if (zelda && vista == 0 && !nav && !hayMapa && !google) { zelda(c, a.left, a.top, a.right, a.bottom, 0, ahora, modo, fondo, s, 1); return; }   // sin ruta: Zelda en grande
             // la carita a un lado (arriba si la pantalla es angosta) y el panel con lo demás
             float corte = aLoAncho ? a.left + a.width() * 0.38f : a.top + a.height() * 0.46f, m = 3 * u;
             if (vista == 2) corte = aLoAncho ? a.left : a.top;                      // solo el mapa: el panel ocupa todo
@@ -282,9 +306,11 @@ public class CubiCarro extends CarAppService {
             float x0 = r.left, y0 = r.top, x1 = r.right, y1 = r.bottom, w = x1 - x0;
             recorte.rewind(); recorte.addRoundRect(r, 5 * u, 5 * u, Path.Direction.CW);
             c.save(); c.clipPath(recorte);
-            boolean conMapa = hayMapa || (nav && s.carroDatos != null && !Double.isNaN(s.posLat));
+            boolean conMapa = google || hayMapa || (nav && s.carroDatos != null && !Double.isNaN(s.posLat));
             p.setStyle(Paint.Style.FILL); p.setColor(fundido ? VELO : PANEL); if (!(fundido && conMapa)) c.drawRect(r, p);   // fundido y con mapa: el velo lo pone el mapa, desvanecido
-            if (conMapa) mapa(c, s, x0, y0, x1, y1, u);
+            if (google) googleR.set(x0, y0, x1, y1);
+            else if (conMapa) mapa(c, s, x0, y0, x1, y1, u);
+            if (google) nav = false;                                     // el giro y lo que falta los muestra Google dentro de su recuadro
             float pie = franja ? 22 * u : 0;
             if (nav) {
                 // el giro: sobre el mapa va en una tarjeta arriba a la izquierda; sin mapa, grande y al centro
@@ -309,7 +335,7 @@ public class CubiCarro extends CarAppService {
             }
             if (nav && !conMapa)                                         // sin mapa: por qué (sin GPS, bajando las calles, sin internet…)
                 texto(c, s.gpsActivo() ? s.carroEstado : "Para ver el mapa, prende “Usar el GPS” en la app de Cubi", x0 + w / 2, y0 + (y1 - y0) * 0.9f, 4.5f * u, fundido ? 0xe6ffffff : GRIS, false, Paint.Align.CENTER, w - 8 * u);
-            if ((nav || conMapa) && fundido && aLoAncho) {
+            if ((nav || conMapa) && fundido && aLoAncho && !google) {
                 String d = conMapa ? calleAhora : "";
                 String f = falta(s, nav), av = s.rutaAviso();
                 if (!f.isEmpty()) d += (d.isEmpty() ? "" : "  ·  ") + f;
@@ -330,7 +356,7 @@ public class CubiCarro extends CarAppService {
             // El botón Destino, siempre a la vista arriba a la derecha del mapa (si el carro avisa los toques): abre el
             // buscador, donde se escribe o se dicta con el micrófono del teclado del carro.
             destR.setEmpty();
-            if (conMapa && botones) {
+            if (conMapa && botones && !google) {
                 float bh = 11 * u, bw = 36 * u;
                 destR.set(x1 - 3 * u - bw, y0 + 3 * u, x1 - 3 * u, y0 + 3 * u + bh);
                 p.setStyle(Paint.Style.FILL); p.setColor(0xd905070c); c.drawRoundRect(destR, bh / 2, bh / 2, p);
@@ -544,6 +570,8 @@ public class CubiCarro extends CarAppService {
         }
         // Los botones de música de la barra: dónde quedaron (para saber cuál se tocó). botones: el carro avisa los toques.
         boolean botones;
+        boolean google;                                               // el recuadro del mapa lo pinta Google (CubiGoogle)
+        final RectF googleR = new RectF();                            // dónde quedó ese recuadro en este cuadro (vacío = no hay)
         private final RectF destR = new RectF();                      // dónde quedó el botón Destino (vacío si no se pintó)
         boolean tocaDestino(float x, float y) { return destR.contains(x, y); }
         private float panX, panY, zoom = 1; private long panCuando;   // el mapa corrido con el dedo (en puntos del suelo) y qué tan cerca

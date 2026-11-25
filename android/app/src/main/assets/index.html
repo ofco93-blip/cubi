@@ -288,6 +288,14 @@ section[hidden] { display: none; }
     <p class="note">Google Maps no deja ver su línea azul desde otras apps. Para que el camino salga pintado en Cubi y en la pantalla del carro, escribe aquí el destino y toca “Trazar ruta”; luego “Ir con Google Maps” abre la navegación hacia ese mismo punto.</p>
     <p class="note">La ruta la calcula un servicio libre (OSRM), no Google: puede no ser la misma que te da Maps. Para buscar el destino y trazarla, el celular manda el destino y tu posición a nominatim.openstreetmap.org y router.project-osrm.org.</p>
   </div>
+  <h2>Mapa de Google (opcional)</h2>
+  <div class="card">
+    <input type="password" id="googleLlave" placeholder="Pega aquí tu llave de Google Cloud" autocomplete="off">
+    <div class="grid2"><button class="btn" id="googleGuardar">Guardar llave</button><button class="btn" id="googleQuitar">Quitar</button></div>
+    <button class="btn" id="googleAbrir" style="width:100%;margin-top:10px">Abrir Google Cloud para sacar la llave</button>
+    <p class="note" id="googleEstado"></p>
+    <p class="note">Con tu propia llave, el recuadro del mapa en la pantalla del carro pasa a ser la navegación de Google: ruta completa, tráfico, giros y voz. El destino se pide desde Cubi (por voz o con el buscador). Pasos en Google Cloud: crear un proyecto, activar la facturación (pide una tarjeta), activar “Navigation SDK” y crear una llave de API. Google regala los primeros 1.000 destinos al mes; lo que pase de ahí lo cobra a tu cuenta. La llave se guarda solo en este celular. Para volver al mapa de Cubi, toca Quitar y vuelve a conectar el carro.</p>
+  </div>
   <h2>Mapa sin internet</h2>
   <div class="card">
     <div class="grid2"><button class="btn" id="paisBajar">Descargar mapa de Colombia</button><button class="btn" id="paisBorrar">Borrar</button></div>
@@ -561,6 +569,13 @@ setInterval(navAhora, 3000);
 $('navCompleto').onchange = e => Android.navCompletoCubi(e.target.checked);
 $('trazar').onclick = () => { if (window.Android) { Android.destinoCubi($('destino').value); navAhora(); } };
 $('irMaps').onclick = () => { if (window.Android && Android.irMaps) Android.irMaps(); };
+if (window.Android && Android.googleEstado) {
+  const goo = () => { $('googleEstado').textContent = Android.googleEstado(); };
+  $('googleGuardar').onclick = () => { const k = $('googleLlave').value.trim(); if (k) { Android.googleLlave(k); $('googleLlave').value = ''; } goo(); };
+  $('googleQuitar').onclick = () => { Android.googleLlave(''); goo(); };
+  $('googleAbrir').onclick = () => Android.googleAbrir();
+  setInterval(goo, 1500);
+}
 if (window.Android && Android.paisEstado) {
   const pais = () => { $('paisEstado').textContent = Android.paisEstado(); };
   $('paisBajar').onclick = () => { Android.paisBajar(); pais(); };

@@ -592,6 +592,26 @@ public class MainActivity extends Activity {
             if (CubiService.yo != null) CubiService.yo.destino(txt);
         }
 
+        // el mapa de Google (opcional): la llave la pega el usuario; no se le devuelve a la página, solo cómo termina
+        @JavascriptInterface
+        public String googleEstado() {
+            String k = CubiGoogle.llave(MainActivity.this);
+            if (k.isEmpty()) return "Sin llave: Cubi usa su mapa de siempre.";
+            String cola = k.length() > 4 ? k.substring(k.length() - 4) : k;
+            return "Llave guardada (termina en " + cola + "). " + (CubiGoogle.lista(MainActivity.this) ? (CubiGoogle.estado.isEmpty() ? "Lista: se usa al conectar el carro." : CubiGoogle.estado)
+                    : CubiGoogle.estado.isEmpty() ? "Falta aceptar los términos de Google: toca Guardar otra vez." : CubiGoogle.estado);
+        }
+        @JavascriptInterface
+        public void googleLlave(String k) {
+            getSharedPreferences("cubi", 0).edit().putString("llaveGoogle", k == null ? "" : k.trim()).apply();
+            if (k != null && !k.trim().isEmpty()) runOnUiThread(() -> CubiGoogle.aceptar(MainActivity.this));
+        }
+        @JavascriptInterface
+        public void googleAbrir() {
+            try { startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://console.cloud.google.com/google/maps-apis/start"))); }
+            catch (Exception e) { js("toast('No pude abrir el navegador')"); }
+        }
+
         @JavascriptInterface
         public String paisEstado() { return CubiService.yo == null ? "" : CubiService.yo.estadoPais(); }
         @JavascriptInterface
