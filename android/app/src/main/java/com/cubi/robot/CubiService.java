@@ -638,6 +638,7 @@ public class CubiService extends Service {
             if (i > 0) Thread.sleep(1100);                            // ese servicio pide no más de una consulta por segundo
             r = new JSONArray(bajarTexto(us.get(i)));
         }
+        if ((r == null || r.length() == 0) && q.indexOf(',') > 2) { Thread.sleep(1100); return sitios(q.substring(0, q.indexOf(',')).trim()); }   // la dirección completa no está: solo el nombre del sitio
         ArrayList<String[]> ops = new ArrayList<>(); final ArrayList<Double> lejos = new ArrayList<>();
         for (int i = 0; r != null && i < r.length(); i++) {
             JSONObject o = r.getJSONObject(i);
