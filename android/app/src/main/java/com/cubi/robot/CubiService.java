@@ -631,26 +631,30 @@ public class CubiService extends Service {
                 aqui.getLongitude() + 0.6, aqui.getLatitude() - 0.6));
         String pais = null;
         try { pais = ((android.telephony.TelephonyManager) getSystemService(TELEPHONY_SERVICE)).getNetworkCountryIso(); } catch (Exception e) { }
+        if (pais == null || pais.length() != 2) pais = Locale.getDefault().getCountry();
         if (pais != null && pais.length() == 2) us.add(base + "&countrycodes=" + pais.toLowerCase(Locale.ROOT));
         us.add(base);
-        JSONArray r = null;
-        for (int i = 0; i < us.size() && (r == null || r.length() == 0); i++) {
+        JSONArray r = new JSONArray();
+        for (int i = 0; i < us.size() && (i < us.size() - 1 || r.length() == 0); i++) {
             if (i > 0) Thread.sleep(1100);                            // ese servicio pide no más de una consulta por segundo
-            r = new JSONArray(bajarTexto(us.get(i)));
+            JSONArray p = new JSONArray(bajarTexto(us.get(i)));
+            for (int j = 0; j < p.length(); j++) r.put(p.getJSONObject(j));
         }
         if ((r == null || r.length() == 0) && q.indexOf(',') > 2) { Thread.sleep(1100); return sitios(q.substring(0, q.indexOf(',')).trim()); }   // la dirección completa no está: solo el nombre del sitio
-        ArrayList<String[]> ops = new ArrayList<>(); final ArrayList<Double> lejos = new ArrayList<>();
+        ArrayList<String[]> ops = new ArrayList<>(); final ArrayList<Double> lejos = new ArrayList<>(); java.util.HashSet<String> vistos = new java.util.HashSet<>();
         for (int i = 0; r != null && i < r.length(); i++) {
             JSONObject o = r.getJSONObject(i);
+            if (!vistos.add(o.optString("osm_type") + o.optLong("osm_id"))) continue;
             String todo = o.optString("display_name", q); int coma = todo.indexOf(',');
             double la = o.getDouble("lat"), lo = o.getDouble("lon");
             double km = aqui == null ? -1 : Math.hypot((la - aqui.getLatitude()) * 111.32, (lo - aqui.getLongitude()) * 111.32 * Math.cos(Math.toRadians(la)));
+            double kk = km < 0 ? -1 : km + ("highway".equals(o.optString("class")) ? 1e5 : 0);   // las calles van después de los pueblos y sitios
             int en = 0;
-            while (en < ops.size() && (km < 0 || lejos.get(en) <= km)) en++;      // se mete en su puesto: del más cercano al más lejano
+            while (en < ops.size() && (kk < 0 || lejos.get(en) <= kk)) en++;      // se mete en su puesto: del más cercano al más lejano
             String donde = coma < 0 ? "" : todo.substring(coma + 1).trim();
             ops.add(en, new String[]{coma < 0 ? todo : todo.substring(0, coma), donde.length() > 60 ? donde.substring(0, 60) : donde,
                     String.format(Locale.US, "%.6f,%.6f", la, lo), km < 0 ? "" : km < 10 ? String.format(Locale.US, "%.1f km", km).replace('.', ',') : Math.round(km) + " km"});
-            lejos.add(en, km);
+            lejos.add(en, kk);
         }
         return ops;
     }
