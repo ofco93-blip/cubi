@@ -394,7 +394,7 @@ public class CubiCarro extends CarAppService {
                     final boolean mapZ = !google && s != null && (hayMapa || (nav && s.carroDatos != null && !Double.isNaN(s.posLat))), navZ = mapZ && nav;
                     final Canvas cZ = c; final CubiService sZ = s;
                     sinHora = navZ && zEsc < 1;                                                 // el aviso del giro ocupa el puesto de la hora
-                    detras = google ? () -> { googleR.set(0, 0, cZ.getWidth(), cZ.getHeight()); googleM.set(Math.max(zLibre, aL + aW * 0.3f * zEsc), aT, googleR.right - aR, googleR.bottom - abajo - mZ); cZ.drawRect(googleR, borra); }   // toda la pantalla: Zelda y la barra flotan sobre el mapa
+                    detras = google ? () -> { googleR.set(0, 0, cZ.getWidth(), cZ.getHeight()); googleM.set(Math.max(zLibre + zDx, aL + aW * 0.3f * zEsc), aT, googleR.right - aR, googleR.bottom - abajo - mZ); cZ.drawRect(googleR, borra); }   // toda la pantalla: Zelda y la barra flotan sobre el mapa
                             : !mapZ ? null : () -> {
                         float iz = Math.max(zLibre, aL + aW * 0.3f * zEsc);
                         sinCaja = true; this.corte = abajo + mZ; mapaExt = iz - aL;
@@ -762,6 +762,7 @@ public class CubiCarro extends CarAppService {
             // Sin nada más en pantalla va enorme, a la derecha, medio metida detrás de ella; con letra o mapa a la derecha
             // sube detrás de las orejas, que la tapan a medias. En pantalla angosta y con música no cabe: va en la barra.
             boolean anchoZ = x1 - libre > w * 0.3f, ocupado = musicaZ || estilo == 2, horaGrande = conBarra && (anchoZ || !musicaZ);
+            zDx = google && estilo == 2 && climaX1 > climaX0 ? (climaX0 + climaX1) / 2 - (x0 + 496 * scz) : 0;   // con el mapa de Google: centrada sobre la pastilla del clima
             if (estilo == 2 && detras != null) detras.run();           // el mapa y el giro: encima del fondo y por detrás de ella
             if (horaGrande && !(estilo == 2 && sinHora)) {
                 tp.setTypeface(Typeface.DEFAULT_BOLD); tp.clearShadowLayer(); tp.setColor(0xffffffff);
@@ -772,15 +773,15 @@ public class CubiCarro extends CarAppService {
                     tp.setTextAlign(Paint.Align.LEFT); c.drawText(hora, libre - th * 0.2f, y0 + vh * 0.5f + tam * 0.36f, tp);
                 } else {
                     tp.setTextSize(100); tp.setTextSize(Math.min(vh * 0.24f * ze, 100 * (anchoZ ? libre - x0 : w) * 0.92f / tp.measureText(hora)));
-                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, anchoZ ? x0 + 1280 * scz * 0.36f : (x0 + x1) / 2, y0 + vh * 0.225f * (ze < 1 ? 0.9f : 1), tp);
+                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, anchoZ ? x0 + 1280 * scz * 0.36f + zDx : (x0 + x1) / 2, y0 + vh * 0.225f * (ze < 1 ? 0.9f : 1), tp);
                 }
             }
             // ella: su cuadro (recortado del clip desde el punto rx,40; el de señalar es más ancho), dejando solo donde su
             // silueta es blanca. Va en espejo; al revés (sin espejo) queda en el mismo sitio, porque está centrada en x=784.
             float rx = clip.equals("senala") ? 80 : 360, bw = b.getWidth();
-            // con el mapa de Google no hay repisa: apoya las patas en la pastilla del clima, como saliendo de ella
-            float cjZ = reprAncho ? caja * 0.8f : caja, pisoZ = google && estilo == 2 ? y1 - caja / 2 - cjZ * 0.37f + cjZ * 0.74f * 0.12f : repisa;
-            float izq = alReves ? x0 + (rx - 288) * scz : x0 + (1280 - rx - bw) * scz;
+            // con el mapa de Google no hay repisa: va exactamente encima de la pastilla del clima (su borde de arriba)
+            float cjZ = reprAncho ? caja * 0.8f : caja, pisoZ = google && estilo == 2 ? y1 - caja / 2 - cjZ * 0.37f : repisa;
+            float izq = (alReves ? x0 + (rx - 288) * scz : x0 + (1280 - rx - bw) * scz) + zDx;
             c.saveLayer(izq - 1, pisoZ - 648 * scz - 1, izq + bw * scz + 1, pisoZ, null);
             mz.setScale(alReves ? scz : -scz, scz); mz.postTranslate(alReves ? izq : izq + bw * scz, pisoZ - 648 * scz); c.concat(mz);
             p.setFilterBitmap(true); p.setColor(0xffffffff); c.drawBitmap(b, 0, 0, p);
@@ -828,6 +829,7 @@ public class CubiCarro extends CarAppService {
         int googleVoz;                                                // la voz de Google (0 todo, 1 alertas, 2 callada)
         private final RectF vozR = new RectF();                       // el botón del parlante
         boolean tocaVoz(float x, float y) { return vozR.contains(x, y); }
+        private float climaX0, climaX1, zDx;                          // de dónde a dónde quedó la pastilla del clima, y lo que se corre Zelda para quedar centrada en ella
         final RectF googleM = new RectF();                            // lo que le tapan a ese recuadro Zelda (izquierda), la barra (abajo) y los bordes
         private final Paint borra = new Paint();                      // abre el hueco transparente por donde se ve el mapa de Google, que va debajo
         { borra.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)); }
@@ -863,6 +865,7 @@ public class CubiCarro extends CarAppService {
             String estado = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaEstado, grados = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaGrados + "°";
             String izq = (hora.isEmpty() ? "" : hora + (grados.isEmpty() ? "" : "   ")) + grados;
             p.setStyle(Paint.Style.FILL);
+            climaX0 = climaX1 = 0;
             if (!izq.isEmpty()) {
                 tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(tam);
                 float wi = tp.measureText(izq); tp.setTypeface(Typeface.DEFAULT); tp.setTextSize(tam * 0.72f);
@@ -877,7 +880,7 @@ public class CubiCarro extends CarAppService {
                 if (wl > libre) wl = 0;
                 if (wl + wa > libre) wa = 0;                              // y antes que la ciudad se va la altura
                 float fin = Math.min(x + ph * 0.45f + dib + wi + we + wl + wa + ph * 0.45f, cx - medio);
-                vidrio(c, x, t, fin, bm); finIzq = fin;
+                vidrio(c, x, t, fin, bm); finIzq = fin; climaX0 = x; climaX1 = fin;
                 x += ph * 0.45f;
                 noche = sv != null && sv.climaNoche;
                 if (dib > 0) { clima(c, x + ph * 0.36f, t + ph / 2, ph * 0.3f, estado.toLowerCase(Locale.ROOT)); x += dib; }
