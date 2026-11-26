@@ -352,7 +352,7 @@ public class CubiCarro extends CarAppService {
             // ponytail: una pantalla vertical a pantalla completa también cae aquí y se queda sin franja; darle su propio caso si aparece
             if (!aLoAncho && !firme.isEmpty()) a = firme;
             boolean franja = musica && aLoAncho && !(zelda && vista == 0);   // con Zelda la canción ya va en su cajita
-            fundido = false; sinCaja = false; sinHora = false; letraR.setEmpty(); listaR.setEmpty();
+            fundido = false; sinCaja = false; sinHora = false; reprAncho = false; letraR.setEmpty(); listaR.setEmpty();
             float u = Math.min(a.height(), a.width() * (aLoAncho ? 0.5f : 1f)) / 100f;
             int modo = suena ? 2 : nav ? 1 : (ahora / 1000) % 34 >= 28 ? 1 : 0;   // Zelda: canta con música, va despierta manejando y, si no, duerme (y cada rato se despierta)
             if (vista == 1) {
@@ -373,13 +373,14 @@ public class CubiCarro extends CarAppService {
                     // El mapa y el aviso del giro van por DETRÁS de Zelda (sus orejas les pasan por encima): se pintan desde
                     // adentro de zelda(), después del fondo y antes de ella. La letra va abajo, en una tarjeta bajita.
                     final float aL = a.left, aT = a.top, aR = a.right, aW = a.width(), mZ = m, uZ = u;
-                    final float abajo = a.bottom - Math.max(a.height() * 0.16f, 30) - m, parte = suena ? a.top + m + (abajo - a.top - m) * 0.78f : abajo;
-                    final boolean suZ = suena, mapZ = !google && s != null && (hayMapa || (nav && s.carroDatos != null && !Double.isNaN(s.posLat))), navZ = mapZ && nav;
+                    reprAncho = musica;                                                         // la letra ya no va en su caja: va dentro del reproductor de la barra
+                    final float abajo = a.bottom - Math.max(a.height() * (reprAncho ? 0.2f : 0.16f), 30) - m;
+                    final boolean mapZ = !google && s != null && (hayMapa || (nav && s.carroDatos != null && !Double.isNaN(s.posLat))), navZ = mapZ && nav;
                     final Canvas cZ = c; final CubiService sZ = s;
                     sinHora = navZ && zEsc < 1;                                                 // el aviso del giro ocupa el puesto de la hora
                     detras = !mapZ ? null : () -> {
                         float iz = Math.max(zLibre, aL + aW * 0.3f * zEsc);
-                        sinCaja = true; this.corte = suZ ? parte - mZ / 2 : abajo + mZ; mapaExt = iz - aL;
+                        sinCaja = true; this.corte = abajo + mZ; mapaExt = iz - aL;
                         mapa(cZ, sZ, iz, aT, aR, abajo + mZ, uZ);
                         mapaExt = 0;
                         if (navZ) tarjetaGiro(cZ, sZ, zEsc < 1 ? aL : iz, aT, 81 * uZ, uZ, 1);   // con Zelda grande no cabe encima de ella (le taparía los metros): va al lado
@@ -388,9 +389,8 @@ public class CubiCarro extends CarAppService {
                     float izq = Math.max(zLibre, a.left + a.width() * 0.3f * zEsc) + m;
                     // El mapa es el fondo de todo lo que deja libre Zelda, hasta los bordes y hasta la barra. La letra va
                     // encima, en su tarjeta (se pinta después del mapa); "corte" es hasta dónde queda el mapa a la vista.
-                    if (suena) letraR.set(izq, parte + m / 2, a.right - m, abajo);
                     r.set(izq - m, a.top, a.right, abajo + m);
-                    sinCaja = true; corte = suena ? parte - m / 2 : abajo + m;
+                    sinCaja = true; corte = abajo + m;
                 } else {                                                            // angosta: el mapa arriba; abajo Zelda y los datos del viaje
                     float cy = a.top + a.height() * 0.62f, cx = a.left + a.width() * 0.42f;
                     zelda(c, a.left, cy, cx, a.bottom, 0, ahora, modo, fondo, s, 3); viaje(c, cx + m / 2, cy, a.right - m, a.bottom - m, s, u);
@@ -441,7 +441,7 @@ public class CubiCarro extends CarAppService {
             }
             if (nav && !conMapa)                                         // sin mapa: por qué (sin GPS, bajando las calles, sin internet…)
                 texto(c, s.gpsActivo() ? s.carroEstado : "Para ver el mapa, prende “Usar el GPS” en la app de Cubi", x0 + w / 2, y0 + (y1 - y0) * 0.9f, 4.5f * u, fundido ? 0xe6ffffff : GRIS, false, Paint.Align.CENTER, w - 8 * u);
-            if ((nav || conMapa) && fundido && aLoAncho && !google) {
+            if ((nav || conMapa) && fundido && aLoAncho && !google && !(sinCaja && conMapa)) {
                 String f = falta(s, nav), av = s.rutaAviso(), dn = s.destinoNombre();
                 final String pre = !dn.isEmpty() && !f.isEmpty() ? "→ " + dn : conMapa ? calleAhora : "";   // con destino va su nombre; sin destino, la calle por la que va
                 String d = pre;
@@ -466,8 +466,44 @@ public class CubiCarro extends CarAppService {
             }
             // El botón Destino, siempre a la vista arriba a la derecha del mapa (si el carro avisa los toques): abre el
             // buscador, donde se escribe o se dicta con el micrófono del teclado del carro.
-            destR.setEmpty();
-            if (conMapa && botones && !google) {
+            destR.setEmpty(); cancR.setEmpty();
+            float pieDest = y0 + 28 * u;                                 // hasta dónde llega lo del destino: debajo van la brújula y el de centrar
+            if (sinCaja && conMapa && !google) {
+                String dn = s.destinoNombre(), f = falta(s, nav), av = s.rutaAviso(), sub;
+                if (ahora - s.resumenCuando < 45000 && !s.resumen.isEmpty()) sub = s.resumen;
+                else if (!avisoVia.isEmpty()) sub = avisoVia;
+                else {
+                    sub = !f.isEmpty() ? f : !av.isEmpty() ? av : dn.isEmpty() ? calleAhora : "";   // sin destino, la calle por la que va
+                    if (nav && s.navMetros >= 0 && s.kmh >= 8 && s.navMetros * 3.6 / s.kmh < 100) sub += (sub.isEmpty() ? "" : "  ·  ") + "giro en " + Math.round(s.navMetros * 3.6 / s.kmh) + " s";
+                }
+                boolean dos = !sub.isEmpty(), hayDest = !s.destinoTexto().isEmpty();
+                if (botones || dos || !dn.isEmpty()) {
+                    float bh = (dos ? 18 : 11) * u, bw = (dos || !dn.isEmpty() ? 73 : 36) * u, by0 = y0 + 17 * u, bx0 = x1 - 3 * u - bw, rr = Math.min(6 * u, bh / 2);   // arriba aparece por ratos "Opciones": por eso no va pegada al borde
+                    gr.set(bx0, by0, x1 - 3 * u, by0 + bh);
+                    p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(bx0, by0 + 0.8f * u, x1 - 3 * u, by0 + bh + 0.8f * u, rr, rr, p);
+                    p.setColor(0x3cffffff); c.drawRoundRect(gr, rr, rr, p);
+                    p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, 0.35f * u)); p.setColor(0xb3ffffff); c.drawRoundRect(gr, rr, rr, p);
+                    if (botones) destR.set(gr);                          // tocarla abre el buscador
+                    float ix = bx0 + 7.6f * u, iy = by0 + bh / 2;
+                    p.setStrokeCap(Paint.Cap.ROUND);
+                    if (botones && hayDest) {                            // la X: quita el destino
+                        float xr = (dos ? 4.6f : 3.8f) * u, g = xr * 0.4f;
+                        cancR.set(ix - xr, iy - xr, ix + xr, iy + xr);
+                        p.setStyle(Paint.Style.FILL); p.setColor(0xe6b3261e); c.drawOval(cancR, p);
+                        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(1.1f * u); p.setColor(0xffffffff);
+                        c.drawLine(ix - g, iy - g, ix + g, iy + g, p); c.drawLine(ix - g, iy + g, ix + g, iy - g, p);
+                    } else {                                             // la lupa
+                        float lr = 2.3f * u, lx = ix - 0.6f * u, ly = iy - 0.6f * u;
+                        p.setStrokeWidth(0.9f * u); p.setColor(0xffffffff);
+                        c.drawCircle(lx, ly, lr, p); c.drawLine(lx + lr * 0.75f, ly + lr * 0.75f, lx + lr * 1.7f, ly + lr * 1.7f, p);
+                    }
+                    p.setStyle(Paint.Style.FILL);
+                    texto(c, dn.isEmpty() ? "Destino" : dn, bx0 + 14 * u, dos ? by0 + 7.6f * u : iy + 2 * u, (dos ? 4.5f : 5.5f) * u, 0xffffffff, true, Paint.Align.LEFT, bw - 17 * u);
+                    if (dos) texto(c, sub, bx0 + 14 * u, by0 + 14.2f * u, 3.7f * u, 0xe0ffffff, false, Paint.Align.LEFT, bw - 17 * u);
+                    pieDest = by0 + bh;
+                }
+            }
+            else if (conMapa && botones && !google) {
                 float bh = 11 * u, bw = 36 * u, by0 = y0 + (sinCaja ? 17 : 3) * u;   // sin recuadro va más abajo: arriba aparece por ratos "Opciones"
                 destR.set(x1 - 3 * u - bw, by0, x1 - 3 * u, by0 + bh);
                 p.setStyle(Paint.Style.FILL); p.setColor(0xd905070c); c.drawRoundRect(destR, bh / 2, bh / 2, p);
@@ -477,8 +513,7 @@ public class CubiCarro extends CarAppService {
                 p.setStyle(Paint.Style.FILL);
                 texto(c, "Destino", destR.left + 13 * u, destR.centerY() + 2 * u, 5.5f * u, TINTA, true, Paint.Align.LEFT, bw - 15 * u);
             }
-            cancR.setEmpty();
-            if (!destR.isEmpty() && s != null && !s.destinoTexto().isEmpty()) {
+            if (!sinCaja && !destR.isEmpty() && s != null && !s.destinoTexto().isEmpty()) {
                 float bh = destR.height();
                 cancR.set(destR.left - 2.5f * u - bh, destR.top, destR.left - 2.5f * u, destR.bottom);
                 p.setStyle(Paint.Style.FILL); p.setColor(0xe6b3261e); c.drawOval(cancR, p);
@@ -489,7 +524,7 @@ public class CubiCarro extends CarAppService {
             }
             centR.setEmpty();
             if (sinCaja && conMapa && !google) {                         // la brújula (el mapa gira con el carro: la punta roja es el norte)
-                float br = 6 * u, bx = x1 - 3 * u - br, by = y0 + 31 * u + br;
+                float br = 6 * u, bx = x1 - 3 * u - br, by = pieDest + 3 * u + br;
                 p.setStyle(Paint.Style.FILL); p.setColor(0xd905070c); c.drawCircle(bx, by, br, p);
                 c.save(); c.rotate(Float.isNaN(rumboS) ? 0 : -rumboS, bx, by);
                 gp.rewind(); gp.moveTo(bx, by - br * 0.78f); gp.lineTo(bx + br * 0.28f, by); gp.lineTo(bx - br * 0.28f, by); gp.close(); p.setColor(0xffff5a4d); c.drawPath(gp, p);
@@ -599,7 +634,7 @@ public class CubiCarro extends CarAppService {
             java.util.Calendar cal = java.util.Calendar.getInstance();
             int h = cal.get(java.util.Calendar.HOUR_OF_DAY);
             String hora = (h % 12 == 0 ? 12 : h % 12) + ":" + String.format(Locale.US, "%02d", cal.get(java.util.Calendar.MINUTE));
-            float w = x1 - x0, alto = y1 - y0, caja = conBarra ? Math.max(alto * 0.16f, 30) : 0, vh = alto - caja;
+            float w = x1 - x0, alto = y1 - y0, caja = conBarra ? Math.max(alto * (estilo == 2 && reprAncho ? 0.2f : 0.16f), 30) : 0, vh = alto - caja;
             boolean musicaZ = modo == 2;
             String[] lista = !musicaZ ? QUIETA : sv != null && "urbano".equals(sv.ritmoCancion) ? RAP : BAILES;
             final int n = 76, vuelta = 2 * n - 2;                     // 76 cuadros a 24 por segundo
@@ -779,9 +814,10 @@ public class CubiCarro extends CarAppService {
         // La barra de abajo, con los colores de Zelda: a la izquierda (crema) el clima con su dibujo, y la hora si no va en
         // grande; en el centro los botones de música, chiquitos; a la derecha (naranja) la carátula y el nombre de la canción.
         private void barra(Canvas c, float x0, float y0, float x1, float y1, CubiService sv, String hora, boolean conTitulo) {
-            float alto = y1 - y0, mg = alto * 0.13f, t = y0 + mg, bm = y1 - mg, ph = bm - t, base = t + ph * 0.68f, tam = ph * 0.52f, cx = (x0 + x1) / 2;
-            boolean hayMusica = sv != null && !sv.cancionTitulo.isEmpty(), conBot = botones && hayMusica && x1 - x0 > ph * 13;
-            float r = ph * 0.36f, medio = conBot ? r * 4.6f : mg;      // lo que ocupan los botones a cada lado del centro
+            float alto = y1 - y0, cj = reprAncho ? alto * 0.8f : alto, mg = cj * 0.13f, t = (y0 + y1) / 2 - cj * 0.37f, bm = (y0 + y1) / 2 + cj * 0.37f, ph = bm - t, base = t + ph * 0.68f, tam = ph * 0.52f, cx = (x0 + x1) / 2;
+            boolean hayMusica = sv != null && !sv.cancionTitulo.isEmpty(), conBot = botones && hayMusica && !reprAncho && x1 - x0 > ph * 13;
+            float r = ph * 0.36f, medio = reprAncho ? (x1 - x0) * 0.14f : conBot ? r * 4.6f : mg;      // lo que ocupan los botones a cada lado del centro (con el reproductor ancho, el clima llega hasta el 36 %)
+            float finIzq = x0 + mg;
             botR = 0;
             String estado = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaEstado, grados = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaGrados + "°";
             String izq = (hora.isEmpty() ? "" : hora + (grados.isEmpty() ? "" : "   ")) + grados;
@@ -799,7 +835,7 @@ public class CubiCarro extends CarAppService {
                 if (wl > libre) wl = 0;
                 if (wl + wa > libre) wa = 0;                              // y antes que la ciudad se va la altura
                 float fin = Math.min(x + ph * 0.45f + dib + wi + we + wl + wa + ph * 0.45f, cx - medio);
-                vidrio(c, x, t, fin, bm);
+                vidrio(c, x, t, fin, bm); finIzq = fin;
                 x += ph * 0.45f;
                 noche = sv != null && sv.climaNoche;
                 if (dib > 0) { clima(c, x + ph * 0.36f, t + ph / 2, ph * 0.3f, estado.toLowerCase(Locale.ROOT)); x += dib; }
@@ -816,22 +852,8 @@ public class CubiCarro extends CarAppService {
                 }
             }
             if (!hayMusica) return;
-            if (conBot) {                                             // atrás, pausa o seguir, siguiente
-                float cy = t + ph / 2; botY = cy; botR = r;
-                for (int i = 0; i < 3; i++) {
-                    float bx = cx + (i - 1) * r * 2.9f, g = r * 0.42f; botX[i] = bx;
-                    p.setStyle(Paint.Style.FILL); p.setColor(i == 1 ? 0xf2ffffff : 0x40ffffff); c.drawCircle(bx, cy, i == 1 ? r * 1.12f : r, p);
-                    p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, r * 0.07f)); p.setColor(0x99ffffff); c.drawCircle(bx, cy, i == 1 ? r * 1.12f : r, p);
-                    p.setStyle(Paint.Style.FILL); p.setColor(i == 1 ? 0xff1b2230 : 0xffffffff);
-                    if (i == 1 && sv.musicaPlay) { c.drawRect(bx - g, cy - g, bx - g * 0.3f, cy + g, p); c.drawRect(bx + g * 0.3f, cy - g, bx + g, cy + g, p); }
-                    else if (i == 1) tri(c, bx - g * 0.7f, cy - g, bx - g * 0.7f, cy + g, bx + g, cy);
-                    else {                                            // un triángulo y una barrita, hacia atrás o hacia adelante
-                        float d = i - 1;
-                        tri(c, bx - d * g * 0.9f, cy - g, bx - d * g * 0.9f, cy + g, bx + d * g * 0.5f, cy);
-                        c.drawRect(bx + d * g * 0.55f - g * 0.14f, cy - g, bx + d * g * 0.55f + g * 0.14f + d * g * 0.2f, cy + g, p);
-                    }
-                }
-            }
+            if (reprAncho) { reproductor(c, finIzq + mg * 2.5f, y0, x1 - mg * 2, y1, sv); return; }
+            if (conBot) botonesMusica(c, cx, t + ph / 2, r, sv);   // atrás, pausa o seguir, siguiente
             android.graphics.Bitmap car = sv.cancionCaratula;
             boolean hayCar = car != null && !car.isRecycled();
             if (!hayCar && !conTitulo) return;
@@ -885,6 +907,88 @@ public class CubiCarro extends CarAppService {
                 c.save(); c.clipPath(gp); c.rotate(discoAng, dx, dy); p.setColor(0xffffffff); p.setFilterBitmap(true); c.drawBitmap(car, null, gr, p); c.restore();
                 p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(2, dr * 0.07f)); p.setColor(0xd9ffffff); c.drawCircle(dx, dy, dr, p);   // el borde de vidrio
                 p.setStyle(Paint.Style.FILL); p.setColor(0xe6ffffff); c.drawCircle(dx, dy, dr * 0.17f, p);               // el centro del disco
+                p.setColor(0xff1b2230); c.drawCircle(dx, dy, dr * 0.07f, p);
+            }
+        }
+        private void botonesMusica(Canvas c, float cx, float cy, float r, CubiService sv) {
+            botY = cy; botR = r;
+            for (int i = 0; i < 3; i++) {
+                float bx = cx + (i - 1) * r * 2.9f, g = r * 0.42f; botX[i] = bx;
+                p.setStyle(Paint.Style.FILL); p.setColor(i == 1 ? 0xf2ffffff : 0x40ffffff); c.drawCircle(bx, cy, i == 1 ? r * 1.12f : r, p);
+                p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, r * 0.07f)); p.setColor(0x99ffffff); c.drawCircle(bx, cy, i == 1 ? r * 1.12f : r, p);
+                p.setStyle(Paint.Style.FILL); p.setColor(i == 1 ? 0xff1b2230 : 0xffffffff);
+                if (i == 1 && sv.musicaPlay) { c.drawRect(bx - g, cy - g, bx - g * 0.3f, cy + g, p); c.drawRect(bx + g * 0.3f, cy - g, bx + g, cy + g, p); }
+                else if (i == 1) tri(c, bx - g * 0.7f, cy - g, bx - g * 0.7f, cy + g, bx + g, cy);
+                else {                                            // un triángulo y una barrita, hacia atrás o hacia adelante
+                    float d = i - 1;
+                    tri(c, bx - d * g * 0.9f, cy - g, bx - d * g * 0.9f, cy + g, bx + d * g * 0.5f, cy);
+                    c.drawRect(bx + d * g * 0.55f - g * 0.14f, cy - g, bx + d * g * 0.55f + g * 0.14f + d * g * 0.2f, cy + g, p);
+                }
+            }
+        }
+        // El reproductor ancho (estilo del de Samsung): una tarjeta con la carátula de fondo, oscurecida; arriba "canción • artista",
+        // debajo el renglón de la letra que se está cantando y la línea de avance con su ola; a la derecha los botones y el disco.
+        private boolean reprAncho;
+        private void reproductor(Canvas c, float xi, float y0, float xf, float y1, CubiService sv) {
+            float alto = y1 - y0, pt = y0 + alto * 0.09f, pb = y1 - alto * 0.09f, PH = pb - pt, rr = PH * 0.34f;
+            android.graphics.Bitmap car = sv.cancionCaratula;
+            boolean hayCar = car != null && !car.isRecycled();
+            p.setStyle(Paint.Style.FILL); p.setColor(0x3d05070c); c.drawRoundRect(xi, pt + rr * 0.12f, xf, pb + rr * 0.12f, rr, rr, p);   // la sombra
+            p.setColor(hayCar ? 0x40ffffff : 0x59ffffff); c.drawRoundRect(xi, pt, xf, pb, rr, rr, p);
+            if (hayCar) {
+                float tira = Math.min(car.getHeight(), car.getWidth() * PH / (xf - xi));
+                gp.rewind(); gp.addRoundRect(xi, pt, xf, pb, rr, rr, Path.Direction.CW);
+                c.save(); c.clipPath(gp);
+                carR.set(0, (int) ((car.getHeight() - tira) / 2), car.getWidth(), (int) ((car.getHeight() + tira) / 2)); gr.set(xi, pt, xf, pb);
+                p.setFilterBitmap(true); p.setColor(0xffffffff); p.setAlpha(0xb3); c.drawBitmap(car, carR, gr, p); p.setAlpha(255);
+                p.setColor(0x80000000); c.drawRect(xi, pt, xf, pb, p);
+                c.restore();
+            }
+            p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, PH * 0.025f)); p.setColor(0xb3ffffff); c.drawRoundRect(xi, pt, xf, pb, rr, rr, p);
+            p.setStyle(Paint.Style.FILL);
+            float dr = PH * 0.56f, dx = xf - PH * 0.5f, dy = pt + PH / 2, der = hayCar ? dx - dr - PH * 0.2f : xf - PH * 0.3f;   // der: hasta dónde llega lo que no es el disco
+            float xa = xi + PH * 0.32f, xb = der - PH * 0.1f;
+            if (botones && der - xa > PH * 4) {                       // los botones, antes del disco
+                float r = PH * 0.2f;
+                botonesMusica(c, der - r * 4.1f, dy, r, sv);
+                xb = der - r * 8.2f - PH * 0.25f;
+            }
+            if (botones) listaR.set(xi, pt, xb, pb);                  // tocar el texto abre las listas
+            float cabe = xb - xa;
+            if (cabe > PH) {
+                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(PH * 0.25f);
+                float wt = Math.min(tp.measureText(sv.cancionTitulo), sv.cancionArtista.isEmpty() ? cabe : cabe * 0.68f);
+                texto(c, sv.cancionTitulo, xa, pt + PH * 0.37f, PH * 0.25f, 0xffffffff, true, Paint.Align.LEFT, wt + 2);
+                if (!sv.cancionArtista.isEmpty() && cabe - wt > PH) texto(c, "  •  " + sv.cancionArtista, xa + wt, pt + PH * 0.37f, PH * 0.22f, 0xd0ffffff, false, Paint.Align.LEFT, cabe - wt);
+                if (!sv.letraAhora.isEmpty()) texto(c, sv.letraAhora, xa, pt + PH * 0.66f, PH * 0.2f, 0xf0ffffff, false, Paint.Align.LEFT, cabe);
+                long dura = sv.musicaDura;
+                if (dura > 0) {
+                    long pos = sv.musicaPos + (sv.musicaPlay ? android.os.SystemClock.elapsedRealtime() - sv.musicaPosEn : 0);
+                    float f = Math.max(0, Math.min(1, pos / (float) dura)), yl = pb - PH * 0.15f, xk = xa + cabe * f, gl = Math.max(1.5f, PH * 0.028f);
+                    if (sv.musicaPlay && xk - xa > PH * 0.3f) for (int k = 0; k < 2; k++) {   // dos olas que se mueven sobre lo que ya sonó
+                        double fase = System.currentTimeMillis() % 100000 / (k == 0 ? 260.0 : 410.0);
+                        gp.rewind(); gp.moveTo(xa, yl);
+                        for (int i = 0; i <= 40; i++) {
+                            float u = i / 40f;
+                            gp.lineTo(xa + (xk - xa) * u, yl - PH * 0.13f * (float) (Math.sin(Math.PI * u) * (0.55 + 0.45 * Math.sin(u * (k == 0 ? 14 : 9) + fase))));
+                        }
+                        gp.lineTo(xk, yl); gp.close();
+                        p.setColor(k == 0 ? 0x99ff9a3d : 0x99ffe14d); c.drawPath(gp, p);
+                    }
+                    p.setColor(0x66ffffff); c.drawRoundRect(xk, yl - gl, xb, yl + gl, gl, gl, p);
+                    p.setColor(0xffe0662a); c.drawRoundRect(xa, yl - gl, xk, yl + gl, gl, gl, p);
+                    p.setColor(0xffffffff); c.drawCircle(xk, yl, gl * 2.6f, p); p.setColor(0xffe0662a); c.drawCircle(xk, yl, gl * 1.6f, p);
+                }
+            }
+            if (hayCar) {                                             // el disco, girando mientras suena
+                long ya = System.currentTimeMillis();
+                if (sv.musicaPlay && discoCuando != 0) discoAng = (discoAng + (ya - discoCuando) * 0.045f) % 360;
+                discoCuando = ya;
+                p.setStyle(Paint.Style.FILL); p.setColor(0x55000000); c.drawCircle(dx, dy + dr * 0.08f, dr * 1.04f, p);
+                gr.set(dx - dr, dy - dr, dx + dr, dy + dr); gp.rewind(); gp.addCircle(dx, dy, dr, Path.Direction.CW);
+                c.save(); c.clipPath(gp); c.rotate(discoAng, dx, dy); p.setColor(0xffffffff); p.setFilterBitmap(true); c.drawBitmap(car, null, gr, p); c.restore();
+                p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(2, dr * 0.07f)); p.setColor(0xd9ffffff); c.drawCircle(dx, dy, dr, p);
+                p.setStyle(Paint.Style.FILL); p.setColor(0xe6ffffff); c.drawCircle(dx, dy, dr * 0.17f, p);
                 p.setColor(0xff1b2230); c.drawCircle(dx, dy, dr * 0.07f, p);
             }
         }
