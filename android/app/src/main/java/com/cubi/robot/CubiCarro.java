@@ -440,7 +440,7 @@ public class CubiCarro extends CarAppService {
                 float k = 1.5f, fx = x0 + 15 * u * k, fy = (y0 + y1 - pie) / 2;
                 if (!llego) flecha(c, fx, fy, 9 * u * k, s.navDir, s.navForma);
                 float tx = llego ? x0 + 8 * u * k : fx + 15 * u * k, tw = x1 - 4 * u - tx;
-                if (dist.isEmpty()) texto(c, calle, tx, fy + 2.5f * u * k, 6.5f * u * k, TINTA, true, Paint.Align.LEFT, tw);   // indicación sin metros
+                if (dist.isEmpty()) { tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(6.5f * u * k); float an = tp.measureText(calle); texto(c, calle, tx, fy + 2.5f * u * k, Math.max(4 * u * k, 6.5f * u * k * Math.min(1, tw / Math.max(1, an))), TINTA, true, Paint.Align.LEFT, tw); }   // indicación sin metros
                 else {
                     texto(c, dist, tx, fy - (calle.isEmpty() ? -4 * u * k : 1 * u * k), 12 * u * k, TINTA, true, Paint.Align.LEFT, tw);
                     if (!calle.isEmpty()) texto(c, calle, tx, fy + 8 * u * k, 5.5f * u * k, fundido ? 0xffdbe4f7 : GRIS, false, Paint.Align.LEFT, tw);
@@ -481,7 +481,7 @@ public class CubiCarro extends CarAppService {
             // El botón Destino, siempre a la vista arriba a la derecha del mapa (si el carro avisa los toques): abre el
             // buscador, donde se escribe o se dicta con el micrófono del teclado del carro.
             destR.setEmpty(); cancR.setEmpty();
-            float pieDest = y0 + 28 * u;                                 // hasta dónde llega lo del destino: debajo van la brújula y el de centrar
+            float pieDest = y0 + 14 * u;                                 // hasta dónde llega lo del destino: debajo van la brújula y el de centrar
             if (sinCaja && conMapa && !google) {
                 String dn = s.destinoNombre(), f = falta(s, nav), av = s.rutaAviso(), sub;
                 if (ahora - s.resumenCuando < 45000 && !s.resumen.isEmpty()) sub = s.resumen;
@@ -492,9 +492,9 @@ public class CubiCarro extends CarAppService {
                 }
                 boolean dos = !sub.isEmpty(), hayDest = !s.destinoTexto().isEmpty();
                 if (botones || dos || !dn.isEmpty()) {
-                    float bh = (dos ? 18 : 11) * u, bw = (dos || !dn.isEmpty() ? 73 : 42) * u, by0 = y0 + 17 * u, bx0 = x1 - 3 * u - bw, rr = Math.min(6 * u, bh / 2);   // arriba aparece por ratos "Opciones": por eso no va pegada al borde
-                    gr.set(bx0, by0, x1 - 3 * u, by0 + bh);
-                    p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(bx0, by0 + 0.8f * u, x1 - 3 * u, by0 + bh + 0.8f * u, rr, rr, p);
+                    float bh = (dos ? 18 : 11) * u, bw = (dos || !dn.isEmpty() ? 73 : 42) * u, by0 = y0 + 3 * u, bx1 = x1 - 31 * u, bx0 = bx1 - bw, rr = Math.min(6 * u, bh / 2);   // a la derecha queda libre la esquina donde aparece por ratos "Opciones"
+                    gr.set(bx0, by0, bx1, by0 + bh);
+                    p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(bx0, by0 + 0.8f * u, bx1, by0 + bh + 0.8f * u, rr, rr, p);
                     p.setColor(0x3cffffff); c.drawRoundRect(gr, rr, rr, p);
                     p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, 0.35f * u)); p.setColor(0xb3ffffff); c.drawRoundRect(gr, rr, rr, p);
                     if (botones) destR.set(gr);                          // tocarla abre el buscador
@@ -514,7 +514,6 @@ public class CubiCarro extends CarAppService {
                     p.setStyle(Paint.Style.FILL);
                     texto(c, dn.isEmpty() ? "Destino" : dn, bx0 + 14 * u, dos ? by0 + 7.6f * u : iy + 2 * u, (dos ? 4.5f : 5.5f) * u, 0xffffffff, true, Paint.Align.LEFT, bw - 17 * u);
                     if (dos) texto(c, sub, bx0 + 14 * u, by0 + 14.2f * u, 3.7f * u, 0xe0ffffff, false, Paint.Align.LEFT, bw - 17 * u);
-                    pieDest = by0 + bh;
                 }
             }
             else if (conMapa && botones && !google) {
@@ -579,7 +578,7 @@ public class CubiCarro extends CarAppService {
             p.setStyle(Paint.Style.FILL); p.setColor(fundido ? 0x8005070c : 0xd905070c); gr.set(x0 + 3 * u, y0 + 3 * u, x0 + Math.min(w - 3 * u, 78 * u * k), y0 + 3 * u + 28 * u * k); c.drawRoundRect(gr, 4 * u, 4 * u, p);
             if (!llego) flecha(c, fx, fy, 9 * u * k, s.navDir, s.navForma);
             float tx = llego ? x0 + 8 * u * k : fx + 15 * u * k, tw = x0 + 76 * u * k - tx;
-            if (dist.isEmpty()) texto(c, calle, tx, fy + 2.5f * u * k, 6.5f * u * k, TINTA, true, Paint.Align.LEFT, tw);   // indicación sin metros
+            if (dist.isEmpty()) { tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(6.5f * u * k); float an = tp.measureText(calle); texto(c, calle, tx, fy + 2.5f * u * k, Math.max(4 * u * k, 6.5f * u * k * Math.min(1, tw / Math.max(1, an))), TINTA, true, Paint.Align.LEFT, tw); }   // indicación sin metros
             else {
                 texto(c, dist, tx, fy - (calle.isEmpty() ? -4 * u * k : 1 * u * k), 12 * u * k, TINTA, true, Paint.Align.LEFT, tw);
                 if (!calle.isEmpty()) texto(c, calle, tx, fy + 8 * u * k, 5.5f * u * k, fundido ? 0xffdbe4f7 : GRIS, false, Paint.Align.LEFT, tw);
