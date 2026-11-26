@@ -623,6 +623,38 @@ public class CubiService extends Service {
     // Los sitios que se llaman así, del más cercano al más lejano: {nombre, dónde queda, "lat,lon", "12 km"}.
     // Primero SOLO cerca del carro (unos 65 km a la redonda); si no hay, en el país; y por último en todo el mundo. Y de
     // lo que salga gana el más cercano: el primero de la lista de ese servicio puede quedar a 150 km (pasó con "Campanario").
+    // Para escoger en el carro: primero los sitios y negocios de 20 km a la redonda cuyo nombre CONTIENE lo que se buscó
+    // ("centro" trae "Campanario Centro Comercial"), del más cercano al más lejano, y después lo de sitios(q).
+    // Sale de overpass-api.de (el mismo servicio de las calles). Si falla o tarda, queda solo lo de sitios(q).
+    // ponytail: no hay "abierto ahora" ni estrellas; eso es de Google.
+    java.util.List<String[]> sitios(String q, boolean negocios) throws Exception {
+        java.util.List<String[]> ops = sitios(q);
+        final Location aqui = antesGps;
+        String re = q.trim().toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N} ]", " ").replaceAll("\\s+", " ").trim();
+        if (!negocios || aqui == null || q.indexOf(',') >= 0 || re.length() < 3) return ops;
+        try {
+            re = re.replaceAll("[aá]", "[aá]").replaceAll("[eé]", "[eé]").replaceAll("[ií]", "[ií]").replaceAll("[oó]", "[oó]").replaceAll("[uúü]", "[uúü]");   // con o sin tilde
+            String ql = "[out:json][timeout:8];nwr[\"name\"~\"" + re + "\",i][!\"highway\"](around:20000," + String.format(Locale.US, "%.4f,%.4f", aqui.getLatitude(), aqui.getLongitude()) + ");out center tags 40;";
+            JSONArray els = new JSONObject(bajarTexto("https://overpass-api.de/api/interpreter?data=" + URLEncoder.encode(ql, "UTF-8"), 10000, 1)).getJSONArray("elements");
+            ArrayList<String[]> cerca = new ArrayList<>(); ArrayList<Double> lejos = new ArrayList<>(); java.util.HashSet<String> ya = new java.util.HashSet<>();
+            for (int i = 0; i < els.length(); i++) {
+                JSONObject o = els.getJSONObject(i), t = o.optJSONObject("tags"), c = o.optJSONObject("center");
+                if (t == null || (c == null && !o.has("lat"))) continue;
+                String nom = t.optString("name");
+                double la = c != null ? c.getDouble("lat") : o.getDouble("lat"), lo = c != null ? c.getDouble("lon") : o.getDouble("lon");
+                double km = Math.hypot((la - aqui.getLatitude()) * 111.32, (lo - aqui.getLongitude()) * 111.32 * Math.cos(Math.toRadians(la)));
+                if (nom.isEmpty() || !ya.add(nom.toLowerCase(Locale.ROOT) + Math.round(km * 2))) continue;   // el mismo sitio dibujado dos veces (punto y edificio)
+                String donde = t.optString("addr:street"), ciudad = t.optString("addr:city");
+                if (!ciudad.isEmpty()) donde += (donde.isEmpty() ? "" : ", ") + ciudad;
+                int en = 0;
+                while (en < cerca.size() && lejos.get(en) <= km) en++;
+                cerca.add(en, new String[]{nom, donde, String.format(Locale.US, "%.6f,%.6f", la, lo), km < 10 ? String.format(Locale.US, "%.1f km", km).replace('.', ',') : Math.round(km) + " km"});
+                lejos.add(en, km);
+            }
+            for (String[] o : ops) { boolean rep = false; for (String[] k : cerca) if (k[0].equalsIgnoreCase(o[0]) && k[3].equals(o[3])) rep = true; if (!rep) cerca.add(o); }
+            return cerca;
+        } catch (Exception e) { return ops; }
+    }
     java.util.List<String[]> sitios(String q) throws Exception {
         String base = "https://nominatim.openstreetmap.org/search?format=json&limit=8&accept-language=es&q=" + URLEncoder.encode(q, "UTF-8");
         ArrayList<String> us = new ArrayList<>();

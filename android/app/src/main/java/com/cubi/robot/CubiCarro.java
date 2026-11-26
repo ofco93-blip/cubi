@@ -145,7 +145,7 @@ public class CubiCarro extends CarAppService {
             buscando = true; aviso = ""; invalidate();
             new Thread(() -> {
                 java.util.List<String[]> r = null; String a = "";
-                try { r = CubiService.yo == null ? null : CubiService.yo.sitios(q); if (r == null || r.isEmpty()) a = "No encontré “" + q + "”. Prueba con otro nombre o agrega la ciudad."; }
+                try { r = CubiService.yo == null ? null : CubiService.yo.sitios(q, true); if (r == null || r.isEmpty()) a = "No encontré “" + q + "”. Prueba con otro nombre o agrega la ciudad."; }
                 catch (Exception e) { a = "No pude buscar (¿hay internet?)."; }
                 final java.util.List<String[]> rr = r; final String aa = a;
                 new Handler(Looper.getMainLooper()).post(() -> {
@@ -492,7 +492,7 @@ public class CubiCarro extends CarAppService {
                 }
                 boolean dos = !sub.isEmpty(), hayDest = !s.destinoTexto().isEmpty();
                 if (botones || dos || !dn.isEmpty()) {
-                    float bh = (dos ? 18 : 11) * u, bw = (dos || !dn.isEmpty() ? 73 : 36) * u, by0 = y0 + 17 * u, bx0 = x1 - 3 * u - bw, rr = Math.min(6 * u, bh / 2);   // arriba aparece por ratos "Opciones": por eso no va pegada al borde
+                    float bh = (dos ? 18 : 11) * u, bw = (dos || !dn.isEmpty() ? 73 : 42) * u, by0 = y0 + 17 * u, bx0 = x1 - 3 * u - bw, rr = Math.min(6 * u, bh / 2);   // arriba aparece por ratos "Opciones": por eso no va pegada al borde
                     gr.set(bx0, by0, x1 - 3 * u, by0 + bh);
                     p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(bx0, by0 + 0.8f * u, x1 - 3 * u, by0 + bh + 0.8f * u, rr, rr, p);
                     p.setColor(0x3cffffff); c.drawRoundRect(gr, rr, rr, p);
