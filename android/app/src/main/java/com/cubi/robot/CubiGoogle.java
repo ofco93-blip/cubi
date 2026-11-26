@@ -63,6 +63,7 @@ final class CubiGoogle {
             NavigationApi.getNavigator((Application) c.getApplicationContext(), new NavigationApi.NavigatorListener() {
                 @Override public void onNavigatorReady(Navigator n) {
                     nav = n; pidiendo = false; estado = "Google: listo.";
+                    aplicarVoz(c);
                     if (!Double.isNaN(irLat)) ir(irLat, irLon);
                 }
                 @Override public void onError(int cod) {
@@ -85,6 +86,32 @@ final class CubiGoogle {
                 if (ok) preparar(a);
             });
         } catch (Throwable t) { estado = puesta.isEmpty() || puesta.equals(llave(a)) ? "Google: " + t : "Google: para cambiar la llave, cierra Cubi del todo y vuelve a abrirla."; }
+    }
+
+    // la voz de la navegación: 0 todo, 1 solo alertas, 2 callada (el botón del parlante en la pantalla del carro)
+    static int voz(Context c) { return c.getSharedPreferences("cubi", 0).getInt("googleVoz", 0) % 3; }
+    static void vozSiguiente(Context c) { c.getSharedPreferences("cubi", 0).edit().putInt("googleVoz", (voz(c) + 1) % 3).apply(); aplicarVoz(c); }
+    private static void aplicarVoz(Context c) {
+        Navigator n = nav;
+        if (n != null) try { n.setAudioGuidance(new int[]{Navigator.AudioGuidance.VOICE_ALERTS_AND_GUIDANCE, Navigator.AudioGuidance.VOICE_ALERTS_ONLY, Navigator.AudioGuidance.SILENT}[voz(c)]); } catch (Throwable t) { }
+    }
+    // lo que falta según Google ("12 min  ·  5,3 km  ·  llega 2:15"); vacío si no hay ruta. Se pregunta cada 2 s, no cada cuadro.
+    private static String faltaTxt = ""; private static long faltaEn;
+    static String falta() {
+        Navigator n = nav; long t = System.currentTimeMillis();
+        if (n == null || Double.isNaN(irLat)) return "";
+        if (t - faltaEn < 2000) return faltaTxt;
+        faltaEn = t;
+        try {
+            com.google.android.libraries.navigation.TimeAndDistance td = n.getCurrentTimeAndDistance();
+            if (td == null || td.getMeters() <= 0) return faltaTxt = "";
+            int seg = td.getSeconds(), min = Math.max(1, Math.round(seg / 60f)); double km = td.getMeters() / 1000.0;
+            java.util.Calendar cal = java.util.Calendar.getInstance(); cal.add(java.util.Calendar.SECOND, seg);
+            int hh = cal.get(java.util.Calendar.HOUR);
+            return faltaTxt = (min >= 60 ? min / 60 + " h " + min % 60 + " min" : min + " min") + "  ·  "
+                    + (km < 10 ? String.format(java.util.Locale.US, "%.1f km", km).replace('.', ',') : Math.round(km) + " km")
+                    + "  ·  llega " + String.format(java.util.Locale.US, "%d:%02d", hh == 0 ? 12 : hh, cal.get(java.util.Calendar.MINUTE));
+        } catch (Throwable e) { return faltaTxt = ""; }
     }
 
     static void ir(double lat, double lon) {
@@ -164,7 +191,7 @@ final class CubiGoogle {
                 try { m.setMapColorScheme(com.google.android.gms.maps.model.MapColorScheme.DARK); } catch (Throwable t) { }
                 try { m.setMapStyle(new com.google.android.gms.maps.model.MapStyleOptions(ESTILO)); } catch (Throwable t) { }
                 try { m.setMyLocationEnabled(true); } catch (Throwable t) { }
-                try { m.setPadding(Math.round(margen), 0, 0, 0); } catch (Throwable t) { }
+                try { m.setPadding(Math.round(margen), 0, 0, Math.round(pieM)); } catch (Throwable t) { }
                 try { m.followMyLocation(GoogleMap.CameraPerspective.TILTED); } catch (Throwable t) { }
             });
             return true;
@@ -177,12 +204,12 @@ final class CubiGoogle {
 
     // cada cuadro: repinta lo de Cubi y acomoda el mapa de Google en su recuadro (vacío = sin mapa a la vista)
     // izq: lo que tapa Zelda a la izquierda (el carrito se centra en lo que queda libre). lat, lon: el GPS de Cubi.
-    private float margen; private double lat = Double.NaN, lon; private boolean ubicado; private long tocado;
-    void cuadro(RectF r, float izq, double la, double lo) {
+    private float margen, pieM; private double lat = Double.NaN, lon; private boolean ubicado; private long tocado;
+    void cuadro(RectF r, float izq, float pie, double la, double lo) {
         if (lienzo == null || vista == null) return;
         lienzo.invalidate();
         lat = la; lon = lo;
-        if (izq != margen) { margen = izq; if (mapa != null) try { mapa.setPadding(Math.round(izq), 0, 0, 0); } catch (Throwable t) { } }
+        if (izq != margen || pie != pieM) { margen = izq; pieM = pie; if (mapa != null) try { mapa.setPadding(Math.round(izq), 0, 0, Math.round(pie)); } catch (Throwable t) { } }
         // al abrir (apenas hay GPS) y a los 10 s de haberlo movido con el dedo, el mapa vuelve al carro
         if (mapa != null && ((!ubicado && !Double.isNaN(la)) || (tocado != 0 && System.currentTimeMillis() - tocado > 10000))) centrar();
         if (r.isEmpty()) { if (vista.getVisibility() == View.VISIBLE) { vista.setVisibility(View.INVISIBLE); borde.setVisibility(View.INVISIBLE); } donde.setEmpty(); return; }
