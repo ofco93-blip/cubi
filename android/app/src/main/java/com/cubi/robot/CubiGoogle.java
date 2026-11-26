@@ -25,7 +25,8 @@ import com.google.android.libraries.navigation.Waypoint;
 // llave de Google Cloud en la pestaña Mapa y aceptó los términos de Google en el celular. Sin llave, nada de esto corre
 // y Cubi sigue con su mapa de siempre.
 // Cómo va en pantalla: en vez de pintar directo en la superficie del carro, se monta sobre ella una pantalla virtual
-// con dos capas: abajo el dibujo de Cubi (Zelda, letra, barra) y encima, en el recuadro del mapa, la vista de Google.
+// con dos capas: abajo la vista de Google y encima el dibujo de Cubi (Zelda, letra, barra), que deja un hueco
+// transparente donde va el mapa: así el mapa queda por detrás de Zelda.
 // ponytail: sin probar en un carro (hace falta una llave que funcione). El botón Destino dibujado y la tarjeta del giro
 // de Cubi no salen en este modo: Google pinta lo suyo dentro del recuadro.
 final class CubiGoogle {
@@ -38,10 +39,14 @@ final class CubiGoogle {
     private static double irLat = Double.NaN, irLon;
 
     static String llave(Context c) { return c.getSharedPreferences("cubi", 0).getString("llaveGoogle", "").trim(); }
+    // Google solo deja poner la llave una vez por arranque de la app (la segunda lanza un error).
+    // ponytail: cambiar la llave por otra pide cerrar y volver a abrir Cubi.
+    private static String puesta = "";
+    private static void poner(Context c) { String k = llave(c); if (!k.isEmpty() && !k.equals(puesta)) { NavigationApi.setApiKey(k); puesta = k; } }
     private static boolean terminos(Context c) {
         // La llave va SIEMPRE antes de cualquier consulta a Google: sin ella, esa consulta arranca por dentro un hilo
         // que la busca en el manifiesto, no la halla y tumba la app al abrir (pasó en la 2.0.340).
-        try { NavigationApi.setApiKey(llave(c)); return NavigationApi.areTermsAccepted((Application) c.getApplicationContext()); } catch (Throwable t) { return false; }
+        try { poner(c); return NavigationApi.areTermsAccepted((Application) c.getApplicationContext()); } catch (Throwable t) { return false; }
     }
     // Los dos mapas siguen sirviendo: con la llave puesta, el usuario escoge cuál sale (se aplica al volver a conectar el carro)
     static boolean elegido(Context c) { return c.getSharedPreferences("cubi", 0).getBoolean("mapaGoogle", true); }
@@ -54,7 +59,7 @@ final class CubiGoogle {
         if (k.isEmpty() || nav != null || pidiendo || !terminos(c)) return;
         pidiendo = true; estado = "Google: conectando…";
         try {
-            NavigationApi.setApiKey(k);
+            poner(c);
             NavigationApi.getNavigator((Application) c.getApplicationContext(), new NavigationApi.NavigatorListener() {
                 @Override public void onNavigatorReady(Navigator n) {
                     nav = n; pidiendo = false; estado = "Google: listo.";
@@ -74,12 +79,12 @@ final class CubiGoogle {
     // en el celular: muestra los términos de Google (una sola vez) y, si se aceptan, deja todo listo
     static void aceptar(Activity a) {
         try {
-            NavigationApi.setApiKey(llave(a));
+            poner(a);
             NavigationApi.showTermsAndConditionsDialog(a, "Cubi", ok -> {
                 estado = ok ? "" : "Google: falta aceptar los términos.";
                 if (ok) preparar(a);
             });
-        } catch (Throwable t) { estado = "Google: " + t; }
+        } catch (Throwable t) { estado = puesta.isEmpty() || puesta.equals(llave(a)) ? "Google: " + t : "Google: para cambiar la llave, cierra Cubi del todo y vuelve a abrirla."; }
     }
 
     static void ir(double lat, double lon) {
@@ -130,6 +135,7 @@ final class CubiGoogle {
             pr = new Presentation(c, vd.getDisplay());
             FrameLayout raiz = new FrameLayout(pr.getContext());
             lienzo = new View(pr.getContext()) { @Override protected void onDraw(Canvas k) { p.pintar(k); } };
+            lienzo.setLayerType(View.LAYER_TYPE_HARDWARE, null);      // capa propia: el hueco del mapa se borra a transparente
             vista = new NavigationViewForAuto(c);
             vista.onCreate(null); vista.onStart(); vista.onResume();
             vista.setVisibility(View.INVISIBLE);
@@ -148,15 +154,17 @@ final class CubiGoogle {
                 }
             };
             borde.setVisibility(View.INVISIBLE);
-            raiz.addView(lienzo, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
             raiz.addView(vista, new FrameLayout.LayoutParams(1, 1));
             raiz.addView(borde, new FrameLayout.LayoutParams(1, 1));
+            raiz.addView(lienzo, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
             pr.setContentView(raiz);
             pr.show();
             vista.getMapAsync(m -> {
                 mapa = m;
                 try { m.setMapColorScheme(com.google.android.gms.maps.model.MapColorScheme.DARK); } catch (Throwable t) { }
                 try { m.setMapStyle(new com.google.android.gms.maps.model.MapStyleOptions(ESTILO)); } catch (Throwable t) { }
+                try { m.setMyLocationEnabled(true); } catch (Throwable t) { }
+                try { m.setPadding(Math.round(margen), 0, 0, 0); } catch (Throwable t) { }
                 try { m.followMyLocation(GoogleMap.CameraPerspective.TILTED); } catch (Throwable t) { }
             });
             return true;
@@ -168,9 +176,15 @@ final class CubiGoogle {
     }
 
     // cada cuadro: repinta lo de Cubi y acomoda el mapa de Google en su recuadro (vacío = sin mapa a la vista)
-    void cuadro(RectF r) {
+    // izq: lo que tapa Zelda a la izquierda (el carrito se centra en lo que queda libre). lat, lon: el GPS de Cubi.
+    private float margen; private double lat = Double.NaN, lon; private boolean ubicado; private long tocado;
+    void cuadro(RectF r, float izq, double la, double lo) {
         if (lienzo == null || vista == null) return;
         lienzo.invalidate();
+        lat = la; lon = lo;
+        if (izq != margen) { margen = izq; if (mapa != null) try { mapa.setPadding(Math.round(izq), 0, 0, 0); } catch (Throwable t) { } }
+        // al abrir (apenas hay GPS) y a los 10 s de haberlo movido con el dedo, el mapa vuelve al carro
+        if (mapa != null && ((!ubicado && !Double.isNaN(la)) || (tocado != 0 && System.currentTimeMillis() - tocado > 10000))) centrar();
         if (r.isEmpty()) { if (vista.getVisibility() == View.VISIBLE) { vista.setVisibility(View.INVISIBLE); borde.setVisibility(View.INVISIBLE); } donde.setEmpty(); return; }
         if (!r.equals(donde)) {
             donde.set(r);
@@ -181,8 +195,15 @@ final class CubiGoogle {
         }
         if (vista.getVisibility() != View.VISIBLE) { vista.setVisibility(View.VISIBLE); borde.setVisibility(View.VISIBLE); }
     }
-    void mover(float dx, float dy) { if (mapa != null) try { mapa.moveCamera(CameraUpdateFactory.scrollBy(dx, dy)); } catch (Throwable t) { } }
+    void mover(float dx, float dy) { tocado = System.currentTimeMillis(); if (mapa != null) try { mapa.moveCamera(CameraUpdateFactory.scrollBy(dx, dy)); } catch (Throwable t) { } }
+    // el botón de centrar: salta a donde está el carro (por si Google aún no tiene su propia ubicación) y lo sigue
+    void centrar() {
+        tocado = 0; if (mapa == null) return;
+        if (!Double.isNaN(lat)) { ubicado = true; try { mapa.moveCamera(CameraUpdateFactory.newLatLngZoom(new com.google.android.gms.maps.model.LatLng(lat, lon), 16.5f)); } catch (Throwable t) { } }
+        try { mapa.followMyLocation(GoogleMap.CameraPerspective.TILTED); } catch (Throwable t) { }
+    }
     void acercar(float f, float x, float y) {
+        tocado = System.currentTimeMillis();
         if (mapa != null) try { mapa.animateCamera(CameraUpdateFactory.zoomBy(f - 1, new Point((int) (x - donde.left), (int) (y - donde.top)))); } catch (Throwable t) { }
     }
     void cerrar() {

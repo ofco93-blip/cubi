@@ -258,7 +258,7 @@ public class CubiCarro extends CarAppService {
         // un toque en el dibujo (los carros con Android Auto reciente lo avisan): si cayó en un botón de música, lo manda
         @Override public void onClick(float x, float y) {
             if (lienzo.tocaListas(x, y)) { getScreenManager().push(new Listas(getCarContext())); return; }   // la pastilla de la canción: tus listas de Spotify
-            if (lienzo.tocaCentrar(x, y)) return;                    // el botón de centrar: el mapa vuelve al carro
+            if (lienzo.tocaCentrar(x, y)) { if (goo != null) goo.centrar(); return; }                    // el botón de centrar: el mapa vuelve al carro
             if (lienzo.tocaCancelar(x, y)) { if (CubiService.yo != null) CubiService.yo.destino(""); return; }   // la X: quita el destino y su ruta
             if (lienzo.tocaDestino(x, y)) { getScreenManager().push(new Buscar(getCarContext())); return; }   // el botón Destino del mapa
             int k = lienzo.boton(x, y);
@@ -281,7 +281,7 @@ public class CubiCarro extends CarAppService {
             CubiService sv = CubiService.yo;                       // le avisa al servicio que la pantalla del carro está a la vista (para el mapa)
             if (sv != null) { if (sv.carroMapa()) sv.carroViendo = System.currentTimeMillis(); else sv.carroEntra(); sv.navRefrescar(); }
             if (goo != null) {                                     // con Google: el dibujo lo pide su capa; aquí solo se acomoda el mapa y se le pasa el destino
-                goo.cuadro(lienzo.googleR);
+                goo.cuadro(lienzo.googleR, lienzo.googleIzq, sv == null ? Double.NaN : sv.posLat, sv == null ? 0 : sv.posLon);
                 double[] d = sv == null ? null : sv.destinoPunto();
                 if (d != null && (d[0] != gLat || d[1] != gLon)) { gLat = d[0]; gLon = d[1]; CubiGoogle.ir(gLat, gLon); }
                 else if (d == null && !Double.isNaN(gLat)) { gLat = Double.NaN; CubiGoogle.parar(); }
@@ -392,7 +392,7 @@ public class CubiCarro extends CarAppService {
                     final boolean mapZ = !google && s != null && (hayMapa || (nav && s.carroDatos != null && !Double.isNaN(s.posLat))), navZ = mapZ && nav;
                     final Canvas cZ = c; final CubiService sZ = s;
                     sinHora = navZ && zEsc < 1;                                                 // el aviso del giro ocupa el puesto de la hora
-                    detras = !mapZ ? null : () -> {
+                    detras = google ? () -> { googleIzq = Math.max(zLibre, aL + aW * 0.3f * zEsc) - aL; googleR.set(aL, aT, aR, abajo + mZ); cZ.drawRect(googleR, borra); } : !mapZ ? null : () -> {
                         float iz = Math.max(zLibre, aL + aW * 0.3f * zEsc);
                         sinCaja = true; this.corte = abajo + mZ; mapaExt = iz - aL;
                         mapa(cZ, sZ, iz, aT, aR, abajo + mZ, uZ);
@@ -422,7 +422,7 @@ public class CubiCarro extends CarAppService {
             p.setStyle(Paint.Style.FILL); p.setColor(fundido ? VELO : PANEL); if (!(fundido && conMapa)) c.drawRect(r, p);   // fundido y con mapa: el velo lo pone el mapa, desvanecido
             final float yf = sinCaja ? corte : y1;                       // el pie del mapa a la vista (encima de la letra, si la hay)
             this.corte = corte;                                          // mapa() lo lee: sin esto valía 0 y el carrito quedaba arriba, fuera de la vista
-            if (google) googleR.set(x0, y0, x1, yf);
+            if (google && googleR.isEmpty()) { googleIzq = 0; googleR.set(x0, y0, x1, yf); c.drawRect(googleR, borra); }   // (con Zelda a lo ancho ya se abrió, por detrás de ella)
             else if (conMapa && !sinCaja) mapa(c, s, x0, y0, x1, y1, u);   // sin recuadro ya se pintó, por detrás de Zelda
             if (google) nav = false;                                     // el giro y lo que falta los muestra Google dentro de su recuadro
             if (!letraR.isEmpty()) {                                     // la letra, sobre una tarjeta oscura para que se lea encima del mapa
@@ -482,7 +482,7 @@ public class CubiCarro extends CarAppService {
             // buscador, donde se escribe o se dicta con el micrófono del teclado del carro.
             destR.setEmpty(); cancR.setEmpty();
             float pieDest = y0 + 14 * u;                                 // hasta dónde llega lo del destino: debajo van la brújula y el de centrar
-            if (sinCaja && conMapa && !google) {
+            if (sinCaja && conMapa && s != null) {
                 String dn = s.destinoNombre(), f = falta(s, nav), av = s.rutaAviso(), sub;
                 if (ahora - s.resumenCuando < 45000 && !s.resumen.isEmpty()) sub = s.resumen;
                 else if (!avisoVia.isEmpty()) sub = avisoVia;
@@ -536,17 +536,19 @@ public class CubiCarro extends CarAppService {
                 p.setStyle(Paint.Style.FILL);
             }
             centR.setEmpty();
-            if (sinCaja && conMapa && !google) {                         // la brújula (el mapa gira con el carro: la punta roja es el norte)
+            if ((sinCaja || google) && conMapa) {                        // la brújula (el mapa gira con el carro: la punta roja es el norte)
                 float br = 6 * u, bx = x1 - 3 * u - br, by = pieDest + 3 * u + br;
+                if (!google) {                                           // (el mapa de Google no gira con la brújula de Cubi)
                 p.setStyle(Paint.Style.FILL); p.setColor(0xd905070c); c.drawCircle(bx, by, br, p);
                 c.save(); c.rotate(Float.isNaN(rumboS) ? 0 : -rumboS, bx, by);
                 gp.rewind(); gp.moveTo(bx, by - br * 0.78f); gp.lineTo(bx + br * 0.28f, by); gp.lineTo(bx - br * 0.28f, by); gp.close(); p.setColor(0xffff5a4d); c.drawPath(gp, p);
                 gp.rewind(); gp.moveTo(bx, by + br * 0.78f); gp.lineTo(bx + br * 0.28f, by); gp.lineTo(bx - br * 0.28f, by); gp.close(); p.setColor(0xffffffff); c.drawPath(gp, p);
                 c.restore();
-                if (botones && (panX != 0 || panY != 0 || zoom != 1)) {  // el mapa está corrido o acercado: botón para volver al carro
-                    float my = by, ar = br * 0.45f, cxb = bx - br * 2 - 3 * u;   // a la izquierda de la brújula (debajo taparía la franja del destino)
+                }
+                if (botones && (google || panX != 0 || panY != 0 || zoom != 1)) {  // el mapa está corrido o acercado: botón para volver al carro
+                    float my = by, ar = br * 0.45f, cxb = google ? bx : bx - br * 2 - 3 * u;   // a la izquierda de la brújula (debajo taparía la franja del destino)
                     centR.set(cxb - br, my - br, cxb + br, my + br);
-                    p.setColor(0xf22f7bff); c.drawCircle(cxb, my, br, p);
+                    p.setStyle(Paint.Style.FILL); p.setColor(0xf22f7bff); c.drawCircle(cxb, my, br, p);
                     p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeWidth(0.9f * u); p.setColor(0xffffffff);
                     c.drawCircle(cxb, my, ar, p);
                     c.drawLine(cxb, my - br * 0.78f, cxb, my - ar, p); c.drawLine(cxb, my + ar, cxb, my + br * 0.78f, p);
@@ -803,6 +805,9 @@ public class CubiCarro extends CarAppService {
         // Los botones de música de la barra: dónde quedaron (para saber cuál se tocó). botones: el carro avisa los toques.
         boolean botones;
         boolean google;                                               // el recuadro del mapa lo pinta Google (CubiGoogle)
+        float googleIzq;                                              // lo que Zelda tapa de ese recuadro por la izquierda
+        private final Paint borra = new Paint();                      // abre el hueco transparente por donde se ve el mapa de Google, que va debajo
+        { borra.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)); }
         final RectF googleR = new RectF();                            // dónde quedó ese recuadro en este cuadro (vacío = no hay)
         private final RectF listaR = new RectF();                     // la pastilla naranja de la canción: al tocarla, las listas
         boolean tocaListas(float x, float y) { return listaR.contains(x, y); }
