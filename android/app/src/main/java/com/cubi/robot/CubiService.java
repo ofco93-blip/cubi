@@ -1955,6 +1955,7 @@ public class CubiService extends Service {
             }
             long[] t = letraT; boolean[] v = letraVoz;
             long pos = st.getPosition() + (long) ((ahora - st.getLastPositionUpdateTime()) * st.getPlaybackSpeed());
+            musicaDura = m.getLong(MediaMetadata.METADATA_KEY_DURATION); musicaPos = pos; musicaPosEn = ahora;   // para la barrita de avance del carro
             // instrumento: el piano mientras dura la intro de piano (hasta la primera línea de la letra, o 15 s sin letra),
             // después el de la canción
             long finIntro = t != null && t.length > 0 ? t[0] : 15000;
@@ -2268,6 +2269,7 @@ public class CubiService extends Service {
 
     private long asisDesde;
     private String asisEstado = "";
+    volatile long musicaDura, musicaPos, musicaPosEn;   // por dónde va la canción (ms) y cuándo se miró
     volatile boolean musicaPlay;  // lo último que se le dijo a Cubi: suena música en el celular
     private boolean videoMandado;  // lo último que se le dijo: el celular está con un video (reels, Facebook)
 

@@ -843,7 +843,38 @@ public class CubiCarro extends CarAppService {
             float ini = fin - (hayCar ? lado + mg : ph * 0.4f) - (wt > 0 ? wt + ph * 0.75f : mg * 0.5f);
             vidrio(c, ini, t, fin, bm);
             if (botones) listaR.set(ini, t - mg, fin, bm + mg);
-            if (wt > 0) texto(c, tit, ini + ph * 0.45f, base - tam * 0.03f, tam * 0.86f, 0xffffffff, true, Paint.Align.LEFT, wt + 2);
+            if (hayCar) {                                             // la carátula de fondo, oscurecida, como el reproductor de Samsung
+                float rr = ph / 2, tira = Math.min(car.getHeight(), car.getWidth() * ph / (fin - ini));
+                gp.rewind(); gp.addRoundRect(ini, t, fin, bm, rr, rr, Path.Direction.CW);
+                c.save(); c.clipPath(gp);
+                carR.set(0, (int) ((car.getHeight() - tira) / 2), car.getWidth(), (int) ((car.getHeight() + tira) / 2)); gr.set(ini, t, fin, bm);
+                p.setFilterBitmap(true); p.setColor(0xffffffff); p.setAlpha(0xb3); c.drawBitmap(car, carR, gr, p); p.setAlpha(255);
+                p.setColor(0x73000000); c.drawRect(ini, t, fin, bm, p);
+                c.restore();
+                p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, rr * 0.07f)); p.setColor(0xb3ffffff); c.drawRoundRect(ini, t, fin, bm, rr, rr, p);
+                p.setStyle(Paint.Style.FILL);
+            }
+            long dura = sv.musicaDura;
+            boolean avance = wt > ph && dura > 0;                     // la línea de por dónde va la canción, con su ola mientras suena
+            if (wt > 0) texto(c, tit, ini + ph * 0.45f, base - tam * 0.03f - (avance ? ph * 0.1f : 0), tam * (avance ? 0.78f : 0.86f), 0xffffffff, true, Paint.Align.LEFT, wt + 2);
+            if (avance) {
+                long pos = sv.musicaPos + (sv.musicaPlay ? android.os.SystemClock.elapsedRealtime() - sv.musicaPosEn : 0);
+                float f = Math.max(0, Math.min(1, pos / (float) dura)), xa = ini + ph * 0.45f, xb = xa + wt, yl = bm - ph * 0.17f, xk = xa + (xb - xa) * f, gl = Math.max(1.5f, ph * 0.035f);
+                p.setStyle(Paint.Style.FILL);
+                if (sv.musicaPlay && xk - xa > ph * 0.3f) for (int k = 0; k < 2; k++) {   // dos olas que se mueven sobre lo que ya sonó
+                    double fase = System.currentTimeMillis() % 100000 / (k == 0 ? 260.0 : 410.0);
+                    gp.rewind(); gp.moveTo(xa, yl);
+                    for (int i = 0; i <= 20; i++) {
+                        float u = i / 20f;
+                        gp.lineTo(xa + (xk - xa) * u, yl - ph * 0.2f * (float) (Math.sin(Math.PI * u) * (0.55 + 0.45 * Math.sin(u * (k == 0 ? 9 : 6) + fase))));
+                    }
+                    gp.lineTo(xk, yl); gp.close();
+                    p.setColor(k == 0 ? 0x99ff9a3d : 0x99ffe14d); c.drawPath(gp, p);
+                }
+                p.setColor(0x66ffffff); c.drawRoundRect(xk, yl - gl, xb, yl + gl, gl, gl, p);
+                p.setColor(0xffe0662a); c.drawRoundRect(xa, yl - gl, xk, yl + gl, gl, gl, p);
+                p.setColor(0xffffffff); c.drawCircle(xk, yl, gl * 2.6f, p); p.setColor(0xffe0662a); c.drawCircle(xk, yl, gl * 1.6f, p);
+            }
             if (hayCar) {
                 long ya = System.currentTimeMillis();
                 if (sv.musicaPlay && discoCuando != 0) discoAng = (discoAng + (ya - discoCuando) * 0.045f) % 360;   // una vuelta cada 8 segundos
@@ -857,7 +888,7 @@ public class CubiCarro extends CarAppService {
                 p.setColor(0xff1b2230); c.drawCircle(dx, dy, dr * 0.07f, p);
             }
         }
-        private float discoAng; private long discoCuando;
+        private float discoAng; private long discoCuando; private final android.graphics.Rect carR = new android.graphics.Rect();
         // Una cápsula de vidrio: translúcida (deja ver el fondo), más clara arriba, con borde de luz y su sombra.
         // ponytail: no desenfoca lo que tiene detrás (el vidrio de verdad lo hace); en este lienzo eso cuesta un cuadro aparte.
         private android.graphics.Shader vidSh; private float vidT = -1, vidB = -1;
