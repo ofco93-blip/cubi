@@ -627,7 +627,61 @@ public class CubiService extends Service {
     // ("centro" trae "Campanario Centro Comercial"), del más cercano al más lejano, y después lo de sitios(q).
     // Sale de overpass-api.de (el mismo servicio de las calles). Si falla o tarda, queda solo lo de sitios(q).
     // ponytail: no hay "abierto ahora" ni estrellas; eso es de Google.
+    // Con la llave de Google puesta, el buscador del carro es el de Google (Places, "searchText"): entiende direcciones y
+    // negocios como Google Maps. Hay que activar "Places API (New)" en el mismo proyecto de la llave; si no está (403) o
+    // falla, devuelve null y se sigue con el buscador de Cubi. Google lo cobra aparte de la navegación.
+    // Le manda a Google lo que se buscó y la ubicación (para traer primero lo cercano), igual que su mapa.
+    private java.util.List<String[]> sitiosGoogle(String q) {
+        String k = CubiGoogle.llave(this);
+        if (k.isEmpty() || q.trim().isEmpty()) return null;
+        try {
+            final Location aqui = antesGps;
+            JSONObject b = new JSONObject().put("textQuery", q).put("languageCode", "es");
+            if (aqui != null) b.put("locationBias", new JSONObject().put("circle", new JSONObject().put("radius", 30000)
+                    .put("center", new JSONObject().put("latitude", aqui.getLatitude()).put("longitude", aqui.getLongitude()))));
+            HttpURLConnection h = (HttpURLConnection) new URL("https://places.googleapis.com/v1/places:searchText").openConnection();
+            h.setConnectTimeout(8000); h.setReadTimeout(10000); h.setRequestMethod("POST"); h.setDoOutput(true);
+            h.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+            h.setRequestProperty("X-Goog-Api-Key", k);
+            h.setRequestProperty("X-Goog-FieldMask", "places.displayName,places.formattedAddress,places.location");
+            h.setRequestProperty("X-Android-Package", getPackageName());   // por si la llave está restringida a esta app
+            String hu = huella(); if (!hu.isEmpty()) h.setRequestProperty("X-Android-Cert", hu);
+            try (java.io.OutputStream o = h.getOutputStream()) { o.write(b.toString().getBytes("UTF-8")); }
+            int cod = h.getResponseCode();
+            if (cod != 200) {
+                CubiGoogle.busca = "El buscador de Google no respondió (" + cod + ")" + (cod == 403 ? ": activa “Places API (New)” en tu proyecto de Google Cloud y, si la llave tiene restricción de API, agrégala ahí." : ".") + " Mientras tanto busca Cubi.";
+                h.disconnect(); return null;
+            }
+            java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
+            try (java.io.InputStream in = h.getInputStream()) { byte[] bf = new byte[8192]; for (int n; (n = in.read(bf)) > 0; ) o.write(bf, 0, n); }
+            JSONArray ps = new JSONObject(o.toString("UTF-8")).optJSONArray("places");
+            ArrayList<String[]> r = new ArrayList<>();
+            for (int i = 0; ps != null && i < ps.length() && r.size() < 10; i++) {
+                JSONObject p = ps.getJSONObject(i), n = p.optJSONObject("displayName"), l = p.optJSONObject("location");
+                if (l == null) continue;
+                double la = l.getDouble("latitude"), lo = l.getDouble("longitude");
+                String nom = n == null ? "" : n.optString("text"), dir = p.optString("formattedAddress"), km = "";
+                if (nom.isEmpty()) { nom = dir; dir = ""; }
+                if (aqui != null) { double d = Math.hypot((la - aqui.getLatitude()) * 111.32, (lo - aqui.getLongitude()) * 111.32 * Math.cos(Math.toRadians(la))); km = d < 10 ? String.format(Locale.US, "%.1f km", d).replace('.', ',') : Math.round(d) + " km"; }
+                r.add(new String[]{nom, dir, String.format(Locale.US, "%.6f,%.6f", la, lo), km});
+            }
+            CubiGoogle.busca = "";
+            return r;
+        } catch (Throwable e) { return null; }
+    }
+    // la huella (SHA-1) con la que está firmada la app: Google la pide si la llave está restringida a esta app
+    private String huella() {
+        try {
+            android.content.pm.Signature[] ss = Build.VERSION.SDK_INT >= 28
+                    ? getPackageManager().getPackageInfo(getPackageName(), android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES).signingInfo.getApkContentsSigners()
+                    : getPackageManager().getPackageInfo(getPackageName(), android.content.pm.PackageManager.GET_SIGNATURES).signatures;
+            StringBuilder sb = new StringBuilder();
+            for (byte x : java.security.MessageDigest.getInstance("SHA-1").digest(ss[0].toByteArray())) sb.append(String.format("%02X", x));
+            return sb.toString();
+        } catch (Throwable t) { return ""; }
+    }
     java.util.List<String[]> sitios(String q, boolean negocios) throws Exception {
+        if (negocios) { java.util.List<String[]> g = sitiosGoogle(q); if (g != null && !g.isEmpty()) return g; }   // con llave: busca Google
         java.util.List<String[]> ops = sitios(q);
         final Location aqui = antesGps;
         String re = q.trim().toLowerCase(Locale.ROOT).replaceAll("[^\\p{L}\\p{N} ]", " ").replaceAll("\\s+", " ").trim();

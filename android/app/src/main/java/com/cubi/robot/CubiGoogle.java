@@ -35,6 +35,7 @@ final class CubiGoogle {
     // ---------- la llave, los términos y el navegador (uno solo para toda la app) ----------
     static volatile Navigator nav;
     static volatile String estado = "";
+    static volatile String busca = "";                             // por qué no está buscando Google (se ve en la pestaña Mapa); vacío = bien
     private static boolean pidiendo;
     private static double irLat = Double.NaN, irLon;
 

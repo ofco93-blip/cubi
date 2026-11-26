@@ -600,7 +600,7 @@ public class MainActivity extends Activity {
             String k = CubiGoogle.llave(MainActivity.this);
             if (k.isEmpty()) return "Sin llave: Cubi usa su mapa de siempre.";
             String cola = k.length() > 4 ? k.substring(k.length() - 4) : k;
-            return "Llave guardada (termina en " + cola + "). " + (CubiGoogle.lista(MainActivity.this) ? (CubiGoogle.estado.isEmpty() ? "Lista: se usa al conectar el carro." : CubiGoogle.estado)
+            return (CubiGoogle.busca.isEmpty() ? "" : CubiGoogle.busca + " ") + "Llave guardada (termina en " + cola + "). " + (CubiGoogle.lista(MainActivity.this) ? (CubiGoogle.estado.isEmpty() ? "Lista: se usa al conectar el carro." : CubiGoogle.estado)
                     : CubiGoogle.estado.isEmpty() ? "Falta aceptar los términos de Google: toca Guardar otra vez." : CubiGoogle.estado);
         }
         @JavascriptInterface
