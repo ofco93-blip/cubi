@@ -32,6 +32,9 @@
     <!-- Android Auto: Cubi dibuja su carita, el giro y la música en la pantalla del carro -->
     <uses-permission android:name="androidx.car.app.NAVIGATION_TEMPLATES" />
     <uses-permission android:name="androidx.car.app.ACCESS_SURFACE" />
+    <!-- ENSAYO: batería, autonomía y kilometraje que el carro le pase a Android Auto (solo lectura) -->
+    <uses-permission android:name="com.google.android.gms.permission.CAR_FUEL" />
+    <uses-permission android:name="com.google.android.gms.permission.CAR_MILEAGE" />
 
     <!-- Cubi habla: reconocimiento de voz y voz del celular -->
     <queries>
@@ -86,7 +89,7 @@
         <!-- Android Auto. Va como app de navegación porque solo esas pueden dibujar libremente; no navega -->
         <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
         <meta-data android:name="androidx.car.app.minCarApiLevel" android:value="1" />
-        <service android:name=".CubiCarro" android:label="Cubi" android:icon="@drawable/ic_launcher" android:exported="true">
+        <service android:name=".CubiCarroDatos" android:label="Cubi" android:icon="@drawable/ic_launcher" android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
                 <category android:name="androidx.car.app.category.NAVIGATION" />
