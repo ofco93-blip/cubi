@@ -139,7 +139,6 @@ final class CubiGoogle {
     private GoogleMap mapa;
     private View lienzo;
     private final RectF donde = new RectF();
-    private View borde;                                               // encima del mapa: desvanece sus orillas hacia el fondo
     // El mapa de Google es una imagen sólida: para que se funda, se le pone el MISMO tono al fondo de la pantalla y a la
     // tierra del mapa (TONO), se pinta en oscuro y sus orillas se desvanecen hacia ese tono.
     // ponytail: el estilo se pide al mapa; si la navegación de Google lo ignora, queda su oscuro de fábrica y solo
@@ -166,23 +165,7 @@ final class CubiGoogle {
             vista = new NavigationViewForAuto(c);
             vista.onCreate(null); vista.onStart(); vista.onResume();
             vista.setVisibility(View.INVISIBLE);
-            borde = new View(pr.getContext()) {                        // las cuatro orillas, del tono del fondo a transparente
-                private final android.graphics.Paint q = new android.graphics.Paint();
-                private void lado(Canvas k, float x0, float y0, float x1, float y1, float gx0, float gy0, float gx1, float gy1) {
-                    q.setShader(new android.graphics.LinearGradient(gx0, gy0, gx1, gy1, TONO, TONO & 0x00ffffff, android.graphics.Shader.TileMode.CLAMP));
-                    k.drawRect(x0, y0, x1, y1, q);
-                }
-                @Override protected void onDraw(Canvas k) {
-                    float w = getWidth(), h = getHeight(), f = 10 * u;
-                    lado(k, 0, 0, f * 1.6f, h, 0, 0, f * 1.6f, 0);       // izquierda (hacia Zelda), más ancha
-                    lado(k, w - f, 0, w, h, w, 0, w - f, 0);
-                    lado(k, 0, 0, w, f * 1.3f, 0, 0, 0, f * 1.3f);
-                    lado(k, 0, h - f, w, h, 0, h, 0, h - f);
-                }
-            };
-            borde.setVisibility(View.INVISIBLE);
             raiz.addView(vista, new FrameLayout.LayoutParams(1, 1));
-            raiz.addView(borde, new FrameLayout.LayoutParams(1, 1));
             raiz.addView(lienzo, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
             pr.setContentView(raiz);
             pr.show();
@@ -191,7 +174,7 @@ final class CubiGoogle {
                 try { m.setMapColorScheme(com.google.android.gms.maps.model.MapColorScheme.DARK); } catch (Throwable t) { }
                 try { m.setMapStyle(new com.google.android.gms.maps.model.MapStyleOptions(ESTILO)); } catch (Throwable t) { }
                 try { m.setMyLocationEnabled(true); } catch (Throwable t) { }
-                try { m.setPadding(Math.round(margen), 0, 0, Math.round(pieM)); } catch (Throwable t) { }
+                try { m.setPadding(Math.round(mar.left), Math.round(mar.top), Math.round(mar.right), Math.round(mar.bottom)); } catch (Throwable t) { }
                 try { m.followMyLocation(GoogleMap.CameraPerspective.TILTED); } catch (Throwable t) { }
             });
             return true;
@@ -203,24 +186,23 @@ final class CubiGoogle {
     }
 
     // cada cuadro: repinta lo de Cubi y acomoda el mapa de Google en su recuadro (vacío = sin mapa a la vista)
-    // izq: lo que tapa Zelda a la izquierda (el carrito se centra en lo que queda libre). lat, lon: el GPS de Cubi.
-    private float margen, pieM; private double lat = Double.NaN, lon; private boolean ubicado; private long tocado;
-    void cuadro(RectF r, float izq, float pie, double la, double lo) {
+    // m: lo que tapan Zelda (izquierda), la barra (abajo) y los bordes del carro; el carrito se centra en lo que queda libre. lat, lon: el GPS de Cubi.
+    private final RectF mar = new RectF(); private double lat = Double.NaN, lon; private boolean ubicado; private long tocado;
+    void cuadro(RectF r, RectF m, double la, double lo) {
         if (lienzo == null || vista == null) return;
         lienzo.invalidate();
         lat = la; lon = lo;
-        if (izq != margen || pie != pieM) { margen = izq; pieM = pie; if (mapa != null) try { mapa.setPadding(Math.round(izq), 0, 0, Math.round(pie)); } catch (Throwable t) { } }
+        if (!m.equals(mar)) { mar.set(m); if (mapa != null) try { mapa.setPadding(Math.round(m.left), Math.round(m.top), Math.round(m.right), Math.round(m.bottom)); } catch (Throwable t) { } }
         // al abrir (apenas hay GPS) y a los 10 s de haberlo movido con el dedo, el mapa vuelve al carro
         if (mapa != null && ((!ubicado && !Double.isNaN(la)) || (tocado != 0 && System.currentTimeMillis() - tocado > 10000))) centrar();
-        if (r.isEmpty()) { if (vista.getVisibility() == View.VISIBLE) { vista.setVisibility(View.INVISIBLE); borde.setVisibility(View.INVISIBLE); } donde.setEmpty(); return; }
+        if (r.isEmpty()) { if (vista.getVisibility() == View.VISIBLE) vista.setVisibility(View.INVISIBLE); donde.setEmpty(); return; }
         if (!r.equals(donde)) {
             donde.set(r);
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(Math.round(r.width()), Math.round(r.height()));
             lp.leftMargin = Math.round(r.left); lp.topMargin = Math.round(r.top);
             vista.setLayoutParams(lp);
-            borde.setLayoutParams(new FrameLayout.LayoutParams(lp));
         }
-        if (vista.getVisibility() != View.VISIBLE) { vista.setVisibility(View.VISIBLE); borde.setVisibility(View.VISIBLE); }
+        if (vista.getVisibility() != View.VISIBLE) vista.setVisibility(View.VISIBLE);
     }
     void mover(float dx, float dy) { tocado = System.currentTimeMillis(); if (mapa != null) try { mapa.moveCamera(CameraUpdateFactory.scrollBy(dx, dy)); } catch (Throwable t) { } }
     // el botón de centrar: salta a donde está el carro (por si Google aún no tiene su propia ubicación) y lo sigue
@@ -237,6 +219,6 @@ final class CubiGoogle {
         try { if (vista != null) { vista.onPause(); vista.onStop(); vista.onDestroy(); } } catch (Throwable t) { }
         try { if (pr != null) pr.dismiss(); } catch (Throwable t) { }
         try { if (vd != null) vd.release(); } catch (Throwable t) { }
-        vista = null; pr = null; vd = null; mapa = null; lienzo = null; borde = null;
+        vista = null; pr = null; vd = null; mapa = null; lienzo = null;
     }
 }

@@ -283,7 +283,7 @@ public class CubiCarro extends CarAppService {
             if (sv != null) { if (sv.carroMapa()) sv.carroViendo = System.currentTimeMillis(); else sv.carroEntra(); sv.navRefrescar(); }
             if (goo != null) {                                     // con Google: el dibujo lo pide su capa; aquí solo se acomoda el mapa y se le pasa el destino
                 lienzo.googleVoz = CubiGoogle.voz(getCarContext());
-                goo.cuadro(lienzo.googleR, lienzo.googleIzq, lienzo.googlePie, sv == null ? Double.NaN : sv.posLat, sv == null ? 0 : sv.posLon);
+                goo.cuadro(lienzo.googleR, lienzo.googleM, sv == null ? Double.NaN : sv.posLat, sv == null ? 0 : sv.posLon);
                 double[] d = sv == null ? null : sv.destinoPunto();
                 if (d != null && (d[0] != gLat || d[1] != gLon)) { gLat = d[0]; gLon = d[1]; CubiGoogle.ir(gLat, gLon); }
                 else if (d == null && !Double.isNaN(gLat)) { gLat = Double.NaN; CubiGoogle.parar(); }
@@ -394,7 +394,7 @@ public class CubiCarro extends CarAppService {
                     final boolean mapZ = !google && s != null && (hayMapa || (nav && s.carroDatos != null && !Double.isNaN(s.posLat))), navZ = mapZ && nav;
                     final Canvas cZ = c; final CubiService sZ = s;
                     sinHora = navZ && zEsc < 1;                                                 // el aviso del giro ocupa el puesto de la hora
-                    detras = google ? () -> { googleIzq = Math.max(zLibre, aL + aW * 0.3f * zEsc) - aL; googlePie = aB - abajo - mZ; googleR.set(aL, aT, aR, aB); cZ.drawRect(googleR, borra); }   // hasta abajo: la barra queda flotando sobre el mapa
+                    detras = google ? () -> { googleR.set(0, 0, cZ.getWidth(), cZ.getHeight()); googleM.set(Math.max(zLibre, aL + aW * 0.3f * zEsc), aT, googleR.right - aR, googleR.bottom - abajo - mZ); cZ.drawRect(googleR, borra); }   // toda la pantalla: Zelda y la barra flotan sobre el mapa
                             : !mapZ ? null : () -> {
                         float iz = Math.max(zLibre, aL + aW * 0.3f * zEsc);
                         sinCaja = true; this.corte = abajo + mZ; mapaExt = iz - aL;
@@ -425,7 +425,7 @@ public class CubiCarro extends CarAppService {
             p.setStyle(Paint.Style.FILL); p.setColor(fundido ? VELO : PANEL); if (!(fundido && conMapa)) c.drawRect(r, p);   // fundido y con mapa: el velo lo pone el mapa, desvanecido
             final float yf = sinCaja ? corte : y1;                       // el pie del mapa a la vista (encima de la letra, si la hay)
             this.corte = corte;                                          // mapa() lo lee: sin esto valía 0 y el carrito quedaba arriba, fuera de la vista
-            if (google && googleR.isEmpty()) { googleIzq = 0; googlePie = 0; googleR.set(x0, y0, x1, yf); c.drawRect(googleR, borra); }   // (con Zelda a lo ancho ya se abrió, por detrás de ella)
+            if (google && googleR.isEmpty()) { googleM.setEmpty(); googleR.set(x0, y0, x1, yf); c.drawRect(googleR, borra); }   // (con Zelda a lo ancho ya se abrió, por detrás de ella)
             else if (conMapa && !sinCaja) mapa(c, s, x0, y0, x1, y1, u);   // sin recuadro ya se pintó, por detrás de Zelda
             if (google) nav = false;                                     // el giro y lo que falta los muestra Google dentro de su recuadro
             if (!letraR.isEmpty()) {                                     // la letra, sobre una tarjeta oscura para que se lea encima del mapa
@@ -778,9 +778,11 @@ public class CubiCarro extends CarAppService {
             // ella: su cuadro (recortado del clip desde el punto rx,40; el de señalar es más ancho), dejando solo donde su
             // silueta es blanca. Va en espejo; al revés (sin espejo) queda en el mismo sitio, porque está centrada en x=784.
             float rx = clip.equals("senala") ? 80 : 360, bw = b.getWidth();
+            // con el mapa de Google no hay repisa: apoya las patas en la pastilla del clima, como saliendo de ella
+            float cjZ = reprAncho ? caja * 0.8f : caja, pisoZ = google && estilo == 2 ? y1 - caja / 2 - cjZ * 0.37f + cjZ * 0.74f * 0.12f : repisa;
             float izq = alReves ? x0 + (rx - 288) * scz : x0 + (1280 - rx - bw) * scz;
-            c.saveLayer(izq - 1, repisa - 648 * scz - 1, izq + bw * scz + 1, repisa, null);
-            mz.setScale(alReves ? scz : -scz, scz); mz.postTranslate(alReves ? izq : izq + bw * scz, repisa - 648 * scz); c.concat(mz);
+            c.saveLayer(izq - 1, pisoZ - 648 * scz - 1, izq + bw * scz + 1, pisoZ, null);
+            mz.setScale(alReves ? scz : -scz, scz); mz.postTranslate(alReves ? izq : izq + bw * scz, pisoZ - 648 * scz); c.concat(mz);
             p.setFilterBitmap(true); p.setColor(0xffffffff); c.drawBitmap(b, 0, 0, p);
             android.graphics.BitmapShader sil = new android.graphics.BitmapShader(mascZ, android.graphics.Shader.TileMode.CLAMP, android.graphics.Shader.TileMode.CLAMP);
             mm.setScale(b.getWidth() / (float) mascZ.getWidth(), b.getHeight() / (float) mascZ.getHeight()); sil.setLocalMatrix(mm);
@@ -823,10 +825,10 @@ public class CubiCarro extends CarAppService {
         // Los botones de música de la barra: dónde quedaron (para saber cuál se tocó). botones: el carro avisa los toques.
         boolean botones;
         boolean google;                                               // el recuadro del mapa lo pinta Google (CubiGoogle)
-        float googlePie; int googleVoz;                               // lo que la barra tapa por abajo; la voz de Google (0 todo, 1 alertas, 2 callada)
+        int googleVoz;                                                // la voz de Google (0 todo, 1 alertas, 2 callada)
         private final RectF vozR = new RectF();                       // el botón del parlante
         boolean tocaVoz(float x, float y) { return vozR.contains(x, y); }
-        float googleIzq;                                              // lo que Zelda tapa de ese recuadro por la izquierda
+        final RectF googleM = new RectF();                            // lo que le tapan a ese recuadro Zelda (izquierda), la barra (abajo) y los bordes
         private final Paint borra = new Paint();                      // abre el hueco transparente por donde se ve el mapa de Google, que va debajo
         { borra.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)); }
         final RectF googleR = new RectF();                            // dónde quedó ese recuadro en este cuadro (vacío = no hay)
@@ -855,7 +857,7 @@ public class CubiCarro extends CarAppService {
         private void barra(Canvas c, float x0, float y0, float x1, float y1, CubiService sv, String hora, boolean conTitulo) {
             float alto = y1 - y0, cj = reprAncho ? alto * 0.8f : alto, mg = cj * 0.13f, t = (y0 + y1) / 2 - cj * 0.37f, bm = (y0 + y1) / 2 + cj * 0.37f, ph = bm - t, base = t + ph * 0.68f, tam = ph * 0.52f, cx = (x0 + x1) / 2;
             boolean hayMusica = sv != null && !sv.cancionTitulo.isEmpty(), conBot = botones && hayMusica && !reprAncho && x1 - x0 > ph * 13;
-            float r = ph * 0.36f, medio = reprAncho ? (x1 - x0) * 0.14f : conBot ? r * 4.6f : mg;      // lo que ocupan los botones a cada lado del centro (con el reproductor ancho, el clima llega hasta el 36 %)
+            float r = ph * 0.36f, medio = reprAncho ? (x1 - x0) * 0.05f : conBot ? r * 4.6f : mg;      // lo que ocupan los botones a cada lado del centro (con el reproductor ancho, el clima puede llegar hasta el 45 %)
             float finIzq = x0 + mg;
             botR = 0;
             String estado = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaEstado, grados = sv == null || sv.climaGrados == Integer.MIN_VALUE ? "" : sv.climaGrados + "°";
@@ -865,6 +867,7 @@ public class CubiCarro extends CarAppService {
                 tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(tam);
                 float wi = tp.measureText(izq); tp.setTypeface(Typeface.DEFAULT); tp.setTextSize(tam * 0.72f);
                 float we = estado.isEmpty() ? 0 : tp.measureText(estado) + ph * 0.25f, dib = grados.isEmpty() ? 0 : ph * 0.95f;
+                if (reprAncho) we = 0;                                    // junto al reproductor: sin la palabra del clima, para que quepan la ciudad y la altura
                 // después del clima, si caben: el lugar por donde va y, con una montañita, los metros sobre el mar
                 int msnm = sv == null ? Integer.MIN_VALUE : sv.altura != Integer.MIN_VALUE ? sv.altura : sv.climaAltura;
                 String lugar = sv == null ? "" : sv.climaLugar, alt = msnm == Integer.MIN_VALUE ? "" : msnm + " m";
