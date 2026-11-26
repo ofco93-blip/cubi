@@ -74,12 +74,17 @@ public class CubiCarroDatos extends CubiCarro {
                 energia = t;
                 cc.getSharedPreferences("cubi", 0).edit().putString("datos_carro_energia", t).apply();
                 Log.i(TAG, t);
+                // al registro va el dato crudo, cada vez que cambia (sirve para estudiar el consumo)
+                registrar(cc, "ENERGIA bat=" + v(n.getBatteryPercent()) + " rango_m=" + v(n.getRangeRemainingMeters()) + " baja=" + v(n.getEnergyIsLow()) + " comb=" + v(n.getFuelPercent()));
                 if (primera[0]) { primera[0] = false; anotar(cc, t); }
             });
         } catch (Throwable e) { anotar(cc, "Batería: error " + e.getClass().getSimpleName()); }
         try {
             final boolean[] primera = {true};
-            info.addMileageListener(ex, k -> { if (primera[0]) { primera[0] = false; anotar(cc, "Kilometraje: " + v(k.getOdometerMeters()) + " m"); } });
+            info.addMileageListener(ex, k -> {
+                registrar(cc, "KM odometro_m=" + v(k.getOdometerMeters()));
+                if (primera[0]) { primera[0] = false; anotar(cc, "Kilometraje: " + v(k.getOdometerMeters()) + " m"); }
+            });
         } catch (Throwable e) { anotar(cc, "Kilometraje: error " + e.getClass().getSimpleName()); }
         new Handler(Looper.getMainLooper()).postDelayed(() -> avisar(cc), 8000);   // da tiempo a que el carro conteste
     }
@@ -91,8 +96,23 @@ public class CubiCarroDatos extends CubiCarro {
         return "(sin dato, estado " + c.getStatus() + ")";
     }
 
+    // Registro en el celular: Android/data/com.cubi.robot/files/datos_carro.txt (se lee después por cable).
+    // Solo escribe cuando la línea cambia. ponytail: tope de 2 MB y deja de escribir; si se vuelve fijo, rotar el archivo.
+    static String ultima = "";
+    static synchronized void registrar(CarContext cc, String linea) {
+        if (linea.equals(ultima)) return;
+        ultima = linea;
+        try {
+            java.io.File f = new java.io.File(cc.getExternalFilesDir(null), "datos_carro.txt");
+            if (f.length() > 2_000_000) return;
+            String hora = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date());
+            try (java.io.FileWriter w = new java.io.FileWriter(f, true)) { w.write(hora + " " + linea + "\n"); }
+        } catch (Throwable e) { Log.w(TAG, "registro", e); }
+    }
+
     static void anotar(CarContext cc, String linea) {
         Log.i(TAG, linea);
+        registrar(cc, linea);
         synchronized (texto) { texto.append(linea).append('\n'); }
         cc.getSharedPreferences("cubi", 0).edit().putString("datos_carro", texto.toString()).apply();
     }
