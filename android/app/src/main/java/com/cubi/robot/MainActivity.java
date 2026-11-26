@@ -609,6 +609,8 @@ public class MainActivity extends Activity {
             if (k != null && !k.trim().isEmpty()) runOnUiThread(() -> CubiGoogle.aceptar(MainActivity.this));
         }
         @JavascriptInterface
+        public void googleAceptar() { if (!CubiGoogle.llave(MainActivity.this).isEmpty()) runOnUiThread(() -> CubiGoogle.aceptar(MainActivity.this)); }
+        @JavascriptInterface
         public boolean googleUsa() { return CubiGoogle.elegido(MainActivity.this); }
         @JavascriptInterface
         public void googleUsar(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("mapaGoogle", si).apply(); }

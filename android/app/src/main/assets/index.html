@@ -595,7 +595,7 @@ $('trazar').onclick = () => { if (window.Android) { Android.destinoCubi($('desti
 $('irMaps').onclick = () => { if (window.Android && Android.irMaps) Android.irMaps(); };
 if (window.Android && Android.googleEstado) {
   const goo = () => { $('googleEstado').textContent = Android.googleEstado(); };
-  $('googleGuardar').onclick = () => { const k = $('googleLlave').value.trim(); if (k) { Android.googleLlave(k); $('googleLlave').value = ''; } goo(); };
+  $('googleGuardar').onclick = () => { const k = $('googleLlave').value.trim(); if (k) { Android.googleLlave(k); $('googleLlave').value = ''; } else if (Android.googleAceptar) Android.googleAceptar(); goo(); [2000, 8000, 20000].forEach(t => setTimeout(goo, t)); };   // con el campo vacío: vuelve a mostrar los términos de la llave ya guardada
   $('googleQuitar').onclick = () => { Android.googleLlave(''); goo(); };
   $('googleAbrir').onclick = () => Android.googleAbrir();
   $('googleUsar').onchange = e => Android.googleUsar(e.target.value === '1');
