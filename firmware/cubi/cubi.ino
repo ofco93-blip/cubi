@@ -1098,9 +1098,14 @@ void energiaUpdate(uint32_t now) {
   if (usb) usbVisto = true;
   if (usb || !pmu.isBatteryConnect()) { sinUsb = 0; return; }
   static uint32_t avisoBat = 0;
-  if (pmu.getBatteryPercent() < 15 && !hayMusica && (!avisoBat || now - avisoBat > 600000)) { avisoBat = now; reac(caras::BATERIA); }
+  // El porcentaje del chip no es de fiar (recién desconectado marcaba <5 % y se apagaba a los 3 s con la pila buena):
+  // se mira el voltaje de la pila. 0 = todavía no hay medida.
+  uint16_t mv = pmu.getBattVoltage();
+  if (mv > 0 && mv < BAT_AVISO_MV && !hayMusica && (!avisoBat || now - avisoBat > 600000)) { avisoBat = now; reac(caras::BATERIA); }
   if (!sinUsb) sinUsb = now;
-  bool vacia = pmu.getBatteryPercent() < 5;
+  static uint8_t bajas = 0;                       // segundos seguidos con la pila por debajo del mínimo (un bajón al sonar el parlante no cuenta)
+  bajas = mv > 0 && mv < BAT_VACIA_MV ? bajas + 1 : 0;
+  bool vacia = bajas >= 10;
   if (vacia || (apagarConCarro && usbVisto && now - sinUsb > APAGAR_SIN_USB_SEG * 1000UL)) {   // se apagó el carro: se despide y se apaga
     // Se apaga del todo para cuidar la batería; el AXP2101 lo vuelve a prender al conectar el USB (o con el botón PWR).
     emoBase = SUENO; setEmo(SUENO, 0); sonar(S_SUENO);

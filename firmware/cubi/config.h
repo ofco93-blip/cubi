@@ -10,7 +10,10 @@
 #define ROTACION_INICIAL 3          // 3 = montada de cabeza (carro), 1 = normal. Se cambia desde la app.
 
 // --- Energía y batería (chip AXP2101) ---
-// Funciona con la batería sin USB. Siempre se apaga solo si la batería baja del 5 % (y prende al conectar el USB).
+// Funciona con la batería sin USB hasta que se le acaba: se despide y se apaga cuando la pila lleva 10 s por debajo de
+// BAT_VACIA_MV (y prende al conectar el USB). Si se apaga muy pronto o aguanta hasta morir de golpe, se ajusta aquí.
+#define BAT_VACIA_MV 3300           // milivoltios: pila vacía (el chip corta solo a los 3000)
+#define BAT_AVISO_MV 3500           // por debajo de esto pone la cara de pila baja
 #define APAGAR_SIN_USB_SEG 60       // cuando el carro corta el USB, se apaga a los N s (si está activado en la app)
 
 // --- Sonido (parlante de la placa) ---
