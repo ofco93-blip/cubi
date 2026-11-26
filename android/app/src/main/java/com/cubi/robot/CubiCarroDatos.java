@@ -71,6 +71,7 @@ public class CubiCarroDatos extends CubiCarro {
             final boolean[] primera = {true};
             info.addEnergyLevelListener(ex, n -> {
                 String t = "Batería " + v(n.getBatteryPercent()) + " % · " + km(n.getRangeRemainingMeters()) + " · baja: " + v(n.getEnergyIsLow());
+                if (t.equals(energia)) return;   // el carro repite el dato unas 3 veces por segundo: solo se atiende si cambió
                 energia = t;
                 cc.getSharedPreferences("cubi", 0).edit().putString("datos_carro_energia", t).apply();
                 Log.i(TAG, t);
