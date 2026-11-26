@@ -43,7 +43,7 @@ public class CubiCarroDatos extends CubiCarro {
     static final StringBuilder texto = new StringBuilder();
 
     static void preguntar(CarContext cc) {
-        if (hecho) return;
+        if (hecho) { new Handler(Looper.getMainLooper()).postDelayed(() -> avisar(cc), 4000); return; }
         int nivel = cc.getCarAppApiLevel();
         if (nivel < 3) { anotar(cc, "Android Auto nivel " + nivel + ": muy viejo para dar datos del carro"); avisar(cc); return; }
         boolean falta = ContextCompat.checkSelfPermission(cc, P_FUEL) != PackageManager.PERMISSION_GRANTED;
@@ -70,7 +70,8 @@ public class CubiCarroDatos extends CubiCarro {
         try {
             final boolean[] primera = {true};
             info.addEnergyLevelListener(ex, n -> {
-                String t = "Batería: " + v(n.getBatteryPercent()) + " % · Autonomía: " + v(n.getRangeRemainingMeters()) + " m · Baja: " + v(n.getEnergyIsLow());
+                String t = "Batería " + v(n.getBatteryPercent()) + " % · " + km(n.getRangeRemainingMeters()) + " · baja: " + v(n.getEnergyIsLow());
+                energia = t;
                 cc.getSharedPreferences("cubi", 0).edit().putString("datos_carro_energia", t).apply();
                 Log.i(TAG, t);
                 if (primera[0]) { primera[0] = false; anotar(cc, t); }
@@ -96,9 +97,16 @@ public class CubiCarroDatos extends CubiCarro {
         cc.getSharedPreferences("cubi", 0).edit().putString("datos_carro", texto.toString()).apply();
     }
 
+    static volatile String energia;
+
+    static String km(CarValue<Float> c) {
+        if (c == null || c.getStatus() != CarValue.STATUS_SUCCESS || c.getValue() == null) return "autonomía " + v(c);
+        return Math.round(c.getValue() / 1000f) + " km";
+    }
+
+    // el aviso solo deja dos renglones: va lo que importa (batería y autonomía); lo demás queda en el registro
     static void avisar(CarContext cc) {
-        String t; synchronized (texto) { t = texto.toString().trim(); }
-        if (t.isEmpty()) t = "El carro no contestó nada por Android Auto";
+        String t = energia != null ? energia : "Batería: el carro todavía no la ha contestado";
         try { CarToast.makeText(cc, t, CarToast.LENGTH_LONG).show(); } catch (Throwable e) { Log.w(TAG, "aviso", e); }
     }
 }
