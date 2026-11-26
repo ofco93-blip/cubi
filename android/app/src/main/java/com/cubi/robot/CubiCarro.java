@@ -71,7 +71,10 @@ public class CubiCarro extends CarAppService {
                 else if (q.matches(PUNTO)) { if (punto == null) punto = q; }
                 if (q.isEmpty()) q = punto;
                 if (q == null || q.isEmpty()) return;
-                irA(getCarContext(), q, punto != null ? punto : q);
+                if (punto != null) { irA(getCarContext(), q, punto); return; }
+                final String qq = q; final CarContext cc = getCarContext();
+                // después de este llamado: al arrancar todavía no está puesta la pantalla principal
+                new Handler(Looper.getMainLooper()).post(() -> { try { cc.getCarService(androidx.car.app.ScreenManager.class).push(new Buscar(cc, qq)); } catch (Exception e) { irA(cc, qq); } });
             }
         };
     }
@@ -134,7 +137,25 @@ public class CubiCarro extends CarAppService {
     static class Buscar extends Screen {
         private java.util.List<String[]> ops;                         // {nombre, dónde queda, "lat,lon", "12 km"}
         private boolean buscando; private String aviso = "";
+        private String inicial = "";                                  // lo que se pidió por voz: se busca apenas abre
         Buscar(CarContext c) { super(c); ops = favoritos(c); ops.addAll(recientes(c)); }
+        Buscar(CarContext c, String q) { this(c); inicial = q; buscar(q, true); }
+        // solo: viene de la voz; si no hay de dónde escoger (uno solo o ninguno) se va derecho, como antes
+        private void buscar(final String q, final boolean solo) {
+            buscando = true; aviso = ""; invalidate();
+            new Thread(() -> {
+                java.util.List<String[]> r = null; String a = "";
+                try { r = CubiService.yo == null ? null : CubiService.yo.sitios(q); if (r == null || r.isEmpty()) a = "No encontré “" + q + "”. Prueba con otro nombre o agrega la ciudad."; }
+                catch (Exception e) { a = "No pude buscar (¿hay internet?)."; }
+                final java.util.List<String[]> rr = r; final String aa = a;
+                new Handler(Looper.getMainLooper()).post(() -> {
+                    buscando = false; aviso = aa; if (rr != null && !rr.isEmpty()) ops = rr;
+                    if (solo && rr != null && rr.size() == 1) { escoger(rr.get(0)); return; }
+                    if (solo && (rr == null || rr.isEmpty())) { irA(getCarContext(), q); getScreenManager().popToRoot(); return; }
+                    invalidate();
+                });
+            }).start();
+        }
         // los favoritos se guardan desde la app (pestaña Mapa): nombre y destino escrito; van con estrella y sin punto fijo
         static java.util.List<String[]> favoritos(android.content.Context c) {
             java.util.ArrayList<String[]> l = new java.util.ArrayList<>();
@@ -159,17 +180,10 @@ public class CubiCarro extends CarAppService {
             androidx.car.app.model.SearchTemplate.Builder b = new androidx.car.app.model.SearchTemplate.Builder(new androidx.car.app.model.SearchTemplate.SearchCallback() {
                 @Override public void onSearchSubmitted(@NonNull String t) {
                     final String q = t.trim();
-                    if (q.isEmpty() || buscando) return;
-                    buscando = true; aviso = ""; invalidate();
-                    new Thread(() -> {
-                        java.util.List<String[]> r = null; String a = "";
-                        try { r = CubiService.yo == null ? null : CubiService.yo.sitios(q); if (r == null || r.isEmpty()) a = "No encontré “" + q + "”. Prueba con otro nombre o agrega la ciudad."; }
-                        catch (Exception e) { a = "No pude buscar (¿hay internet?)."; }
-                        final java.util.List<String[]> rr = r; final String aa = a;
-                        new Handler(Looper.getMainLooper()).post(() -> { buscando = false; aviso = aa; if (rr != null && !rr.isEmpty()) ops = rr; invalidate(); });
-                    }).start();
+                    if (!q.isEmpty() && !buscando) buscar(q, false);
                 }
             }).setHeaderAction(Action.BACK).setSearchHint("¿A dónde vamos?").setShowKeyboardByDefault(false);
+            if (!inicial.isEmpty()) b.setInitialSearchText(inicial);
             if (buscando) return b.setLoading(true).build();
             ItemList.Builder l = new ItemList.Builder().setNoItemsMessage(aviso.isEmpty() ? "Toca arriba para escribir o dictar el destino" : aviso);
             int n = 0;
