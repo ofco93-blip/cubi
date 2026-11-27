@@ -12,6 +12,7 @@
 #include <Wire.h>
 #include <Update.h>
 #include "fuente.h"
+#include "TouchDrvCSTXXX.hpp"           // el táctil (CST9217), de SensorLib
 
 #if __has_include("version.h")
 #include "version.h"                       // lo escribe el taller de GitHub: el número de la versión publicada
@@ -23,6 +24,7 @@ static const int P_CS = 12, P_SCK = 38, P_D0 = 4, P_D1 = 5, P_D2 = 6, P_D3 = 7, 
 #define BLE_RX  "6e400102-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_TX  "6e400103-b5a3-f393-e0a9-e50e24dcca9e"
 #define BLE_OTA "6e400104-b5a3-f393-e0a9-e50e24dcca9e"
+#define BLE_IMG "6e400105-b5a3-f393-e0a9-e50e24dcca9e"   // la carátula de la canción, en pedazos
 
 constexpr int D = 466;                     // la pantalla
 constexpr float C = D / 2.f;
@@ -86,10 +88,10 @@ static void fila(int y, float xa, float xb, const Col &c, float a) {
   for (int x = i0 + 1; x < i1; x++) { if (a >= 0.996f) fb[y * D + x] = v; else mezclar(x, y, c, a); }
   if (i1 < D) mezclar(i1, y, c, (xb - i1) * a);
 }
-static void rellenar(const float *px, const float *py, int n, const Col &c, float a) {   // polígono, fila por fila
+static void rellenar(const float *px, const float *py, int n, const Col &c, float a, float yDesde = -1e9f) {   // polígono, fila por fila (desde yDesde hacia abajo)
   float y0 = 1e9f, y1 = -1e9f;
   for (int i = 0; i < n; i++) { y0 = fminf(y0, py[i]); y1 = fmaxf(y1, py[i]); }
-  const int iy0 = (int)fmaxf(0, ceilf(y0 - 0.5f)), iy1 = (int)fminf(D - 1, floorf(y1 - 0.5f));
+  const int iy0 = (int)fmaxf(fmaxf(0, ceilf(yDesde - 0.5f)), ceilf(y0 - 0.5f)), iy1 = (int)fminf(D - 1, floorf(y1 - 0.5f));
   for (int iy = iy0; iy <= iy1; iy++) {
     const float yc = iy + 0.5f; float xs[16]; int m = 0;
     for (int i = 0; i < n && m < 16; i++) { const int j = i + 1 == n ? 0 : i + 1; if ((py[i] <= yc) != (py[j] <= yc)) xs[m++] = px[i] + (yc - py[i]) * (px[j] - px[i]) / (py[j] - py[i]); }
@@ -296,6 +298,11 @@ int horaMin = -1; float horaT = 0;
 char calleAhora[40] = ""; int limV = -1; bool limX = false;
 float zoomMapa = 1, tamFlecha = 1, giroPantalla = 0; bool estiloAbajo = false; int aroColor = 0; bool usarGiro = false;   // usarGiro: girar con su giroscopio (si no, con el rumbo que manda el celular). aro del giro: 0 verde, 1 naranja, 2 azul, 3 cian, 4 sin aro   // estilo: los datos a los lados (de fábrica) o abajo
 int altura = -10000, faltaT = -1;
+float pilaViaje = -1, pilaHoy = -1;   // km de este viaje y su consumo (kWh/100)
+// la música que suena en el celular: nombre, artista, por dónde va y cuánto dura (s), y la carátula (120 x 120)
+char musTit[48] = "", musArt[40] = ""; float musPos = 0, musDur = 0, musT = -100; bool musSuena = false;
+constexpr int POR = 120;
+uint16_t *portada; volatile uint32_t porN = 0, porHay = 0; volatile bool porOk = false, porNueva = false; Col porTinte{70, 30, 110};
 bool rutaVisible = false;   // la ruta (y su tráfico) solo se pinta mientras se navega: al quitar la navegación se borra   // la altura sobre el mar (m) y los minutos que faltan para llegar   // los pone la app (pestaña Mapi): acercar o alejar el mapa y el tamaño de la flecha   // la calle por donde va y el límite de la vía (de Google)
 
 static String decodificar(const String &s) {   // %XX y + -> espacio
@@ -331,6 +338,7 @@ static void orden(const String &linea) {
     strlcpy(giroCalle, valor(q, "c").c_str(), sizeof giroCalle); giroT = tAhora;
   } else if (ruta == "/llega") { strlcpy(llegaTxt, valor(q, "h").c_str(), sizeof llegaTxt); faltaM = tiene(q, "d") ? valor(q, "d").toInt() : -1; faltaT = tiene(q, "t") ? valor(q, "t").toInt() : -1; }
   else if (ruta == "/pila") {
+    pilaViaje = tiene(q, "v") ? valor(q, "v").toFloat() : -1; pilaHoy = tiene(q, "q") ? valor(q, "q").toFloat() : -1;
     pilaB = valor(q, "b").toInt(); pilaReal = tiene(q, "r") ? valor(q, "r").toInt() : -1; pilaWltp = tiene(q, "w") ? valor(q, "w").toInt() : -1;
     pilaCarga = valor(q, "c") == "1"; pilaKw = valor(q, "k").toFloat(); pilaHoras = tiene(q, "h") ? valor(q, "h").toFloat() : -1; pilaProm = valor(q, "p").toFloat();
   } else if (ruta == "/clima") { climaG = valor(q, "t").toInt(); strlcpy(climaE, valor(q, "e").c_str(), sizeof climaE); strlcpy(climaLugar, valor(q, "l").c_str(), sizeof climaLugar); climaNoche = valor(q, "n") == "1"; }
@@ -338,6 +346,10 @@ static void orden(const String &linea) {
   else if (ruta == "/ajuste") { zoomMapa = lim(valor(q, "z").toFloat(), 0.5f, 2.5f); tamFlecha = lim(valor(q, "f").toFloat(), 0.6f, 2.5f);
     giroPantalla = lim(valor(q, "g").toFloat(), -180, 180); estiloAbajo = valor(q, "e") == "1"; if (tiene(q, "a")) aroColor = valor(q, "a").toInt(); usarGiro = valor(q, "i") == "1"; }
   else if (ruta == "/alt") altura = tiene(q, "m") ? valor(q, "m").toInt() : -10000;
+  else if (ruta == "/musica") {
+    strlcpy(musTit, valor(q, "t").c_str(), sizeof musTit); strlcpy(musArt, valor(q, "a").c_str(), sizeof musArt);
+    musSuena = valor(q, "s") == "1"; musDur = valor(q, "d").toFloat(); if (tiene(q, "p")) { musPos = valor(q, "p").toFloat(); musT = tAhora; }
+  }
   else if (ruta == "/calle") strlcpy(calleAhora, valor(q, "c").c_str(), sizeof calleAhora);
   else if (ruta == "/limite") { limV = valor(q, "v").toInt(); limX = valor(q, "x") == "1"; }
 }
@@ -370,11 +382,22 @@ class Ota : public BLECharacteristicCallbacks {
     otaHecho += n;
   }
 };
+class Img : public BLECharacteristicCallbacks {               // los pedazos de la carátula, directo a su memoria
+  void onWrite(BLECharacteristic *c) override {
+    if (!portada || !porN || porHay >= porN) return;
+    size_t n = min((size_t)c->getLength(), (size_t)(porN - porHay));
+    memcpy((uint8_t *)portada + porHay, c->getData(), n); porHay += n;
+    if (porHay >= porN) { porOk = true; porNueva = true; }
+  }
+};
 class Rx : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *c) override {
     String v = c->getValue();
     if (v.startsWith("/ota/")) { ota(v); return; }           // la actualización se atiende de una (no espera al dibujo)
     if (v == "/hola") { avisar("ver|" VERSION_MAPI); return; }   // la app pregunta qué versión tiene
+    if (v.startsWith("/caratula")) {                         // viene una carátula: cuántos bytes (los pedazos llegan por IMG)
+      porN = min((uint32_t)valor(v.substring(v.indexOf('?') + 1), "n").toInt(), (uint32_t)(POR * POR * 2)); porHay = 0; porOk = false; return;
+    }
     Orden o; strlcpy(o.t, v.c_str(), sizeof o.t);
     if (xQueueSend(colaBle, &o, 0) != pdTRUE) { Orden basura; xQueueReceive(colaBle, &basura, 0); xQueueSend(colaBle, &o, 0); }
   }
@@ -391,6 +414,7 @@ static void bleInit() {
   BLECharacteristic *rx = sv->createCharacteristic(BLE_RX, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR); rx->setCallbacks(new Rx());
   tx = sv->createCharacteristic(BLE_TX, BLECharacteristic::PROPERTY_NOTIFY); tx->addDescriptor(new BLE2902());
   sv->createCharacteristic(BLE_OTA, BLECharacteristic::PROPERTY_WRITE)->setCallbacks(new Ota());
+  sv->createCharacteristic(BLE_IMG, BLECharacteristic::PROPERTY_WRITE)->setCallbacks(new Img());
   sv->start();
   BLEAdvertising *a = BLEDevice::getAdvertising(); a->addServiceUUID(BLE_SRV); a->setScanResponse(true); BLEDevice::startAdvertising();
 }
@@ -559,10 +583,13 @@ static void metros(int m, char *b, size_t n) {
 
 // El aro del giro, por el borde (como un "cargando"): se va llenando con el reloj desde 300 m y queda completo en el
 // giro. Sólido, con las puntas redondas y un brillo suave; por lo lleno corre un destello de la salida a la punta.
+static void aroBorde(float frac, const Col &c);
 static void aroGiro(float frac) {
   static const Col COLS[4] = {{70, 220, 130}, {255, 140, 40}, {76, 139, 245}, {60, 210, 240}};
   if (aroColor < 0 || aroColor > 3) return;
-  const Col c = COLS[aroColor];
+  aroBorde(frac, COLS[aroColor]);
+}
+static void aroBorde(float frac, const Col &c) {
   const float R = C - 7, w = 4, g = 8, lleno = 2 * PI * lim(frac, 0, 1), brillo = fmodf(tAhora * 0.9f, 1) * lleno;
   for (int y = 0; y < D; y++) {
     const float dy = y + .5f - C, ro = R + g, ri = R - g;
@@ -587,6 +614,82 @@ static void aroGiro(float frac) {
   const float a0 = -PI / 2, a1 = -PI / 2 + lleno;                 // las puntas redondas y la que avanza, más clara
   disco(C + R * cosf(a0), C + R * sinf(a0), w, c, 1); disco(C + R * cosf(a1), C + R * sinf(a1), w, c, 1);
   disco(C + R * cosf(a1), C + R * sinf(a1), 2.6f, BLANCO, 0.85f);
+}
+// ---------------------------------------------------------------- las pantallas de los lados (se pasan con el dedo)
+int pagina = 1;                                 // 0 el carro, 1 el mapa, 2 la música
+static void puntos() {                          // abajo: en cuál de las tres va
+  for (int k = 0; k < 3; k++) disco(C + (k - 1) * 16, 452, k == pagina ? 4.5f : 3.5f, BLANCO, k == pagina ? 0.95f : 0.35f);
+}
+static void fondoColor(const Col &a, const Col &b) { for (int y = 0; y < D; y++) { const float k = y / (float)D; fila(y, 0, D, Col{a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k}, 1); } }
+static void tiempoTxt(float s, char *b, size_t n) { int t = (int)fmaxf(0, s); snprintf(b, n, "%d:%02d", t / 60, t % 60); }
+// la música: la carátula como un disco que gira mientras suena, el aro de por dónde va, el nombre por la curva y los botones
+static void paginaMusica() {
+  if (porNueva && portada) {                    // el tinte del fondo: el color promedio de la carátula, oscuro
+    porNueva = false; uint32_t r = 0, g = 0, b = 0;
+    for (int i = 0; i < POR * POR; i += 7) { const uint16_t p = portada[i]; r += (p >> 11) << 3; g += ((p >> 5) & 63) << 2; b += (p & 31) << 3; }
+    const int n = POR * POR / 7 + 1; porTinte = Col{r / (float)n, g / (float)n, b / (float)n};
+  }
+  const Col t = porOk ? porTinte : Col{70, 30, 110};
+  fondoColor(Col{t.r * 0.42f + 6, t.g * 0.42f + 6, t.b * 0.42f + 10}, Col{t.r * 0.16f + 4, t.g * 0.16f + 4, t.b * 0.16f + 8});
+extern float biselF;
+  const float pos = biselF >= 0 ? biselF * musDur : musSuena ? musPos + (tAhora - musT) : musPos, frac = musDur > 0 ? lim(pos / musDur, 0, 1) : 0;
+  static float vuelta = 0; if (musSuena) vuelta += dtCuadro * 0.55f;   // el disco gira (despacio) solo mientras suena
+  const float cx = C, cy = C - 34, R = 107, cs = cosf(vuelta), sn = sinf(vuelta);
+  disco(cx, cy + 6, R + 9, Col{0, 0, 0}, 0.35f);
+  if (porOk && portada) {
+    for (int y = (int)(cy - R); y <= (int)(cy + R); y++) for (int x = (int)(cx - R); x <= (int)(cx + R); x++) {
+      const float dx = x + .5f - cx, dy = y + .5f - cy, d2 = dx * dx + dy * dy;
+      if (d2 > R * R || x < 0 || y < 0 || x >= D || y >= D) continue;
+      const float u = (dx * cs + dy * sn) / R, v = (-dx * sn + dy * cs) / R;
+      const int sx = (int)lim((u * 0.5f + 0.5f) * POR, 0, POR - 1), sy = (int)lim((v * 0.5f + 0.5f) * POR, 0, POR - 1);
+      fb[y * D + x] = portada[sy * POR + sx];
+    }
+  } else {
+    disco(cx, cy, R, Col{t.r * 0.6f, t.g * 0.6f, t.b * 0.6f}, 1);
+    textoFilo(musTit[0] ? "♪" : "Pon música", cx, cy, musTit[0] ? 60 : 24, BLANCO);
+  }
+  figura(cx - R - 3, cy - R - 3, cx + R + 3, cy + R + 3, BLANCO, 0.25f, [=](float x, float y) { return fabsf(dCirculo(x, y, cx, cy, R)) - 1.2f; });
+  disco(cx, cy, 15, BLANCO, 0.45f); disco(cx, cy, 13, Col{t.r * 0.2f, t.g * 0.2f, t.b * 0.2f}, 1);   // el agujerito del disco
+  if (musDur > 0) aroBorde(frac, Col{255, 120, 200});
+  if (musTit[0]) textoArco(musTit, 200, -90, 26, BLANCO, false);
+  if (musArt[0]) textoArco(musArt, 176, -90, 16, Col{225, 210, 255}, false);
+  const float by = 362;                         // los botones: anterior, pausa o seguir, siguiente
+  disco(C - 78, by, 26, BLANCO, 0.16f); disco(C + 78, by, 26, BLANCO, 0.16f); disco(C, by, 34, BLANCO, 0.92f);
+  for (int s = -1; s <= 1; s += 2) {
+    const float bx = C + s * 78; float px[3] = {bx - 8 * s, bx + 6 * s, bx - 8 * s}, py[3] = {by - 10, by, by + 10};
+    rellenar(px, py, 3, BLANCO, 1); float qx[4] = {bx + 6 * s, bx + 10 * s, bx + 10 * s, bx + 6 * s}, qy[4] = {by - 10, by - 10, by + 10, by + 10}; rellenar(qx, qy, 4, BLANCO, 1);
+  }
+  const Col os{t.r * 0.25f, t.g * 0.25f, t.b * 0.25f};
+  if (musSuena) for (int s = -1; s <= 1; s += 2) { float px[4] = {C + s * 7 - 4, C + s * 7 + 4, C + s * 7 + 4, C + s * 7 - 4}, py[4] = {by - 12, by - 12, by + 12, by + 12}; rellenar(px, py, 4, os, 1); }
+  else { float px[3] = {C - 8, C + 12, C - 8}, py[3] = {by - 13, by, by + 13}; rellenar(px, py, 3, os, 1); }
+  if (musDur > 0) { char a[12], b[12], c[28]; tiempoTxt(pos, a, sizeof a); tiempoTxt(musDur, b, sizeof b); snprintf(c, sizeof c, "%s / %s", a, b); texto(c, C, 410, 16, Col{235, 222, 255}); }
+}
+// el carro: la pila en grande (el gato), lo que alcanza por los lados y el consumo
+static void paginaCarro() {
+  fondoColor(Col{14, 26, 62}, Col{8, 16, 42});
+  if (pilaB < 0) { textoFilo("Abre Mascota Auto", C, 210, 24, BLANCO); texto("para ver la pila del carro", C, 246, 17, Col{200, 212, 240}); return; }
+  static const float G[14][2] = {{16.5f, 6.2f}, {12, 8.4f}, {8.2f, 43}, {12, 70}, {30, 88}, {50, 92.5f}, {70, 88}, {88, 70}, {91.8f, 43}, {88, 8.4f}, {83.5f, 6.2f}, {64.5f, 20.6f}, {50, 17}, {35.5f, 20.6f}};
+  const float sc = 1.9f, ox = C - 50 * sc, oy = 62; float px[14], py[14];
+  for (int i = 0; i < 14; i++) { px[i] = ox + G[i][0] * sc; py[i] = oy + G[i][1] * sc; }
+  const int pc = (int)lim(pilaB, 0, 100);
+  const Col liq = pc < 15 ? Col{240, 68, 58} : pc < 35 ? Col{245, 165, 36} : Col{90, 225, 150};
+  rellenar(px, py, 14, Col{40, 62, 160}, 1);
+  rellenar(px, py, 14, liq, 1, oy + (92.5f - 83.5f * pc / 100.f) * sc);
+  for (int i = 0; i < 14; i++) { const int j = (i + 1) % 14; grueso(px[i], py[i], px[j], py[j], 3, BLANCO, 1); }
+  char b[32]; snprintf(b, sizeof b, "%d", pc); textoFilo(b, C, oy + 58 * sc, 46, BLANCO); texto("%", C, oy + 76 * sc, 18, BLANCO, 0.9f);
+  if (pilaReal >= 0) { snprintf(b, sizeof b, "Real %d km", pilaReal); textoArco(b, 205, 184, 26, BLANCO, false); }
+  if (pilaWltp >= 0) { snprintf(b, sizeof b, "WLTP %d km", pilaWltp); textoArco(b, 205, 6, 24, BLANCO, false); }
+  const char *et[3] = {"Hoy", "Viaje", "Promedio"}; char v[3][28] = {"", "", ""};
+  if (pilaHoy > 0) snprintf(v[0], 28, "%.1f kWh/100", pilaHoy);
+  if (pilaViaje >= 0) snprintf(v[1], 28, "%.1f km", pilaViaje);
+  if (pilaProm > 0) snprintf(v[2], 28, "%.1f kWh/100", pilaProm);
+  float y = 300;
+  for (int i = 0; i < 3; i++) {
+    if (!v[i][0]) continue;
+    for (char *q = v[i]; *q; q++) if (*q == '.') *q = ',';
+    texto(et[i], C - 8 - anchoTexto(et[i], 16), y, 16, Col{190, 205, 240}, 1, true); texto(v[i], C + 8, y, 18, BLANCO, 1, true); y += 32;
+  }
+  if (pilaCarga) { snprintf(b, sizeof b, pilaKw > 0.3f ? "Cargando %.1f kW" : "Cargando", pilaKw); for (char *q = b; *q; q++) if (*q == '.') *q = ','; textoFilo(b, C, 404, 20, Col{255, 236, 150}); }
 }
 static void altTexto(char *b, size_t n) { if (altura >= 1000) snprintf(b, n, "%d.%03d m", altura / 1000, altura % 1000); else snprintf(b, n, "%d m", altura); }
 // abajo, en las dos pantallas: lo que alcanza la pila con el consumo de ahora (o la carga) y la altura por la curva
@@ -619,6 +722,7 @@ static void pintar() {
     textoFilo("Actualizando", C, 200, 40, BLANCO); textoFilo(p, C, 260, 56, BLANCO);
     return;
   }
+  if (pagina != 1) { if (pagina == 0) paginaCarro(); else paginaMusica(); puntos(); return; }
   const float cyCarro = 292;
   rutaVisible = nav;
   t0 = millis(); mapa(cyCarro); tMapa = millis() - t0;
@@ -676,6 +780,43 @@ static void pintar() {
     char v[6]; snprintf(v, sizeof v, "%d", limV); texto(v, sx, sy, limV >= 100 ? 20 : 24, Col{20, 20, 24});
   }
   if (!conectado) texto("buscando el celular…", C, 440, 15, Col{170, 184, 214}, 0.9f);
+  puntos();
+}
+
+// ---------------------------------------------------------------- el táctil
+// El CST9217 de la placa (I2C 0x5A, reset GPIO40, aviso GPIO11). Da las coordenadas en espejo (como en el ejemplo de
+// Waveshare); si la pantalla está girada desde la app, el toque se gira igual.
+// ponytail: el espejo y el sentido del deslizar se ajustan con Mapi en la mano si salen al revés (TACTIL_ESPEJO).
+#define TACTIL_ESPEJO 1
+TouchDrvCST92xx tactil; bool hayTactil = false, tocando = false, bisel = false; float tx0, ty0, txN, tyN, tocaT, biselF = -1;
+// el bisel: en la música, el dedo dando la vuelta por el borde lleva la canción a ese punto (arriba = el principio)
+static float fraccionDe(float x, float y) { float a = atan2f(y - C, x - C) + PI / 2; if (a < 0) a += 2 * PI; return a / (2 * PI); }
+static void tocar(float x, float y) {
+  if (pagina != 2) return;
+  auto cerca = [&](float bx, float by, float r) { return (x - bx) * (x - bx) + (y - by) * (y - by) < r * r; };
+  if (cerca(C - 78, 362, 38)) avisar("tecla|-1");
+  else if (cerca(C, 362, 44)) { avisar("tecla|0"); if (musSuena) musPos += tAhora - musT; musT = tAhora; musSuena = !musSuena; }
+  else if (cerca(C + 78, 362, 38)) avisar("tecla|1");
+}
+static void tactilCuadro() {
+  if (!hayTactil) return;
+  int16_t xs[2], ys[2];
+  if (tactil.getPoint(xs, ys, 1)) {
+    float px = TACTIL_ESPEJO ? D - xs[0] : xs[0], py = TACTIL_ESPEJO ? D - ys[0] : ys[0];
+    if (fabsf(giroPantalla) >= 0.5f) { const float a = -giroPantalla * PI / 180, dx = px - C, dy = py - C; px = C + dx * cosf(a) - dy * sinf(a); py = C + dx * sinf(a) + dy * cosf(a); }
+    if (!tocando) { tocando = true; tx0 = px; ty0 = py; tocaT = tAhora; bisel = pagina == 2 && musDur > 0 && hypotf(px - C, py - C) > C - 48; }
+    txN = px; tyN = py;
+    if (bisel) biselF = fraccionDe(px, py);
+  } else if (tocando) {
+    tocando = false;
+    if (bisel) {                                     // soltó el bisel: la canción va a ese punto
+      bisel = false; char b[24]; snprintf(b, sizeof b, "ir|%.3f", biselF); avisar(b);
+      musPos = biselF * musDur; musT = tAhora; biselF = -1; return;
+    }
+    const float dx = txN - tx0, dy = tyN - ty0;
+    if (fabsf(dx) > 60 && fabsf(dx) > fabsf(dy) * 1.4f) pagina = constrain(pagina + (dx < 0 ? 1 : -1), 0, 2);   // el dedo a la izquierda: la de la derecha
+    else if (fabsf(dx) < 28 && fabsf(dy) < 28 && tAhora - tocaT < 0.9f) tocar(tx0, ty0);
+  }
 }
 
 // ---------------------------------------------------------------- arranque y vuelta
@@ -689,6 +830,10 @@ void setup() {
   if (!panel->begin()) Serial.println("Mapi: la pantalla no arrancó");
   panel->fillScreen(0); panel->setBrightness(200);
   imuInit();
+  portada = (uint16_t *)ps_malloc(POR * POR * 2);
+  tactil.setPins(40, 11);
+  hayTactil = tactil.begin(Wire, 0x5A);
+  Serial.println(hayTactil ? "Mapi: táctil listo" : "Mapi: sin táctil");
   bleInit();
   Serial.println("Mapi v" VERSION_MAPI " lista");
 }
@@ -697,6 +842,7 @@ void loop() {
   static uint32_t antes = millis();
   const uint32_t ahora = millis(); dtCuadro = (ahora - antes) / 1000.f; tAhora += dtCuadro; antes = ahora;
   imuCuadro(dtCuadro);
+  tactilCuadro();
   if (reinicioEn && (int32_t)(ahora - reinicioEn) > 0) ESP.restart();   // actualizado: arranca con la versión nueva
   Orden o; int n = 0;
   while (n++ < 12 && xQueueReceive(colaBle, &o, 0) == pdTRUE) orden(String(o.t));

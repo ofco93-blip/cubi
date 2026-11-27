@@ -36,6 +36,7 @@ final class CubiMapi {
     static final UUID RX = UUID.fromString("6e400102-b5a3-f393-e0a9-e50e24dcca9e");
     static final UUID TX = UUID.fromString("6e400103-b5a3-f393-e0a9-e50e24dcca9e");
     static final UUID OTA = UUID.fromString("6e400104-b5a3-f393-e0a9-e50e24dcca9e");
+    static final UUID IMG = UUID.fromString("6e400105-b5a3-f393-e0a9-e50e24dcca9e");   // la carátula de la canción
     static volatile CubiMapi yo;
     static boolean listo() { CubiMapi m = yo; return m != null && m.listo; }
     static String estado() { CubiMapi m = yo; return m == null ? "Apagado." : m.estado; }
@@ -43,9 +44,9 @@ final class CubiMapi {
     private final CubiService sv;
     private final Handler ui = new Handler(Looper.getMainLooper());
     private BluetoothLeScanner scanner; private ScanCallback scanCb;
-    private BluetoothGatt gatt; private BluetoothGattCharacteristic rx, otaC;
+    private BluetoothGatt gatt; private BluetoothGattCharacteristic rx, otaC, imgC;
     private volatile boolean listo, ocupado, parado;
-    private static final class Paq { final boolean fw; final byte[] d; Paq(boolean f, byte[] x) { fw = f; d = x; } }
+    private static final class Paq { final boolean fw; final int canal; final byte[] d; Paq(boolean f, byte[] x) { fw = f; canal = f ? 1 : 0; d = x; } Paq(int c, byte[] x) { fw = false; canal = c; d = x; } }
     private final ArrayDeque<Paq> cola = new ArrayDeque<>();
     private volatile String estado = "Buscando a Mapi…";
     private static volatile List<String> ultMapa; private static volatile int ultVias; private static volatile String ultCierre;
@@ -101,7 +102,7 @@ final class CubiMapi {
                 @Override public void onServicesDiscovered(BluetoothGatt g, int st) {
                     BluetoothGattService s = g.getService(SRV);
                     if (s == null) { g.disconnect(); return; }
-                    rx = s.getCharacteristic(RX); otaC = s.getCharacteristic(OTA);
+                    rx = s.getCharacteristic(RX); otaC = s.getCharacteristic(OTA); imgC = s.getCharacteristic(IMG);
                     BluetoothGattCharacteristic tx = s.getCharacteristic(TX);
                     if (tx != null) {                                   // los avisos de Mapi (las respuestas de la actualización)
                         g.setCharacteristicNotification(tx, true);
@@ -132,7 +133,7 @@ final class CubiMapi {
     private void empezar() {
         if (listo) return;
         listo = true; version = ""; estado = "Conectado · firmware anterior a la 2.0.400 (toca Actualizar Mapi).";
-        yaGiro = yaLlega = yaPila = yaClima = yaLimite = yaAjuste = yaAlt = ""; yaHora = 0; yaCalle = 0;            // recién conectado: se manda todo otra vez
+        yaGiro = yaLlega = yaPila = yaClima = yaLimite = yaAjuste = yaAlt = yaMusica = ""; yaHora = 0; yaPortada = null; yaCalle = 0;            // recién conectado: se manda todo otra vez
         mandar("/hola");                                               // ¿qué versión tiene? (la de antes no contesta)
         ui.post(this::mandarMapa);
     }
@@ -140,8 +141,17 @@ final class CubiMapi {
     static String version() { CubiMapi m = yo; return m == null ? "" : m.version; }
     static boolean actualizando() { CubiMapi m = yo; return m != null && m.actualizando; }
 
+    private void siguienteLuego() { ui.post(this::siguiente); }
     private void llega(byte[] v) {
         String s = new String(v, StandardCharsets.UTF_8).trim();
+        if (s.startsWith("ir|")) {                                     // el bisel de Mapi: la canción a esa parte (0 a 1)
+            try { final float f = Float.parseFloat(s.substring(3).trim()); ui.post(() -> sv.musicaIr(f)); } catch (Exception ignored) { }
+            return;
+        }
+        if (s.startsWith("tecla|")) {                                  // un botón de la música en la pantalla de Mapi
+            try { final int k = Integer.parseInt(s.substring(6).trim()); ui.post(() -> sv.musicaTecla(k)); } catch (Exception ignored) { }
+            return;
+        }
         if (s.startsWith("ver|")) { version = s.substring(4); if (!actualizando) estado = "Conectado · firmware de la versión " + version + "."; return; }
         if (!s.startsWith("ota|") || !actualizando) return;
         if (s.startsWith("ota|!")) { fallo("Mapi no aceptó la actualización: " + s.substring(5)); return; }
@@ -186,7 +196,8 @@ final class CubiMapi {
         synchronized (cola) {
             if (!listo || ocupado || cola.isEmpty() || gatt == null || rx == null) return;
             Paq p = cola.poll();
-            BluetoothGattCharacteristic c = p.fw ? otaC : rx;
+            BluetoothGattCharacteristic c = p.canal == 1 ? otaC : p.canal == 2 ? imgC : rx;
+            if (c == null) { siguienteLuego(); return; }
             c.setValue(p.d); c.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);   // con confirmación: ninguno se pierde
             enVuelo = p;
             try { ocupado = gatt.writeCharacteristic(c); } catch (SecurityException e) { ocupado = false; }
@@ -225,6 +236,35 @@ final class CubiMapi {
         String r = "/mapa?r=" + Math.round(rumboAhora());
         if (!r.equals(yaRumbo)) { yaRumbo = r; mandar(r); }
     } };
+    // la música para la pantalla de la derecha de Mapi: nombre, artista, si suena, cuánto dura y por dónde va (cada 5 s
+    // o cuando cambia), y la carátula en 120 x 120 (RGB565) cada vez que cambia la canción
+    private String yaMusica = ""; private long yaMusicaT; private android.graphics.Bitmap yaPortada;
+    private static String corta(String s, int n) { return s == null ? "" : s.length() > n ? s.substring(0, n).trim() : s; }
+    private void musica(long ahora) {
+        boolean su = sv.musicaPlay;
+        String m = "/musica?t=" + cod(corta(sv.cancionTitulo.replaceAll("\\s*[\\(\\[].*$", ""), 30)) + "&a=" + cod(corta(sv.cancionArtista.split(",")[0], 24))
+                + "&s=" + (su ? 1 : 0) + "&d=" + sv.musicaDura / 1000;
+        if (!m.equals(yaMusica) || ahora - yaMusicaT > 5000) {
+            yaMusica = m; yaMusicaT = ahora;
+            long pos = sv.musicaPos + (su ? android.os.SystemClock.elapsedRealtime() - sv.musicaPosEn : 0);
+            mandar(m + "&p=" + Math.max(0, pos / 1000));
+        }
+        android.graphics.Bitmap b = sv.cancionCaratula;
+        if (b == null || b == yaPortada || imgC == null || b.isRecycled()) return;
+        yaPortada = b;
+        try {
+            android.graphics.Bitmap e = android.graphics.Bitmap.createScaledBitmap(b, 120, 120, true);
+            int[] px = new int[120 * 120]; e.getPixels(px, 0, 120, 0, 0, 120, 120);
+            byte[] o = new byte[px.length * 2];
+            for (int i = 0; i < px.length; i++) {
+                int c = px[i], v = (((c >> 16) & 255) >> 3) << 11 | (((c >> 8) & 255) >> 2) << 5 | ((c & 255) >> 3);
+                o[2 * i] = (byte) v; o[2 * i + 1] = (byte) (v >> 8);       // como la guarda el ESP32 (el byte bajo primero)
+            }
+            mandar("/caratula?n=" + o.length);
+            synchronized (cola) { for (int i = 0; i < o.length; i += 240) cola.add(new Paq(2, java.util.Arrays.copyOfRange(o, i, Math.min(o.length, i + 240)))); }
+            siguiente();
+        } catch (Throwable ignored) { }
+    }
     // cada segundo: la posición y lo que haya cambiado
     private final Runnable tic = new Runnable() { @Override public void run() {
         if (parado) return;
@@ -293,8 +333,9 @@ final class CubiMapi {
                     en.promedio(), Math.round(en.promKm), Math.round(en.viajeKm), Double.isNaN(en.consumoViaje()) ? 0 : en.consumoViaje(), en.consumo()));
             if (!Double.isNaN(en.energia)) {
                 double h = en.horasParaLleno();
-                String p = String.format(Locale.US, "/pila?b=%d&r=%d&c=%d&k=%.1f&p=%.1f", Math.round(en.bateria), Math.round(en.autonomiaKm()), en.cargando ? 1 : 0,
-                        Double.isNaN(en.kw) ? 0 : en.kw, en.promedio())
+                double cv = en.consumoViaje();
+                String p = String.format(Locale.US, "/pila?b=%d&r=%d&c=%d&k=%.1f&p=%.1f&v=%.1f", Math.round(en.bateria), Math.round(en.autonomiaKm()), en.cargando ? 1 : 0,
+                        Double.isNaN(en.kw) ? 0 : en.kw, en.promedio(), en.viajeKm) + (Double.isNaN(cv) ? "" : String.format(Locale.US, "&q=%.1f", cv))
                         + (Double.isNaN(en.rangoCarro) ? "" : "&w=" + Math.round(en.rangoCarro * CubiCarro.Lienzo.WLTP_DE_NEDC))
                         + (Double.isNaN(h) ? "" : String.format(Locale.US, "&h=%.2f", h));
                 if (!p.equals(yaPila)) { yaPila = p; mandar(p); }
@@ -309,6 +350,7 @@ final class CubiMapi {
                 }
                 limLa = la; limLo = lo;
             }
+            musica(ahora);
             android.content.SharedPreferences pr = sv.getSharedPreferences("cubi", 0);   // el zoom y la flecha (pestaña Mapi)
             String aj = String.format(Locale.US, "/ajuste?z=%.2f&f=%.2f&g=%.0f&e=%d&a=%d&i=%d", pr.getFloat("mapiZoom", 1), pr.getFloat("mapiFlecha", 1),
                     pr.getFloat("mapiGiro", 0), Math.round(pr.getFloat("mapiEstilo", 0)), Math.round(pr.getFloat("mapiAro", 0)), Math.round(pr.getFloat("mapiImu", 0)));

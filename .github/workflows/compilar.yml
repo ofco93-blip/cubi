@@ -61,7 +61,7 @@ jobs:
           # el firmware sabe su número de versión (la app lo muestra)
           N=$VC
           { echo '#pragma once'; echo "#define VERSION_FW $N"; echo "#define VERSION_FW_TXT \"$N\""; } > firmware/cubi/version.h
-          arduino-cli lib install "GFX Library for Arduino@1.6.9" "arduinoFFT@2.0.4" "XPowersLib@0.3.3"
+          arduino-cli lib install "GFX Library for Arduino@1.6.9" "arduinoFFT@2.0.4" "XPowersLib@0.3.3" "SensorLib@0.4.1"
           arduino-cli compile --fqbn "esp32:esp32:waveshare_esp32_s3_touch_amoled_18:PSRAM=enabled,CDCOnBoot=cdc" --build-property upload.maximum_size=5242880 --output-dir out firmware/cubi 2>&1 | tee compilar.log || { grep -m8 "error" compilar.log | sed "s/^/::error::/"; exit 1; }
           cp out/cubi.ino.bin cubi.ino.bin
 
