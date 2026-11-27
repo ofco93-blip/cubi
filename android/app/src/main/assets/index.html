@@ -5,469 +5,380 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Cubi</title>
 <style>
+/* Vidrio tipo Apple: fondo de colores difuminados y tarjetas translúcidas encima. Tres cosas aparte: Cubi, Mapi y
+   Mascota Auto, cada una en su pestaña; lo que conecta con afuera (Bluetooth, Spotify, Google) en Conexiones. */
 :root {
-  --bg: #07090c; --panel: #12161b; --panel2: #1b2128; --line: #262e37;
-  --ink: #eef2f5; --muted: #8894a1; --accent: #3cd6e8; --accent-ink: #041417;
-  --sing: #ff6fa3; --music: #ffc43d; --ok: #5be38a; --bad: #ff6b5b;
-  --cara: #ffffff;   /* el color escogido para la cara de Cubi */
-  --r: 20px;
+  --ink: #f5f7ff; --muted: rgba(235, 240, 255, .62); --line: rgba(255, 255, 255, .12);
+  --glass: rgba(255, 255, 255, .085); --glass2: rgba(255, 255, 255, .14); --borde: rgba(255, 255, 255, .16);
+  --azul: #0a84ff; --verde: #30d158; --rojo: #ff453a; --amarillo: #ffd60a;
+  --cubi: #b18cff; --mapi: #4fc3ff; --auto: #ff9f43;
+  --cara: #ffffff;
+  --r: 24px;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; }
-body { padding: 0 16px calc(92px + env(safe-area-inset-bottom)); }
-h2 { font-size: 20px; margin: 28px 4px 12px; font-weight: 700; letter-spacing: -.01em; }
-button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+html { background: #070a16; overflow-x: hidden; }
+body { margin: 0; color: var(--ink); font: 400 16px/1.4 -apple-system, "SF Pro Text", system-ui, "Segoe UI", Roboto, sans-serif;
+  padding: 0 16px calc(104px + env(safe-area-inset-bottom)); min-height: 100vh; overflow-x: hidden; }
+/* el fondo: manchas de color que se ven a través del vidrio */
+body::before { content: ""; position: fixed; inset: -20%; z-index: -1;
+  background: radial-gradient(40% 35% at 15% 10%, rgba(84, 101, 255, .55), transparent 70%),
+              radial-gradient(35% 30% at 90% 25%, rgba(177, 92, 255, .45), transparent 70%),
+              radial-gradient(45% 40% at 70% 90%, rgba(18, 194, 233, .35), transparent 70%),
+              radial-gradient(30% 30% at 10% 80%, rgba(255, 120, 80, .25), transparent 70%), #070a16;
+  filter: blur(10px); }
+button { font: inherit; color: inherit; border: 0; cursor: pointer; background: none; }
 p { margin: 0; }
+section[hidden] { display: none; }
 
-/* cabecera */
-.top { position: sticky; top: 0; z-index: 5; background: linear-gradient(var(--bg) 78%, transparent); padding: 14px 4px 14px; display: flex; align-items: center; gap: 10px; }
-.top b { font-size: 22px; flex: 1; letter-spacing: -.02em; }
-.estado { display: flex; align-items: center; gap: 7px; min-width: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; font-size: 13px; color: var(--muted); }
-.estado span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); flex: none; }
-.dot.on { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+/* cabecera grande, como en iOS */
+.top { position: sticky; top: 0; z-index: 5; padding: calc(14px + env(safe-area-inset-top)) 4px 10px; margin: 0 -16px 6px; padding-left: 20px; padding-right: 20px;
+  background: linear-gradient(rgba(7, 10, 22, .86), rgba(7, 10, 22, .55) 70%, transparent); -webkit-backdrop-filter: blur(18px); backdrop-filter: blur(18px); }
+.top h1 { margin: 0; font-size: 34px; font-weight: 800; letter-spacing: -.03em; }
+.pills { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.pill { display: inline-flex; align-items: center; gap: 7px; padding: 5px 11px; border-radius: 999px; background: var(--glass); border: 1px solid var(--borde); font-size: 13px; color: var(--muted); }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rojo); }
+.pill .dot.on { background: var(--verde); box-shadow: 0 0 8px var(--verde); }
 
-/* tarjetas y controles */
-.card { background: var(--panel); border: 1px solid rgba(255, 255, 255, .05); border-radius: var(--r); padding: 16px; display: grid; gap: 14px; }
-.row { display: flex; align-items: center; gap: 12px; }
-.row > span:first-child { flex: 1; }
-.btn { background: var(--panel2); border-radius: 14px; padding: 13px 14px; font-weight: 600; text-align: center; }
-.btn.main { background: var(--accent); color: var(--accent-ink); }
-.btn:active, .paq:active, .colores button:active { transform: scale(.97); }
-.btn:disabled { opacity: .4; transform: none; }
-.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.grid2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-label.sl { display: grid; gap: 6px; }
-label.sl .row span:last-child { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 14px; }
-input[type=range] { width: 100%; accent-color: var(--accent); height: 28px; margin: 0; }
-input[type=text], input[type=password], input:not([type]), select, textarea { width: 100%; background: var(--bg); border: 1px solid var(--line); color: var(--ink); border-radius: 14px; padding: 13px; font: inherit; }
-textarea { resize: vertical; }
-input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
-.sw { position: relative; width: 50px; height: 30px; flex: none; }
-.sw input { opacity: 0; width: 0; height: 0; position: absolute; }
-.sw i { position: absolute; inset: 0; background: var(--line); border-radius: 15px; transition: .2s; }
-.sw i::after { content: ""; position: absolute; left: 3px; top: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: .2s; }
-.sw input:checked + i { background: var(--accent); }
-.sw input:checked + i::after { left: 23px; }
+/* títulos de grupo y tarjetas de vidrio */
+h2 { margin: 26px 8px 8px; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.card { background: var(--glass); border: 1px solid var(--borde); border-radius: var(--r); -webkit-backdrop-filter: blur(28px) saturate(170%); backdrop-filter: blur(28px) saturate(170%);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .25), inset 0 1px 0 rgba(255, 255, 255, .12); overflow: hidden; }
+.card > .in { padding: 16px; display: grid; gap: 12px; }
+/* filas tipo lista de ajustes: texto a la izquierda, control a la derecha, línea entre filas */
+.fila { display: flex; align-items: center; gap: 12px; padding: 13px 16px; min-height: 52px; }
+.fila + .fila, .fila + .in, .in + .fila { border-top: 1px solid var(--line); }
+.fila > span:first-child { flex: 1; min-width: 0; }
+.fila > span.ico { flex: none; } .fila > .ico + span { flex: 1; min-width: 0; }
+.fila small { display: block; color: var(--muted); font-size: 13px; margin-top: 1px; }
+.fila .val { color: var(--muted); font-size: 15px; font-variant-numeric: tabular-nums; }
+.ico { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; flex: none; }
+.ico svg { width: 18px; height: 18px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .note { color: var(--muted); font-size: 14px; }
-/* los dos mundos de la app, bien separados: el robot (morado) y la pantalla del carro (azul) */
-.grupo { margin: 30px 0 -8px; padding: 12px 16px; border-radius: 14px; border-left: 5px solid; }
-.grupo b { display: block; font-size: 17px; } .grupo small { display: block; font-size: 13px; opacity: .8; margin-top: 2px; }
-.grupo.robot { background: rgba(140, 110, 255, .16); border-color: #8c6eff; }
-.grupo.auto { background: rgba(46, 160, 255, .16); border-color: #2ea0ff; }
-/* las explicaciones largas van guardadas: se abren al tocarlas */
-.ayuda { color: var(--muted); font-size: 14px; }
-.ayuda summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; color: var(--accent); font-size: 13px; font-weight: 600; padding: 2px 0; }
-.ayuda summary::-webkit-details-marker { display: none; }
-.ayuda summary::before { content: "?"; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid currentColor; font-size: 11px; }
-.ayuda[open] summary { margin-bottom: 6px; }
-/* lo que Cubi va reportando: letra chica, se puede copiar y mandar */
-.log { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; }
-.log > :first-child { font: 12px/1.5 ui-monospace, "Roboto Mono", monospace; color: var(--muted); white-space: pre-wrap; word-break: break-word; max-height: 132px; overflow: auto; user-select: text; }
-.log:has(> :first-child:empty) { display: none; }
-.lb { display: flex; gap: 8px; justify-content: flex-end; }
-.lb button { background: var(--panel2); color: var(--ink); border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; }
+/* controles */
+.sw { position: relative; width: 51px; height: 31px; flex: none; }
+.sw input { opacity: 0; width: 0; height: 0; position: absolute; }
+.sw i { position: absolute; inset: 0; background: rgba(120, 120, 128, .36); border-radius: 16px; transition: .25s; }
+.sw i::after { content: ""; position: absolute; left: 2px; top: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, .3); transition: .25s; }
+.sw input:checked + i { background: var(--verde); }
+.sw input:checked + i::after { left: 22px; }
+input[type=range] { width: 100%; accent-color: var(--azul); height: 28px; margin: 0; }
+.desliza { padding: 10px 16px 12px; display: grid; gap: 2px; }
+.desliza .fila { padding: 0; min-height: 0; border: 0; }
+select { appearance: none; -webkit-appearance: none; background: transparent; border: 0; color: var(--muted); font: inherit; font-size: 15px; text-align: right; padding: 4px 18px 4px 4px; max-width: 58%;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%), linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 7px center, right 2px center; background-size: 5px 5px; background-repeat: no-repeat; }
+select option { background: #1c2033; color: #fff; }
+input[type=text], input[type=password], input:not([type]) { width: 100%; background: rgba(0, 0, 0, .25); border: 1px solid var(--borde); color: var(--ink); border-radius: 14px; padding: 13px 14px; font: inherit; }
+input:focus, select:focus { outline: 2px solid var(--azul); outline-offset: -1px; }
+.btn { display: block; width: 100%; padding: 14px; border-radius: 16px; background: var(--glass2); border: 1px solid var(--borde); font-weight: 600; text-align: center; color: var(--ink); }
+.btn.main { background: linear-gradient(180deg, #3a9bff, #0a6cff); border-color: transparent; color: #fff; box-shadow: 0 6px 18px rgba(10, 108, 255, .35); }
+.btn.peligro { color: #ff6b61; }
+.btn:active, .paq:active, .colores button:active { transform: scale(.97); }
+.btn:disabled { opacity: .45; transform: none; }
+.dos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.tres { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.dos > *, .tres > * { min-width: 0; }
+.enlace { color: var(--azul); font-weight: 600; font-size: 15px; }
+/* lo que va guardado (extras, avanzado): se abre al tocarlo */
+details.mas > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; font-weight: 600; }
+details.mas > summary::-webkit-details-marker { display: none; }
+details.mas > summary::after { content: "›"; font-size: 22px; color: var(--muted); transition: transform .2s; }
+details.mas[open] > summary::after { transform: rotate(90deg); }
+details.mas[open] > summary { border-bottom: 1px solid var(--line); }
 
-/* la cara: en grande arriba y en chiquito en cada personaje (las medidas van en em) */
+/* la cara del robot, en grande y en cada mascota */
+.hero { display: grid; justify-items: center; gap: 14px; padding: 22px 16px 18px; }
 .eyes { display: flex; gap: .34em; align-items: center; justify-content: center; font-size: 30px; height: 1.1em; }
 .eyes i { width: .37em; height: .67em; border-radius: .2em; background: var(--cara); box-shadow: 0 0 .4em color-mix(in srgb, var(--cara) 50%, transparent); }
 [data-paq="8"] .eyes i { width: .67em; height: .67em; border-radius: .33em .33em .17em .17em; }
 [data-paq="9"] .eyes i { background: none; border: .07em solid var(--cara); }
 [data-paq="10"] .eyes i { height: .5em; border-radius: 50%; }
 [data-paq="11"] .eyes i { background: #35b85f; box-shadow: none; }
-.paq[data-paq="11"] .eyes, #pantalla[data-paq="11"] { background: #f28c28; border-radius: 34px; }
+.paq[data-paq="11"] .eyes, #pantalla[data-paq="11"] { background: #f28c28; }
 .paq[data-paq="11"] .eyes { border-radius: 14px; padding: .1em .3em; }
-.pantalla { justify-self: center; width: 216px; height: 176px; border-radius: 34px; background: #000; border: 1px solid var(--line); display: grid; place-content: center;
-  box-shadow: 0 0 44px -6px color-mix(in srgb, var(--cara) 34%, transparent); transition: box-shadow .3s; }
-.pantalla .eyes { font-size: 84px; }
-.pantalla .eyes i { animation: parpadeo 5s infinite; transition: background .3s, border-color .3s; }
+.pantalla { width: 200px; height: 160px; border-radius: 36px; background: #000; border: 1px solid var(--borde); display: grid; place-content: center;
+  box-shadow: 0 0 50px -8px color-mix(in srgb, var(--cara) 40%, transparent), inset 0 1px 0 rgba(255, 255, 255, .1); }
+.pantalla .eyes { font-size: 78px; }
+.pantalla .eyes i { animation: parpadeo 5s infinite; }
 @keyframes parpadeo { 0%, 93%, 100% { transform: none; } 96% { transform: scaleY(.12); } }
 @media (prefers-reduced-motion: reduce) { .pantalla .eyes i { animation: none; } }
-.paqs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.paq { background: var(--panel2); color: var(--ink); border-radius: 16px; padding: 14px 8px 12px; display: grid; justify-items: center; gap: 6px; border: 2px solid transparent; }
-.paq small { color: var(--muted); font-size: 12px; }
-.paq.sel { border-color: var(--accent); }
+.paqs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.paq { background: rgba(0, 0, 0, .25); border-radius: 16px; padding: 12px 2px 8px; display: grid; justify-items: center; gap: 6px; border: 2px solid transparent; font-size: 12px; }
+.paq .eyes { font-size: 20px; }
+.paq.sel { border-color: var(--azul); background: rgba(10, 132, 255, .18); }
 .colores { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.colores button, .colores input { width: 38px; height: 38px; border-radius: 50%; border: 2px solid var(--line); padding: 0; background: var(--c); }
-.colores button.sel { border-color: var(--ink); box-shadow: 0 0 0 2px var(--bg) inset; }
+.colores button, .colores input { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--borde); padding: 0; background: var(--c); }
+.colores button.sel { border-color: #fff; box-shadow: 0 0 0 2px rgba(0, 0, 0, .5) inset; }
 .colores input { background: conic-gradient(#f55, #fc3, #5e8, #3cf, #a7f, #f55); overflow: hidden; }
 .colores input::-webkit-color-swatch-wrapper, .colores input::-webkit-color-swatch { opacity: 0; }
-.face { background: var(--panel2); border-radius: 14px; padding: 14px 6px 10px; display: grid; justify-items: center; gap: 8px; font-size: 13px; --cara: var(--c); }
-.face.sel { outline: 2px solid var(--accent); }
+.face { background: rgba(0, 0, 0, .25); border-radius: 14px; padding: 12px 4px 8px; display: grid; justify-items: center; gap: 6px; font-size: 12px; --cara: var(--c); }
+.face .eyes { font-size: 22px; }
 
-/* música en vivo */
-.live { display: grid; gap: 14px; }
-.state { display: flex; align-items: center; gap: 12px; }
-.chip { padding: 6px 12px; border-radius: 999px; font-weight: 700; font-size: 14px; background: var(--panel2); color: var(--muted); }
-.chip.s1 { background: #17323a; color: var(--accent); }
-.chip.s2 { background: #3a3012; color: var(--music); }
-.chip.s3 { background: #3a1626; color: var(--sing); }
-.bpm { color: var(--muted); font-size: 14px; font-variant-numeric: tabular-nums; }
-.meter { display: grid; gap: 6px; font-size: 14px; }
-.meter .bar { position: relative; height: 12px; background: var(--panel2); border-radius: 6px; overflow: hidden; }
-.meter .bar b { position: absolute; inset: 0 auto 0 0; width: 0; border-radius: 6px; background: var(--accent); transition: width .12s linear; }
-.meter .bar u { position: absolute; top: -2px; bottom: -2px; width: 2px; background: #fff; }
-.mouth { display: grid; place-items: center; height: 92px; }
-.mouth div { width: 60px; height: 8px; border-radius: 50%; border: 5px solid var(--sing); background: #2a0614; transition: height .08s linear, width .12s; }
+/* Mapi y Mascota Auto: su dibujito arriba */
+.redonda { width: 150px; height: 150px; border-radius: 50%; background: radial-gradient(circle at 50% 60%, #1a2a5a, #0b1430 70%); border: 4px solid #11151f;
+  box-shadow: 0 0 0 1px var(--borde), 0 0 40px -6px rgba(79, 195, 255, .5); position: relative; overflow: hidden; }
+.redonda::before { content: ""; position: absolute; left: 50%; top: 38%; width: 10px; height: 70%; background: #4c8bf5; transform: translateX(-50%) perspective(80px) rotateX(55deg); transform-origin: bottom; border-radius: 4px; }
+.redonda::after { content: ""; position: absolute; left: 50%; top: 66%; width: 0; height: 0; border-left: 10px solid transparent; border-right: 10px solid transparent; border-bottom: 18px solid #fff; transform: translateX(-50%); }
+.carro { width: 230px; height: 120px; border-radius: 22px; background: linear-gradient(160deg, #23306b, #101a3d); border: 1px solid var(--borde); position: relative; overflow: hidden;
+  box-shadow: 0 0 40px -8px rgba(255, 159, 67, .45); }
+.carro b { position: absolute; left: 18px; bottom: 10px; width: 64px; height: 64px; border-radius: 50% 50% 46% 46%; background: #f28c28; }
+.carro b::before, .carro b::after { content: ""; position: absolute; top: -12px; border-left: 12px solid transparent; border-right: 12px solid transparent; border-bottom: 20px solid #f28c28; }
+.carro b::before { left: 2px; } .carro b::after { right: 2px; }
+.carro i { position: absolute; right: 16px; top: 16px; width: 110px; height: 32px; border-radius: 16px; background: rgba(255, 255, 255, .2); border: 1px solid rgba(255, 255, 255, .5); }
+.carro u { position: absolute; right: 16px; bottom: 14px; width: 128px; height: 26px; border-radius: 13px; background: rgba(255, 255, 255, .14); }
 
-/* pestañas */
-nav { position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 0 0 10px var(--bg), 0 30px 0 10px var(--bg); padding: 6px; z-index: 6; }
-nav button { flex: 1; min-width: 0; padding: 8px 0 7px; display: grid; justify-items: center; gap: 3px; font-size: 11px; color: var(--muted); background: none; border-radius: 16px; }
-nav button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-nav button.on { color: var(--accent); background: var(--panel2); }
-section[hidden] { display: none; }
-.toast { position: fixed; left: 16px; right: 16px; bottom: calc(96px + env(safe-area-inset-bottom)); background: var(--panel2); border: 1px solid var(--line); padding: 12px 14px; border-radius: 14px; opacity: 0; transform: translateY(8px); transition: .25s; pointer-events: none; z-index: 7; }
+/* pestañas: una cápsula de vidrio flotando abajo */
+nav { position: fixed; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); display: flex; padding: 6px; z-index: 6; border-radius: 28px;
+  background: rgba(30, 34, 52, .6); border: 1px solid var(--borde); -webkit-backdrop-filter: blur(30px) saturate(180%); backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: 0 12px 34px rgba(0, 0, 0, .45), inset 0 1px 0 rgba(255, 255, 255, .12); }
+nav button { flex: 1; min-width: 0; padding: 8px 0 6px; display: grid; justify-items: center; gap: 3px; font-size: 10.5px; color: var(--muted); border-radius: 22px; transition: .2s; }
+nav button svg { width: 23px; height: 23px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+nav button.on { color: #fff; background: rgba(255, 255, 255, .14); }
+.toast { position: fixed; left: 16px; right: 16px; bottom: calc(100px + env(safe-area-inset-bottom)); background: rgba(40, 44, 64, .85); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  border: 1px solid var(--borde); padding: 12px 16px; border-radius: 16px; opacity: 0; transform: translateY(8px); transition: .25s; pointer-events: none; z-index: 7; }
 .toast.on { opacity: 1; transform: none; }
-.bloqueo { position: fixed; inset: 0; z-index: 20; background: rgba(5, 7, 9, .92); display: grid; place-items: center; padding: 24px; touch-action: none; }
+/* mientras se actualiza un firmware: tapa toda la app */
+.bloqueo { position: fixed; inset: 0; z-index: 20; background: rgba(4, 6, 14, .82); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); display: grid; place-items: center; padding: 24px; touch-action: none; }
 .bloqueo[hidden] { display: none; }
-.bloqueo .caja { width: 100%; max-width: 380px; background: var(--panel); border-radius: var(--r); padding: 20px; display: grid; gap: 14px; }
-.bloqueo .caja > b { font-size: 18px; }
-.bloqueo .barra { height: 14px; background: var(--panel2); border-radius: 7px; overflow: hidden; }
-.bloqueo .barra b { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 7px; transition: width .2s linear; }
-#otaPct { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.bloqueo .card { width: 100%; max-width: 380px; padding: 22px; display: grid; gap: 14px; }
+.bloqueo b.t { font-size: 20px; }
+.barra { height: 10px; background: rgba(255, 255, 255, .12); border-radius: 5px; overflow: hidden; }
+.barra b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #3a9bff, #30d158); border-radius: 5px; transition: width .2s linear; }
+#otaPct { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.lista-fav .fila { padding: 10px 16px; }
+pre.reg { margin: 0; max-height: 320px; overflow: auto; font: 11px/1.35 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; padding: 12px 16px; color: var(--muted); }
 </style>
 </head>
 <body>
 
 <div class="top">
-  <b>Cubi</b>
-  <div class="estado"><span class="dot" id="dot"></span><span id="conn">Buscando al robot…</span></div>
+  <h1 id="titulo">Cubi</h1>
+  <div class="pills">
+    <button class="pill" id="conn"><span class="dot" id="dot"></span><span id="connTxt">Buscando a Cubi…</span></button>
+    <span class="pill"><span class="dot" id="dotMapi"></span><span id="mapiPill">Mapi</span></span>
+  </div>
 </div>
 
-<!-- ================= CUBI ================= -->
+<!-- ================= CUBI: el robot cuadrado ================= -->
 <section id="tab-cubi">
-  <div class="card">
+  <div class="card"><div class="hero">
     <div class="pantalla" id="pantalla" data-paq="1"><span class="eyes"><i></i><i></i></span></div>
-    <div class="grid2">
-      <button class="btn main" id="hablarCubi">Hablarle a Cubi</button>
-      <button class="btn" id="gemini">Gemini</button>
+    <button class="btn main" id="gemini">Hablar con Gemini</button>
+    <p class="note">Di “Hi Lili” o “Hola Cubi”, o toca dos veces su pantalla.</p>
+  </div></div>
+
+  <h2>Mascota</h2>
+  <div class="card"><div class="in">
+    <div class="paqs">
+      <button class="paq" data-paq="1"><span class="eyes"><i></i><i></i></span>Cubi</button>
+      <button class="paq" data-paq="8"><span class="eyes"><i></i><i></i></span>Pancho</button>
+      <button class="paq" data-paq="9"><span class="eyes"><i></i><i></i></span>Lino</button>
+      <button class="paq" data-paq="10"><span class="eyes"><i></i><i></i></span>Mochi</button>
+      <button class="paq" data-paq="11"><span class="eyes"><i></i><i></i></span>Zelda</button>
     </div>
-    <details class="ayuda"><summary>Cómo hablarle</summary>
-      <p>Di “Hi Lili” (lo oye el micrófono del robot), “Hola Cubi” (lo oye el celular) o toca dos veces su pantalla. Espera su carita de escuchar y pide lo que quieras: “haz un kamehameha”, “cuéntame un chiste”. Mientras escucha y habla, la música se baja sola. Sin clave de Claude, el doble toque abre Gemini; mientras Gemini te contesta, Cubi mueve la boca.</p>
-    </details>
-  </div>
+    <div class="colores" id="colores"><input type="color" id="ojos" value="#ffffff" aria-label="Otro color"></div>
+  </div></div>
+
   <h2>Pantalla y sonido</h2>
   <div class="card">
-    <label class="sl"><div class="row"><span>Tamaño de la cara</span><span id="vTam"></span></div><input type="range" id="tam" min="100" max="150" step="5"></label>
-    <p class="note" id="fluidez">Más grande se ve mejor con el acrílico, pero a Cubi le cuesta más dibujarla.</p>
-    <label class="sl"><div class="row"><span>Brillo</span><span id="vBri"></span></div><input type="range" id="bri" min="10" max="255"></label>
-    <label class="sl"><div class="row"><span>Volumen</span><span id="vVol"></span></div><input type="range" id="vol" min="0" max="100"></label>
-    <div class="row"><span>Sonidos del robot</span><label class="sw"><input type="checkbox" id="son"><i></i></label></div>
-    <div class="row"><span>Mover la boca con la letra</span><label class="sw"><input type="checkbox" id="lab"><i></i></label></div>
-    <div class="row"><span>Apagarse cuando se apaga el carro</span><label class="sw"><input type="checkbox" id="carro"><i></i></label></div>
-    <details class="ayuda"><summary>Qué hace cada uno</summary>
-      <p>Mover la boca apagado: con la música solo baila y toca su instrumento, sin cantar. Apagarse con el carro: cuando el carro corta la corriente del USB, Cubi se despide y se apaga al minuto; al prender el carro vuelve solo. Si lo prendes con batería sin USB, no se apaga por esto.</p>
+    <div class="desliza"><div class="fila"><span>Tamaño de la cara</span><span class="val" id="vTam"></span></div><input type="range" id="tam" min="100" max="150" step="5"></div>
+    <div class="desliza" style="border-top:1px solid var(--line)"><div class="fila"><span>Brillo</span><span class="val" id="vBri"></span></div><input type="range" id="bri" min="10" max="255"></div>
+    <div class="desliza" style="border-top:1px solid var(--line)"><div class="fila"><span>Volumen</span><span class="val" id="vVol"></span></div><input type="range" id="vol" min="0" max="100"></div>
+    <div class="fila" style="border-top:1px solid var(--line)"><span>Sonidos del robot</span><label class="sw"><input type="checkbox" id="son"><i></i></label></div>
+    <div class="fila"><span>Apagarse con el carro<small>Se despide al minuto de quitarle el USB</small></span><label class="sw"><input type="checkbox" id="carro"><i></i></label></div>
+    <div class="fila"><span>Girar la pantalla 180°</span><button class="enlace" id="rot">Girar</button></div>
+  </div>
+
+  <h2>Música</h2>
+  <div class="card">
+    <div class="fila"><span>Bailar con la música</span><label class="sw"><input type="checkbox" id="mus"><i></i></label></div>
+    <div class="fila"><span>Cantar con la letra</span><label class="sw"><input type="checkbox" id="lab"><i></i></label></div>
+    <div class="fila"><span>Solo con la música del celular<small>Apagado, también baila con lo que oiga</small></span><label class="sw"><input type="checkbox" id="mc"><i></i></label></div>
+    <div class="fila"><span class="note" id="letraNota">…</span></div>
+  </div>
+
+  <h2>Voz</h2>
+  <div class="card">
+    <div class="fila"><span>“Hola Cubi” desde el celular</span><label class="sw"><input type="checkbox" id="hola"><i></i></label></div>
+    <div class="desliza" style="border-top:1px solid var(--line)"><div class="fila"><span>Oído de “Hi Lili”</span><span class="val" id="vWkg"></span></div><input type="range" id="wkg" min="0" max="6" step="1" value="2"></div>
+    <div class="fila" style="border-top:1px solid var(--line)"><span>Su voz</span><select id="vozCubi" aria-label="Voz de Cubi"></select></div>
+    <div class="desliza" style="border-top:1px solid var(--line)"><div class="fila"><span>Tono</span><span class="val">más agudo = más robotito</span></div><input type="range" id="tonoCubi" min="0.8" max="2" step="0.05" value="1.4"></div>
+    <div class="in"><div class="dos"><button class="btn" id="probarVoz">Probar voz</button><button class="btn" id="bajarVoces">Más voces</button></div>
+      <button class="btn" id="permisoGemini" hidden>Permitir abrir Gemini con la pantalla apagada</button></div>
+  </div>
+
+  <h2>Aparte</h2>
+  <div class="card">
+    <details class="mas"><summary>Caritas, sonidos y pruebas</summary>
+      <div class="in">
+        <p class="note">Para probar a Cubi a mano. Él solito las usa cuando toca.</p>
+        <div class="tres" id="caras"></div>
+        <div class="tres" id="sonidos"></div>
+        <div class="dos"><button class="btn" data-demo="canto">Que cante</button><button class="btn" data-demo="baile">Que baile</button></div>
+        <div class="dos"><button class="btn" data-ev="whatsapp">WhatsApp</button><button class="btn" data-ev="llamada">Llamada</button></div>
+        <button class="btn" id="adl">Si al frenar se alegra en vez de asustarse, toca aquí</button>
+      </div>
     </details>
-    <button class="btn" id="rot">Girar la pantalla 180°</button>
-    <div hidden><label class="sl"><div class="row"><span>Qué tan duro hay que frenar para que se estrelle</span><span id="vFr"></span></div>
-      <input type="range" id="fr" min="15" max="90" step="1"></label></div>
-    <button class="btn" id="adl">Si al frenar se alegra en vez de asustarse, toca aquí</button>
-  </div>
-  <div hidden>
-  <h2>Reacciones</h2>
-  <div class="grid" id="caras"></div>
-  <h2>Avisos</h2>
-  <div class="grid2">
-    <button class="btn" data-ev="whatsapp">WhatsApp</button>
-    <button class="btn" data-ev="llamada">Llamada</button>
-    <button class="btn" data-ev="encurso">En llamada</button>
-    <button class="btn" data-ev="colgar">Colgar</button>
-  </div>
-  <h2>Sonidos</h2>
-  <div class="grid" id="sonidos"></div>
   </div>
 </section>
 
-<!-- ================= VOZ ================= -->
-<section id="tab-voz" hidden>
-  <h2>Despertarlo</h2>
+<!-- ================= MAPI: la pantalla redonda del mapa ================= -->
+<section id="tab-mapi" hidden>
+  <div class="card"><div class="hero">
+    <div class="redonda"></div>
+    <b id="mapiEstado" style="text-align:center">Buscando a Mapi…</b>
+    <p class="note" style="text-align:center">Va por su cuenta: se conecta directo a este celular, no pasa por Cubi.</p>
+  </div></div>
+  <h2>Lo que muestra</h2>
   <div class="card">
-    <div class="row"><span>“Hola Cubi” u “Oye robot” desde el celular</span><label class="sw"><input type="checkbox" id="hola"><i></i></label></div>
-    <div class="log"><div id="holaAhora"></div></div>
-    <label class="sl"><div class="row"><span>Sensibilidad de “Hi Lili”</span><span id="vWkg"></span></div>
-      <input type="range" id="wkg" min="0" max="6" step="1" value="2"></label>
-    <p class="note">Súbela si toca gritarle; bájala si se despierta solo. En 0 no oye su nombre. Un toque en su pantalla lo hace dejar de escuchar.</p>
-    <details class="ayuda"><summary>Cómo funciona</summary>
-      <p>“Hi Lili” lo oye el robot con su propio micrófono, siempre. “Hola Cubi” lo oye el celular, solo mientras Cubi está conectado: escucha sin internet y nada sale de él. También escucha con música (háblale fuerte, cerca del celular). Con un video sonando (Facebook, reels) no escucha: ahí háblale con doble toque. Android muestra el puntito verde del micrófono. Sin internet igual te entiende lo básico: baila, música, pausa, siguiente, volumen, la hora, chistes y kamehameha.</p>
-    </details>
-    <button class="btn" id="permisoGemini" hidden>Permitir que Cubi abra Gemini con la pantalla apagada</button>
+    <div class="fila"><span class="ico" style="background:#4c8bf5"><svg viewBox="0 0 24 24"><path d="M12 3 5 21l7-4 7 4z"/></svg></span><span>El mapa, siempre<small>Acostado como los navegadores, con los colores de Google</small></span></div>
+    <div class="fila"><span class="ico" style="background:#5e5ce6"><svg viewBox="0 0 24 24"><path d="M9 18V8h8M13 4l4 4-4 4"/></svg></span><span>El giro<small>De la ruta de Google Maps en el celular</small></span></div>
+    <div class="fila"><span class="ico" style="background:#30d158"><svg viewBox="0 0 24 24"><rect x="7" y="4" width="10" height="17" rx="2"/><path d="M10 2h4"/></svg></span><span>La pila del carro<small>Cuando hay Android Auto</small></span></div>
+    <div class="fila"><span class="ico" style="background:#ff9f0a"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg></span><span>La hora y el clima</span></div>
   </div>
-  <h2>Su voz</h2>
+  <h2>Para que funcione</h2>
   <div class="card">
-    <select id="vozCubi" aria-label="Voz de Cubi"></select>
-    <label class="sl"><div class="row"><span>Tono</span><span>más agudo = más robotito</span></div>
-      <input type="range" id="tonoCubi" min="0.8" max="2" step="0.05" value="1.4"></label>
-    <div class="grid2"><button class="btn" id="probarVoz">Probar voz</button><button class="btn" id="bajarVoces">Bajar más voces</button></div>
-    <details class="ayuda"><summary>Cómo bajar voces</summary>
-      <p>Abre los ajustes de voz del celular: elige “Servicios de voz de Google”, toca el engranaje → Instalar datos de voz → Español. Al volver, las voces nuevas aparecen aquí.</p>
-    </details>
-  </div>
-  <h2>Personalidad</h2>
-  <div class="card">
-    <select id="persona" aria-label="Personalidad"></select>
-    <input id="pNombre" placeholder="Nombre de la personalidad">
-    <textarea id="pReglas" rows="6" placeholder="Cómo es y cómo habla Cubi"></textarea>
-    <button class="btn main" id="pGuardar">Usar y guardar</button>
-    <div class="grid2"><button class="btn" id="pNueva">Nueva</button><button class="btn" id="pBorrar">Borrar</button></div>
-    <p class="note">Los trucos, la música y el clima funcionan igual con todas.</p>
-  </div>
-  <h2>Conexiones</h2>
-  <div class="card">
-    <p class="note" id="claudeNota"></p>
-    <input type="password" id="claveClaude" placeholder="Clave de la API de Anthropic" autocomplete="off">
-    <button class="btn" id="guardarClaude">Guardar clave</button>
-    <button class="btn" id="spotify">Conectar Spotify</button>
-    <button class="btn" id="permisoMusica" hidden>Permitir que Cubi controle la música y cante con la letra</button>
+    <div class="fila"><span>Usar el GPS<small>Sin GPS usa la última ubicación del celular</small></span><label class="sw"><input type="checkbox" id="gps2"><i></i></label></div>
+    <div class="fila"><span>Actualizar a Mapi</span><button class="enlace" data-ir="ajustes">En Ajustes</button></div>
   </div>
 </section>
 
-<!-- ================= MÚSICA ================= -->
-<section id="tab-musica" hidden>
-  <h2>En vivo</h2>
-  <div class="card live">
-    <div class="state"><span class="chip" id="chip">Silencio</span><span class="bpm" id="bpm"></span></div>
-    <div class="mouth"><div id="mouth"></div></div>
-    <div class="meter"><div class="row"><span>Volumen que escucha</span></div><div class="bar"><b id="mNivel"></b></div></div>
-    <div class="meter"><div class="row"><span>Parecido a voz</span><span class="note">la línea es desde dónde canta</span></div><div class="bar"><b id="mVoz" style="background:var(--sing)"></b><u id="mUmbral"></u></div></div>
-    <div class="log"><div><span id="letraNota"></span>
-<span id="insNota"></span></div></div>
-  </div>
-  <div hidden>
-  <h2>Probar sin música</h2>
-  <div class="grid2">
-    <button class="btn main" data-demo="canto">Que cante</button>
-    <button class="btn" data-demo="baile">Que baile</button>
-  </div>
-  <h2>Bailes</h2>
-  <div class="grid2" id="bailes"></div>
-  <p class="note" id="cps"></p>
-  </div>
-  <h2>Ajustar el canto</h2>
+<!-- ================= MASCOTA AUTO: Zelda en la pantalla del carro ================= -->
+<section id="tab-auto" hidden>
+  <div class="card"><div class="hero">
+    <div class="carro"><i></i><u></u><b></b></div>
+    <p class="note" style="text-align:center">Lo que sale al abrir Mascota Auto en la pantalla del carro. Lo que cambies aquí se ve allá al instante.</p>
+  </div></div>
+  <h2>Mascota</h2>
   <div class="card">
-    <div class="row"><span>Reaccionar a la música</span><label class="sw"><input type="checkbox" id="mus"><i></i></label></div>
-    <div class="row"><span>Esperar a que el celular reproduzca</span><label class="sw"><input type="checkbox" id="mc"><i></i></label></div>
-    <details class="ayuda"><summary>Cómo funciona</summary>
-      <p>Prendido: con Spotify (o tu app de música) en play baila de una, también por Android Auto, y usa la letra de la canción; si el celular no reproduce nada, baila con lo que oiga (radio, la música de la oficina); con un video del celular (reels, Facebook) no baila. Apagado: se guía solo por lo que oye su micrófono.</p>
-    </details>
-    <label class="sl"><div class="row"><span>Sensibilidad del micrófono (boca)</span><span id="vUv"></span></div>
-      <input type="range" id="uv" min="5" max="95" step="1"></label>
-    <label class="sl"><div class="row"><span>Qué tanto abre la boca</span><span id="vGb"></span></div>
-      <input type="range" id="gb" min="30" max="300" step="5"></label>
-    <details class="ayuda"><summary>Sensibilidad</summary>
-      <p>Más alto: abre la boca con la voz más bajita. Más bajo: solo con la voz fuerte (no se le mete el ruido).</p>
-    </details>
-    <div hidden><label class="sl"><div class="row"><span>Sensibilidad a la música</span><span id="vSk"></span></div>
-      <input type="range" id="sk" min="0" max="100" step="1"></label>
-    <label class="sl"><div class="row"><span>Micrófono</span><span id="vMg"></span></div>
-      <input type="range" id="mg" min="0" max="7" step="1"></label></div>
+    <div class="fila"><span>Personaje</span><select id="carroZelda" aria-label="Personaje"><option value="1">Zelda, la gata</option><option value="0">Cubi (los ojitos)</option></select></div>
+    <div class="fila"><span>Fondo</span><select id="carroFondo" aria-label="Fondo"><option value="-1">Automático</option><option value="0">Cielo</option><option value="1">Chicle</option><option value="2">Menta</option><option value="3">Lila</option><option value="4">Noche</option></select></div>
+    <div class="fila"><span>Vista</span><select id="carroVista" aria-label="Vista"><option value="0">Mascota y mapa</option><option value="1">Solo la mascota</option><option value="2">Solo el mapa</option></select></div>
+    <div class="fila"><span>Tamaño junto al mapa</span><select id="carroZeldaTam" aria-label="Tamaño"><option value="0">Grande</option><option value="1">Mediana</option><option value="2">Pequeña</option></select></div>
+    <div class="fila"><span>Pila del carro</span><select id="carroPila" aria-label="Pila"><option value="0">Gato de vidrio</option><option value="1">Gato oscuro</option><option value="2">Pastilla</option><option value="3">No mostrar</option></select></div>
   </div>
-  <h2>Capturador</h2>
+  <h2>Mapa</h2>
   <div class="card">
-    <div class="row"><span>Capturar lo que oye</span><label class="sw"><input type="checkbox" id="captura"><i></i></label></div>
-    <p class="note" id="capturaNota">Prendido, Cubi anota cada 2 segundos lo que oye, qué instrumento decidió y qué canción sonaba, y las indicaciones de Google Maps o Waze. Úsalo un día manejando con música y luego mándame el archivo.</p>
-    <div class="grid2"><button class="btn main" id="capturaMandar">Guardar y mandar</button><button class="btn" id="capturaBorrar">Borrar</button></div>
-  </div>
-</section>
-
-<!-- ================= MAPA ================= -->
-<section id="tab-mapa" hidden>
-  <div class="grupo robot"><b>Cubi</b><small>El robot de pantalla chiquita, sobre el tablero</small></div>
-  <h2>Mapa en el robot</h2>
-  <div class="card"><p class="note">Por ahora Cubi no muestra mapas ni flechas de giro: eso va en Mapi.</p></div>
-  <div class="card" hidden>
-    <div class="row"><span>Con una ruta, el robot muestra</span></div>
-    <select id="navModo" aria-label="Qué muestra Cubi con una ruta">
-      <option value="avisos">Solo los avisos de giro</option>
-      <option value="mapa">Solo el mapa</option>
-      <option value="nada">Nada del mapa</option>
-    </select>
-    <div class="row"><span>Mapa completo (sin el muñequito)</span><label class="sw"><input type="checkbox" id="navCompleto"><i></i></label></div>
-    <div class="log"><div id="navAhora"></div></div>
-    <details class="ayuda"><summary>Cómo funciona</summary>
-      <p>Con una ruta puesta en el celular, Cubi muestra la flecha del próximo giro y los metros que faltan: avisa como la voz de Maps, unos segundos cada vez: con tiempo (800 m), cuando falta poco (300 m) y cuando ya toca (80 m). Entre aviso y aviso sigue cantando y bailando. Y celebra al llegar.<br><br>
-      Modo mapa: mientras haya una ruta, Cubi se queda en la pantalla de giro (flecha, metros y calle) en vez de bailar, sin sonar, y la música no lo quita. Con “Usar el GPS” prendido, además sale un mini mapa con las calles de alrededor: para eso el celular le manda tu posición a OpenStreetMap (overpass-api.de y, si ese está ocupado, el de respaldo overpass.kumi.systems) mientras haya una ruta. Las calles ya bajadas quedan guardadas en el celular para que la próxima vez salgan al instante. La línea azul de Maps no se puede sacar; para ver una ruta, escribe el destino aquí abajo.<br><br>
-      Mapa completo apagado: Cubi con la manito o el volante y la tarjeta con el mini mapa. Prendido: el mapa en toda la pantalla, con el carrito, la ruta y arriba la barra con el giro, los metros y la calle.</p>
-    </details>
-  </div>
-  <div class="grupo auto"><b>Mascota Auto</b><small>Zelda en la pantalla del carro (Android Auto)</small></div>
-  <h2>Destino y ruta</h2>
-  <div class="card">
-    <p class="note">Con Cubi abierto en la pantalla del carro (Android Auto) y una ruta puesta, el mapa sale allá en cualquiera de los modos; para eso el celular le manda tu posición a OpenStreetMap (overpass-api.de), igual que en “Solo el mapa”, y necesita “Usar el GPS” prendido.<br><br>Solo los avisos: muestra la flecha cuando se acerca un giro y sigue cantando y reaccionando a lo demás. Solo el mapa: se queda fijo en el mapa mientras haya ruta. Sirve con Google Maps o con Waze; si los dos tienen ruta a la vez, manda Google Maps.</p>
-    <input type="text" id="destino" placeholder="Destino (ej: Centro Comercial Andino, Bogotá)" autocomplete="off">
-    <div class="grid2"><button class="btn" id="trazar">Trazar ruta</button><button class="btn" id="quitarRuta">Quitar ruta</button></div>
-    <button class="btn" id="irMaps" style="width:100%;margin-top:10px">Ir con Google Maps a ese destino</button>
-    <p class="note">Google Maps no deja ver su línea azul desde otras apps. Para que el camino salga pintado en Cubi y en la pantalla del carro, escribe aquí el destino y toca “Trazar ruta”; luego “Ir con Google Maps” abre la navegación hacia ese mismo punto.</p>
-    <p class="note">La ruta la calcula un servicio libre (OSRM), no Google: puede no ser la misma que te da Maps. Para buscar el destino y trazarla, el celular manda el destino y tu posición a nominatim.openstreetmap.org y router.project-osrm.org.</p>
-  </div>
-  <h2>Destinos favoritos</h2>
-  <div class="card">
-    <input type="text" id="favNombre" placeholder="Nombre (ej: Casa)" autocomplete="off">
-    <input type="text" id="favDestino" placeholder="Dirección o sitio (ej: Carrera 9 # 20-15, Popayán)" autocomplete="off" style="margin-top:8px">
-    <button class="btn" id="favGuardar" style="width:100%;margin-top:10px">Guardar favorito</button>
-    <div id="favLista"></div>
-    <p class="note">Salen con una estrella arriba del todo al tocar “Destino” en la pantalla del carro: un toque y traza la ruta. Entre más completa la dirección, mejor lo encuentra.</p>
-  </div>
-  <h2>Mapa de Google (opcional)</h2>
-  <div class="card">
-    <input type="password" id="googleLlave" placeholder="Pega aquí tu llave de Google Cloud" autocomplete="off">
-    <div class="grid2"><button class="btn" id="googleGuardar">Guardar llave</button><button class="btn" id="googleQuitar">Quitar</button></div>
-    <button class="btn" id="googleAbrir" style="width:100%;margin-top:10px">Abrir Google Cloud para sacar la llave</button>
-    <p class="note" id="googleEstado"></p>
-    <div class="row"><span>Mapa que sale en el carro</span></div>
-    <select id="googleUsar" aria-label="Mapa que sale en el carro"><option value="1">El de Google (con mi llave)</option><option value="0">El de Cubi</option></select>
-    <p class="note">Con tu propia llave, el recuadro del mapa en la pantalla del carro pasa a ser la navegación de Google: ruta completa, tráfico, giros y voz. El destino se pide desde Cubi (por voz o con el buscador). Pasos en Google Cloud: crear un proyecto, activar la facturación (pide una tarjeta), activar “Navigation SDK” y crear una llave de API. Google regala los primeros 1.000 destinos al mes; lo que pase de ahí lo cobra a tu cuenta. La llave se guarda solo en este celular. Para volver al mapa de Cubi, toca Quitar y vuelve a conectar el carro.</p>
-  </div>
-  <h2>Mapa sin internet</h2>
-  <div class="card">
-    <div class="grid2"><button class="btn" id="paisBajar">Descargar mapa de Colombia</button><button class="btn" id="paisBorrar">Borrar</button></div>
-    <p class="note" id="paisEstado"></p>
-    <p class="note">Baja una vez las vías de todo el país y las guarda en el celular: así el mapa de la pantalla del carro sale al instante y sigue saliendo en carretera sin señal. Mejor bajarlo con wifi. Las indicaciones siguen viniendo de Google Maps o Waze, así que para viajar sin señal Maps también necesita su propio mapa descargado. Datos © colaboradores de OpenStreetMap.</p>
-  </div>
-</section>
-
-<!-- ================= MASCOTAS ================= -->
-<section id="tab-mascotas" hidden>
-  <div class="grupo robot"><b>Cubi</b><small>El robot de pantalla chiquita, sobre el tablero</small></div>
-  <h2>Mascota del robot</h2>
-  <div class="card">
-    <div class="paqs">
-      <button class="paq" data-paq="1"><span class="eyes"><i></i><i></i></span><b>Cubi</b><small>Ojitos de píldora</small></button>
-      <button class="paq" data-paq="8"><span class="eyes"><i></i><i></i></span><b>Pancho</b><small>Ojos de pan y guantes</small></button>
-      <button class="paq" data-paq="9"><span class="eyes"><i></i><i></i></span><b>Lino</b><small>Todo en línea</small></button>
-      <button class="paq" data-paq="10"><span class="eyes"><i></i><i></i></span><b>Mochi</b><small>Ojitos chiquitos</small></button>
-      <button class="paq" data-paq="11"><span class="eyes"><i></i><i></i></span><b>Zelda</b><small>La gata naranja: reloj y micrófono</small></button>
+    <div class="fila"><span>Mapa en el carro</span><select id="googleUsar" aria-label="Mapa en el carro"><option value="1">Google</option><option value="0">El de Cubi</option></select></div>
+    <div class="in">
+      <input type="text" id="destino" placeholder="¿A dónde vamos?" autocomplete="off">
+      <div class="dos"><button class="btn main" id="trazar">Trazar ruta</button><button class="btn" id="quitarRuta">Quitar</button></div>
+      <button class="btn" id="irMaps">Ir con Google Maps</button>
     </div>
-    <div class="row"><span>Color</span></div>
-    <div class="colores" id="colores"><input type="color" id="ojos" value="#ffffff" aria-label="Otro color"></div>
-    <details class="ayuda"><summary>Qué toma el color</summary>
-      <p>Todos vienen blancos. Cubi y Pancho lo toman en los ojos y la boca (sus guantes y efectos siguen a color); Lino y Mochi lo toman en todo: ojos, boca, manitos e instrumentos.</p>
+  </div>
+  <h2>Favoritos</h2>
+  <div class="card">
+    <div class="lista-fav" id="favLista"></div>
+    <div class="in">
+      <div class="dos"><input type="text" id="favNombre" placeholder="Nombre" autocomplete="off"><input type="text" id="favDestino" placeholder="Dirección" autocomplete="off"></div>
+      <button class="btn" id="favGuardar">Guardar favorito</button>
+    </div>
+  </div>
+  <h2>Aparte</h2>
+  <div class="card">
+    <details class="mas"><summary>Mapa sin internet</summary>
+      <div class="in">
+        <p class="note" id="paisEstado"></p>
+        <div class="dos"><button class="btn" id="paisBajar">Descargar Colombia</button><button class="btn peligro" id="paisBorrar">Borrar</button></div>
+        <p class="note">Mejor con wifi. Datos © colaboradores de OpenStreetMap.</p>
+      </div>
+    </details>
+    <details class="mas" style="border-top:1px solid var(--line)"><summary>Lo que dice el carro</summary>
+      <pre class="reg" id="carroReg">…</pre>
     </details>
   </div>
-  <div class="grupo robot"><b>Mapi</b><small>La pantalla redonda del mapa, debajo del volante</small></div>
-  <div class="card"><p class="note" id="mapiEstado">Buscando a Mapi…</p><p class="note">Mapi va por su cuenta: se conecta directo a este celular, no pasa por Cubi (puede estar Cubi apagado). Siempre muestra el mapa: el giro, la pila del carro, el clima y la hora. Para el mapa hay que tener prendido “Usar el GPS”.</p></div>
-  <div class="grupo auto"><b>Mascota Auto</b><small>Zelda en la pantalla del carro (Android Auto)</small></div>
-  <h2>Mascota de Android Auto</h2>
+</section>
+
+<!-- ================= CONEXIONES ================= -->
+<section id="tab-conexiones" hidden>
+  <h2>Bluetooth</h2>
   <div class="card">
-    <div class="row"><span>Personaje</span></div>
-    <select id="carroZelda" aria-label="Personaje de la pantalla"><option value="1">Zelda, la gata</option><option value="0">Cubi (los ojitos)</option></select>
-    <div class="row"><span>Fondo</span></div>
-    <select id="carroFondo" aria-label="Fondo de la pantalla">
-      <option value="-1">Automático (oscuro)</option>
-      <option value="0">Cielo</option><option value="1">Chicle</option><option value="2">Menta</option><option value="3">Lila</option><option value="4">Noche</option>
-    </select>
-    <div class="row"><span>Vista</span></div>
-    <select id="carroVista" aria-label="Vista de la pantalla">
-      <option value="0">Personaje, y mapa cuando hay ruta</option><option value="1">Solo el personaje</option><option value="2">Solo el mapa</option>
-    </select>
-    <div class="row"><span>Tamaño de Zelda junto al mapa</span></div>
-    <select id="carroZeldaTam" aria-label="Tamaño de Zelda junto al mapa"><option value="0">Grande</option><option value="1">Mediana</option><option value="2">Pequeña (mapa más amplio)</option></select>
-    <div class="row"><span>Pila del carro</span></div>
-    <select id="carroPila" aria-label="Pila del carro en la pantalla"><option value="0">Cabeza de gato de vidrio</option><option value="1">Cabeza oscura con aro de luz</option><option value="2">Pastilla de vidrio con orejas</option><option value="3">No mostrar</option></select>
-    <p class="note">La batería y la autonomía que el carro le pasa a Android Auto (hay que aceptar “Información del vehículo” en el celular). Sin destino sale arriba con los kilómetros reales y el consumo; con destino queda solo el gatito con el número, junto a los botones.</p>
-    <button class="btn" id="carroRegVer" style="width:100%;margin-top:10px">Ver lo que ha dicho el carro</button>
-    <pre id="carroReg" hidden style="max-height:320px;overflow:auto;font-size:11px;line-height:1.35;white-space:pre-wrap;word-break:break-word;user-select:text;-webkit-user-select:text;background:rgba(0,0,0,.35);border-radius:12px;padding:10px;margin-top:10px"></pre>
-    <p class="note">La caja negra: Cubi anota todo lo que el carro le pasa a Android Auto (batería, carga, velocidad, kilometraje, sensores, y también lo que el carro no quiso dar). Se guarda solo en este celular; mantén oprimido el texto para copiarlo.</p>
-    <p class="note">Es lo que sale al abrir Cubi en la pantalla del carro. Son las mismas opciones del botón “Opciones” de esa pantalla: lo que cambies aquí se ve allá al instante. El robot sigue con su propia cara.</p>
+    <div class="fila"><span class="ico" style="background:var(--cubi)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="M9 10v3M15 10v3"/></svg></span><span>Cubi<small id="bleNota">Buscando…</small></span><button class="enlace" id="reconectar">Buscar</button></div>
+    <div class="fila"><span class="ico" style="background:var(--mapi)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7 9 16l3-2 3 2z"/></svg></span><span>Mapi<small id="mapiNota">Buscando…</small></span></div>
+  </div>
+  <h2>Spotify</h2>
+  <div class="card">
+    <div class="fila"><span class="ico" style="background:#1db954"><svg viewBox="0 0 24 24"><path d="M7 10c3-1 7-1 10 1M8 13.5c2.5-.8 5.5-.6 8 .8M9 17c2-.5 4-.4 6 .5"/></svg></span><span>Spotify<small id="spotifyNota">Para que Cubi ponga canciones</small></span><button class="enlace" id="spotify">Conectar</button></div>
+    <div class="fila" id="permisoMusicaFila"><span>Controlar la música<small>Para cantar con la letra y saber qué suena</small></span><button class="enlace" id="permisoMusica">Permitir</button></div>
+  </div>
+  <h2>Google</h2>
+  <div class="card">
+    <div class="fila"><span class="ico" style="background:#4285f4"><svg viewBox="0 0 24 24"><path d="M12 3 5 21l7-4 7 4z"/></svg></span><span>Mapa de Google<small id="googleEstado">…</small></span></div>
+    <div class="in">
+      <input type="password" id="googleLlave" placeholder="Pega aquí tu llave de Google Cloud" autocomplete="off">
+      <div class="dos"><button class="btn main" id="googleGuardar">Guardar</button><button class="btn peligro" id="googleQuitar">Quitar</button></div>
+      <button class="btn" id="googleAbrir">Abrir Google Cloud</button>
+      <p class="note">La navegación y la búsqueda de Google en la pantalla del carro. Google regala una cuota al mes; lo demás lo cobra a tu cuenta. La llave se guarda solo en este celular.</p>
+    </div>
+  </div>
+  <div id="claudeCaja" hidden>
+    <h2>Claude</h2>
+    <div class="card">
+      <div class="fila"><span>Clave de Claude guardada<small>Mientras esté, Cubi conversa con Claude en vez de Gemini</small></span><button class="enlace" id="quitarClaude">Quitar</button></div>
+    </div>
   </div>
 </section>
 
 <!-- ================= AJUSTES ================= -->
 <section id="tab-ajustes" hidden>
-  <h2>Clima y viaje</h2>
+  <h2>Actualizaciones</h2>
   <div class="card">
-    <div class="row"><span>Usar el GPS</span><label class="sw"><input type="checkbox" id="gps"><i></i></label></div>
-    <div class="row"><span>Reaccionar al clima</span><label class="sw"><input type="checkbox" id="clima"><i></i></label></div>
-    <p class="note" id="climaNota">Solito: cuando empieza a llover, sale el sol o la temperatura sube o baja 3 grados, hace su animación y muestra los grados. Con lluvia saca la sombrilla, con sol se alegra, con calor suda y con frío tirita. Usa tu ubicación aproximada (~1 km) y se actualiza cada 20 minutos.</p>
-    <details class="ayuda"><summary>Para qué usa el GPS</summary>
-      <p>Cuando paran 3 minutos después de un viaje, Cubi celebra que llegaron (sin Google Maps). En el camino revisa el clima cada 8 km y reacciona si cambia (lluvia, sol, frío, calor). Si le hablas, sabe a qué velocidad van.</p>
-    </details>
+    <div class="fila"><span class="ico" style="background:#5e5ce6"><svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></svg></span><span>La app<small id="verApp">…</small></span><button class="enlace" id="actApp">Actualizar</button></div>
+    <div class="fila"><span class="ico" style="background:var(--cubi)"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="M9 10v3M15 10v3"/></svg></span><span>Cubi<small id="verCubi">…</small></span><button class="enlace" id="actCubi">Actualizar</button></div>
+    <div class="fila"><span class="ico" style="background:var(--mapi)"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7 9 16l3-2 3 2z"/></svg></span><span>Mapi<small id="verMapi">…</small></span><button class="enlace" id="actMapi">Actualizar</button></div>
+    <div class="fila"><span class="note">Cada una tiene su número. Cubi y Mapi solo piden actualizarse cuando cambia su firmware.</span><button class="enlace" id="buscarVer">Revisar</button></div>
+  </div>
+  <h2>Viaje</h2>
+  <div class="card">
+    <div class="fila"><span>Usar el GPS</span><label class="sw"><input type="checkbox" id="gps"><i></i></label></div>
+    <div class="fila"><span>Reaccionar al clima<small id="climaNota">Lluvia, sol, frío o calor</small></span><label class="sw"><input type="checkbox" id="clima"><i></i></label></div>
   </div>
   <h2>¿Dónde parqueé?</h2>
   <div class="card">
-    <p class="note" id="parqueoNota">Cuando Cubi se desconecta (se apagó el carro), la app guarda aquí dónde quedó. No manda notificación y la ubicación no sale del celular.</p>
-    <button class="btn" id="parqueoIr">Abrir en Maps</button>
+    <div class="fila"><span class="note" id="parqueoNota">Se guarda sola cuando Cubi se desconecta (se apagó el carro). No sale del celular.</span><button class="enlace" id="parqueoIr" hidden>Abrir</button></div>
   </div>
-  <h2>Bluetooth</h2>
-  <div class="card">
-    <p class="note" id="bleNota">La app se conecta sola a Cubi por Bluetooth. El celular sigue con su internet.</p>
-    <button class="btn" id="reconectar">Conectar por Bluetooth</button>
-  </div>
-  <h2>Actualizaciones</h2>
-  <div class="card">
-    <p class="note" id="verNota" style="white-space:pre-line">Revisando si hay versión nueva…</p>
-    <button class="btn main" id="actApp">Actualizar la app</button>
-    <button class="btn main" id="actCubi">Actualizar a Cubi (firmware)</button>
-    <button class="btn main" id="actMapi">Actualizar a Mapi (firmware)</button>
-    <p class="note">Son tres cosas aparte, cada una con su número: la app (con Mascota Auto), Cubi y Mapi. Cubi y Mapi solo piden actualizarse cuando cambia su firmware, no cada vez que cambia la app. El firmware va por Bluetooth: tarda unos minutos y la app queda bloqueada hasta que termine.</p>
-    <button class="btn" id="buscarVer">Buscar versión nueva</button>
-    <button class="btn" id="subir" hidden>Subir un firmware desde un archivo</button>
-  </div>
-  <h2>Diagnóstico</h2>
-  <div class="card">
-    <p class="note">Si algo falla, copia esto o mándalo.</p>
-    <div class="log"><div id="diag"></div></div>
-    <p class="note" id="info"></p>
-  </div>
+  <p class="note" id="info" style="text-align:center;margin:22px 0 0"></p>
 </section>
 
 <nav>
   <button data-tab="cubi" class="on"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="4"/><path d="M9 10v3M15 10v3"/></svg>Cubi</button>
-  <button data-tab="voz"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Voz</button>
-  <button data-tab="musica"><svg viewBox="0 0 24 24"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Música</button>
-  <button data-tab="mapa"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2zM9 4v14M15 6v14"/></svg>Mapa</button>
-  <button data-tab="mascotas"><svg viewBox="0 0 24 24"><path d="M5 9V4l4 3h6l4-3v5a7 7 0 0 1-14 0zM10 12v1M14 12v1"/></svg>Mascotas</button>
-  <button data-tab="ajustes"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Ajustes</button>
+  <button data-tab="mapi"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7 9 16l3-2 3 2z"/></svg>Mapi</button>
+  <button data-tab="auto"><svg viewBox="0 0 24 24"><path d="M5 9V4l4 3h6l4-3v5a7 7 0 0 1-14 0zM10 12v1M14 12v1"/></svg>Mascota Auto</button>
+  <button data-tab="conexiones"><svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>Conexiones</button>
+  <button data-tab="ajustes"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Ajustes</button>
 </nav>
 <div class="toast" id="toast"></div>
-<!-- Mientras se actualiza: tapa toda la app, no deja tocar nada -->
+<!-- Mientras se actualiza Cubi o Mapi: tapa toda la app, no deja tocar nada -->
 <div class="bloqueo" id="bloqueo" hidden>
-  <div class="caja">
-    <b>Actualizando a Cubi</b>
-    <p class="note">No cierres la app, no apagues el robot y deja el celular cerca.</p>
+  <div class="card">
+    <b class="t" id="otaTitulo">Actualizando a Cubi</b>
+    <p class="note" id="otaAviso">No cierres la app, no lo apagues y deja el celular cerca.</p>
     <div class="barra"><b id="otaBarra"></b></div>
-    <div class="row"><span id="otaPct">0 %</span><span class="note" id="otaKb"></span></div>
+    <div class="fila" style="padding:0;min-height:0"><span id="otaPct">0 %</span><span class="note" id="otaKb"></span></div>
   </div>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
-const CARAS = [  // reacciones de caricatura (las de Isa): [nombre en Cubi, texto, color]
-  ['saludo', 'Saludo', '#7CF7FF'], ['risa', 'Risa', '#FFE66B'], ['amor', 'Amor', '#FF8FCF'], ['sorpresa', 'Sorpresa', '#FFFFFF'],
-  ['guino', 'Guiño', '#7CF7FF'], ['curiosa', 'Curioso', '#9CC9FF'], ['caricia', 'Caricia', '#FFB86B'], ['mareo', 'Mareado', '#C6FF6B'],
-  ['frenazo', 'Frenazo', '#FF6A3D'], ['aceleron', 'Acelerón', '#FFD23F'], ['arranque', 'Arranque', '#7CF7FF'], ['bache', 'Hueco', '#C3B5FF'],
-  ['izq', 'Curva izq.', '#9CC9FF'], ['der', 'Curva der.', '#9CC9FF'], ['maps_izq', 'Maps izq.', '#6FE3F0'], ['maps_der', 'Maps der.', '#6FE3F0'], ['maps_recto', 'Maps derecho', '#6FE3F0'],
-  ['cinturon', 'Cinturón', '#FFD27A'], ['sonrojo', 'Sonrojado', '#FF9CC0'], ['enojo', 'Enojado', '#FF7A7A'],
-  ['papas', 'Papas', '#FFD27A'], ['bebida', 'Bebida', '#FF9CC0'], ['consola', 'Consola', '#9CC9FF'], ['leemapa', 'Lee el mapa', '#6FE3F0'],
-  ['confeti&f=1', 'Pistola al de atrás', '#FF9CC0'], ['ppt_piedra', 'Piedra', '#FFE66B'], ['ppt_papel', 'Papel', '#FFE66B'], ['ppt_tijera', 'Tijera', '#FFE66B'],
-  ['cono', 'Helado', '#FF9CC0'], ['crispetas', 'Crispetas', '#FFD27A'], ['feliz', 'Feliz', '#FFE66B'], ['triste', 'Triste', '#9CC9FF'], ['sueno', 'Con sueño', '#C6B0FF'],
-  ['llegamos', 'Llegamos', '#FFE66B'], ['sol', 'Sol', '#FFD23F'], ['lluvia', 'Lluvia', '#9CC9FF'], ['frio', 'Frío', '#EDEBFF'],
-  ['calor', 'Calor', '#FF6A3D'], ['bateria', 'Batería', '#C6FF6B'],
-];
-const BAILES = [  // [nombre en Cubi, texto, canta]
-  ['pop', 'Pop con micrófono', 1], ['urbano', 'Urbano con gorra', 1], ['tropical', 'Salsa con sombrero', 1], ['electro', 'Electrónica con luces', 0],
-  ['dj', 'DJ con audífonos', 0], ['kpop', 'K-pop', 1], ['corazon', 'Corazoncito', 1], ['groove', 'Groove', 0], ['rock', 'Rock', 1],
-  ['guitarra', 'Guitarra acústica', 0], ['disfruta', 'Suave', 1], ['jazz', 'Jazz con saxofón', 0], ['piano', 'Piano', 1], ['barras', 'Barritas', 0],
-  ['manos', 'Canta con las manos', 1], ['acordeon', 'Acordeón', 1], ['vela', 'Balada con vela', 1],
-];
-const SONIDOS = [['risa', 'Risa'], ['feliz', 'Feliz'], ['sorpresa', 'Sorpresa'], ['enojado', 'Enojado'], ['triste', 'Triste'],
-  ['enamorado', 'Amor'], ['mareado', 'Mareado'], ['sueno', 'Sueño'], ['arranque', 'Arranque']];
-const ESTADOS = ['Silencio', 'Hablando', 'Sintiendo la música', 'Cantando'];
+const A = () => window.Android;
+const TITULOS = {cubi: 'Cubi', mapi: 'Mapi', auto: 'Mascota Auto', conexiones: 'Conexiones', ajustes: 'Ajustes'};
+// las caritas para probar a mano (aparte): las que Cubi usa en el carro
+const CARAS = [['saludo', 'Saludo', '#7CF7FF'], ['risa', 'Risa', '#FFE66B'], ['amor', 'Amor', '#FF8FCF'], ['sorpresa', 'Sorpresa', '#FFFFFF'],
+  ['guino', 'Guiño', '#7CF7FF'], ['curiosa', 'Curioso', '#9CC9FF'], ['feliz', 'Feliz', '#FFE66B'], ['triste', 'Triste', '#9CC9FF'],
+  ['sueno', 'Con sueño', '#C6B0FF'], ['llegamos', 'Llegamos', '#FFE66B'], ['frenazo', 'Frenazo', '#FF6A3D'], ['bache', 'Hueco', '#C3B5FF']];
+const SONIDOS = [['risa', 'Risa'], ['feliz', 'Feliz'], ['sorpresa', 'Sorpresa']];
 
-let vivo = false, tab = 'cubi', ini = true;
-
+let vivo = false, tab = 'cubi', ini = true, actualizando = false;
 function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.h); toast.h = setTimeout(() => el.classList.remove('on'), 2600); }
 
-// ---------- Bluetooth: la parte Android conecta; aquí se mandan "id|ruta" y llegan "id|respuesta" ----------
+// ---------- Bluetooth con Cubi: la parte Android conecta; aquí se mandan "id|ruta" y llegan "id|respuesta" ----------
 const pend = {}; let sigId = 1;
-const TEXTO_BLE = {
-  buscando: 'Buscando a Cubi por Bluetooth…', conectando: 'Conectando…', conectado: 'Conectado por Bluetooth',
-  desconectado: 'Se desconectó · toca para reconectar', 'no-encontrado': 'No encontré a Cubi · toca para buscar',
-  apagado: 'Prende el Bluetooth del celular', 'sin-permiso': 'Falta permiso de Bluetooth · toca para pedirlo',
-};
+const TEXTO_BLE = { buscando: 'Buscando a Cubi…', conectando: 'Conectando con Cubi…', conectado: 'Cubi conectado', desconectado: 'Cubi desconectado',
+  'no-encontrado': 'No encuentro a Cubi', apagado: 'Bluetooth apagado', 'sin-permiso': 'Falta permiso de Bluetooth' };
 function bleEstado(s) {
   vivo = s === 'conectado';
   $('dot').classList.toggle('on', vivo);
-  $('conn').textContent = TEXTO_BLE[s] || s;
+  $('connTxt').textContent = TEXTO_BLE[s] || s; $('bleNota').textContent = TEXTO_BLE[s] || s;
   if (vivo) { ini = true; estado(); }
 }
 function bleRespuesta(linea) {
@@ -475,34 +386,28 @@ function bleRespuesta(linea) {
   if (!p) return;
   delete pend[linea.slice(0, i)];
   const r = linea.slice(i + 1);
-  if (r.startsWith('!')) p.rej(new Error(r.slice(1)));
-  else p.res(r.startsWith('{') ? JSON.parse(r) : r);
+  if (r.startsWith('!')) p.rej(new Error(r.slice(1))); else p.res(r.startsWith('{') ? JSON.parse(r) : r);
 }
 function api(path, ms = 3000) {
   return new Promise((res, rej) => {
     if (actualizando) return rej(new Error('Espera a que termine la actualización'));
-    if (!vivo || !window.Android) return rej(new Error('Sin conexión con Cubi'));
-    const id = String(sigId++);
-    pend[id] = { res, rej };
-    Android.bleEnviar(id + '|' + path);
+    if (!vivo || !A()) return rej(new Error('Cubi no está conectado'));
+    const id = String(sigId++); pend[id] = { res, rej };
+    A().bleEnviar(id + '|' + path);
     setTimeout(() => { if (pend[id]) { delete pend[id]; rej(new Error('Cubi no respondió')); } }, ms);
   });
 }
 const mandar = p => api(p).catch(e => toast(e.message));
-function conectar() { if (window.Android) Android.bleBuscar(); else $('conn').textContent = 'Abre esto desde la app Cubi'; }
-// la app se reabre con Cubi ya conectado: la parte Android avisa el estado al cargar
+function conectar() { if (A()) A().bleBuscar(); }
 $('conn').onclick = () => { if (!vivo) conectar(); };
 $('reconectar').onclick = conectar;
 
-// ---------- estado ----------
+// ---------- lo que cuenta Cubi ----------
 function pintarEstado(j) {
-  document.querySelectorAll('.face').forEach(b => b.classList.toggle('sel', b.dataset.n === j.emo));
-  $('conn').textContent = 'Conectado por Bluetooth' + (j.bat >= 0 ? ' · batería ' + j.bat + '%' : '');
+  $('connTxt').textContent = 'Cubi conectado' + (j.bat >= 0 ? ' · ' + j.bat + '%' : '');
   if (j.fw !== undefined) { vFw = j.fw; notaVersiones(); }
   if (j.paq !== undefined) pintarPaq(j.paq);
-  if (j.cps) $('cps').textContent = 'Ahora Cubi dibuja a ' + j.cps + ' cuadros por segundo (lo normal es 15 o más)';
-  if (j.cps) $('fluidez').textContent = 'Fluidez ahora: ' + j.cps + ' cuadros por segundo' + (j.cps < 15 ? ' (se ve trabado: baja el tamaño)' : '') + '. Más grande se ve mejor con el acrílico, pero a Cubi le cuesta más dibujarla.';
-  $('info').textContent = 'Cubi v' + j.ver + (j.carga ? ' · cargando' : j.usb ? ' · conectado al USB' : ' · con batería');
+  $('info').textContent = 'Cubi v' + j.ver + (j.carga ? ' · cargando' : j.usb ? ' · con USB' : ' · con batería');
   if (ini) {
     ini = false;
     if (j.tam !== undefined) $('tam').value = j.tam;
@@ -511,77 +416,36 @@ function pintarEstado(j) {
     if (j.wkg !== undefined) $('wkg').value = j.wkg;
     if (j.ojos !== undefined && document.activeElement !== $('ojos')) pintarColor('#' + j.ojos.toString(16).padStart(6, '0'));
     $('bri').value = j.bri; $('vol').value = j.vol; $('son').checked = !!j.son; $('mus').checked = !!j.mus; if (j.mc !== undefined) $('mc').checked = !!j.mc;
-    $('uv').value = 100 - Math.round(j.uv * 100); $('gb').value = Math.round(j.gb * 100);
-    $('sk').value = Math.round((8 - j.sk) / 6.7 * 100); $('mg').value = j.mg;
-    if (j.fr) $('fr').value = Math.round(j.fr * 100);
     etiquetas();
   }
 }
-async function estado() {
-  if (!vivo) return;
-  try { pintarEstado(await api('/estado')); } catch (e) {}
-}
+async function estado() { if (vivo) try { pintarEstado(await api('/estado')); } catch (e) {} }
 
-// ---------- música en vivo ----------
-let audioEnCurso = false;
-async function audio() {
-  if (tab !== 'musica' || !vivo || audioEnCurso) return;
-  audioEnCurso = true;
-  try {
-    if (window.Android) $('letraNota').textContent = 'Letra: ' + (Android.estadoLetra() || '…')
-      + (vFw > 0 && vFw < 49 ? ' · Actualiza a Cubi: su firmware no sabe cantar con la letra' : '');
-    const a = await api('/audio', 1000);
-    const INS = {kpop: 'micrófono (manda la voz)', dj: 'DJ (bajo electrónico)', pop: 'batería', tropical: 'maracas', rock: 'guitarra eléctrica',
-      jazz: 'saxo', piano: 'piano', guitarra: 'guitarra acústica'};
-    $('insNota').textContent = 'Oye: ' + (INS[a.ins] || 'nada claro todavía') + (a.ruido !== undefined ? ' · ruido ' + a.ruido.toFixed(2) + ' · golpes/s ' + a.gps.toFixed(1) : '');
-    const chip = $('chip');
-    chip.textContent = ESTADOS[a.estado] || 'Silencio';
-    chip.className = 'chip s' + a.estado;
-    $('bpm').textContent = a.bpm > 0 && a.estado >= 2 ? Math.round(a.bpm) + ' bpm · ' + a.estilo : '';
-    $('mNivel').style.width = (a.nivel * 100) + '%';
-    $('mVoz').style.width = (a.voz * 100) + '%';
-    const m = $('mouth');
-    m.style.height = (8 + a.boca * 70) + 'px';
-    m.style.width = (44 + a.ancho * 40) + 'px';
-  } catch (e) {}
-  audioEnCurso = false;
-}
-
-// ---------- ajustes ----------
+// ---------- ajustes de Cubi ----------
 function etiquetas() {
-  $('vUv').textContent = $('uv').value + '%';
-  $('mUmbral').style.left = (100 - $('uv').value) + '%';
-  $('vGb').textContent = ($('gb').value / 100).toFixed(1) + '×';
-  $('vSk').textContent = $('sk').value + '%';
-  $('vMg').textContent = $('mg').value + ' de 7';
-  $('vFr').textContent = $('fr').value < 30 ? 'suave' : $('fr').value < 50 ? 'normal' : $('fr').value < 70 ? 'fuerte' : 'muy fuerte';
   $('vBri').textContent = Math.round($('bri').value / 2.55) + '%';
   $('vTam').textContent = $('tam').value + '%';
   $('vVol').textContent = $('vol').value + '%';
-  $('vWkg').textContent = +$('wkg').value ? $('wkg').value + ' de 6' : 'apagada';
+  $('vWkg').textContent = +$('wkg').value ? $('wkg').value + ' de 6' : 'apagado';
 }
 document.querySelectorAll('input[type=range]').forEach(r => r.addEventListener('input', etiquetas));
-$('uv').onchange = e => mandar('/ajuste?uv=' + ((100 - e.target.value) / 100));
-$('gb').onchange = e => mandar('/ajuste?gb=' + (e.target.value / 100));
-$('sk').onchange = e => mandar('/ajuste?sk=' + (8 - e.target.value / 100 * 6.7).toFixed(2));
-$('mg').onchange = e => mandar('/ajuste?mg=' + e.target.value);
-$('mus').onchange = e => mandar('/ajuste?mus=' + (e.target.checked ? 1 : 0));
-$('mc').onchange = e => mandar('/ajuste?mc=' + (e.target.checked ? 1 : 0));
 $('bri').onchange = e => mandar('/brillo?v=' + e.target.value);
 $('tam').onchange = e => mandar('/ajuste?tam=' + e.target.value);
+$('vol').onchange = e => mandar('/ajuste?vol=' + e.target.value);
+$('son').onchange = e => mandar('/ajuste?son=' + (e.target.checked ? 1 : 0));
 $('carro').onchange = e => mandar('/ajuste?carro=' + (e.target.checked ? 1 : 0));
 $('wkg').onchange = e => mandar('/ajuste?wkg=' + e.target.value);
 $('lab').onchange = e => mandar('/ajuste?lab=' + (e.target.checked ? 1 : 0));
-// el color de la cara: unos ya listos y el que se quiera; la cara de la app se pinta igual
+$('mus').onchange = e => mandar('/ajuste?mus=' + (e.target.checked ? 1 : 0));
+$('mc').onchange = e => mandar('/ajuste?mc=' + (e.target.checked ? 1 : 0));
+$('rot').onclick = () => mandar('/ajuste?rot=1');
+$('adl').onclick = () => { mandar('/ajuste?adl=1'); toast('Listo: frenar y arrancar quedaron al revés'); };
 const COLORES = ['#ffffff', '#5ee6ff', '#ff6fb0', '#ffd23f', '#7dff9a', '#b78cff', '#ff8a3d'];
 function pintarColor(c) {
   $('ojos').value = c; document.documentElement.style.setProperty('--cara', c);
   document.querySelectorAll('#colores button').forEach(b => b.classList.toggle('sel', b.dataset.c === c.toLowerCase()));
 }
-function pintarPaq(n) {
-  document.querySelectorAll('.paq').forEach(b => b.classList.toggle('sel', +b.dataset.paq === +n));
-  $('pantalla').dataset.paq = n;
-}
+function pintarPaq(n) { document.querySelectorAll('.paq').forEach(b => b.classList.toggle('sel', +b.dataset.paq === +n)); $('pantalla').dataset.paq = n; }
 const ponerColor = c => { pintarColor(c); mandar('/ajuste?ojos=' + c.slice(1)); };
 COLORES.forEach(c => {
   const b = document.createElement('button');
@@ -590,300 +454,187 @@ COLORES.forEach(c => {
 });
 pintarColor('#ffffff');
 $('ojos').onchange = e => ponerColor(e.target.value);
-$('vol').onchange = e => mandar('/ajuste?vol=' + e.target.value);
-$('son').onchange = e => mandar('/ajuste?son=' + (e.target.checked ? 1 : 0));
-$('rot').onclick = () => mandar('/ajuste?rot=1');
-$('clima').onchange = e => Android.climaCubi(e.target.checked);
-$('gps').onchange = e => Android.gpsCubi(e.target.checked);
-function gpsEstado(si) { $('gps').checked = si; }
-$('navModo').onchange = e => { const v = e.target.value; Android.navCubi(v !== 'nada'); Android.navMapaCubi(v === 'mapa'); navAhora(); };
-function navAhora() { if (window.Android && Android.estadoNav) $('navAhora').textContent = Android.estadoNav(); }
-if (window.Android && Android.navActiva) setTimeout(() => { $('navModo').value = !Android.navActiva() ? 'nada' : Android.navMapa() ? 'mapa' : 'avisos'; navAhora(); }, 500);
-setInterval(navAhora, 3000);
-$('navCompleto').onchange = e => Android.navCompletoCubi(e.target.checked);
-$('trazar').onclick = () => { if (window.Android) { Android.destinoCubi($('destino').value); navAhora(); } };
-$('irMaps').onclick = () => { if (window.Android && Android.irMaps) Android.irMaps(); };
-if (window.Android && Android.googleEstado) {
-  const goo = () => { $('googleEstado').textContent = Android.googleEstado(); };
-  $('googleGuardar').onclick = () => { const k = $('googleLlave').value.trim(); if (k) { Android.googleLlave(k); $('googleLlave').value = ''; } else if (Android.googleAceptar) Android.googleAceptar(); goo(); [2000, 8000, 20000].forEach(t => setTimeout(goo, t)); };   // con el campo vacío: vuelve a mostrar los términos de la llave ya guardada
-  $('googleQuitar').onclick = () => { Android.googleLlave(''); goo(); };
-  $('googleAbrir').onclick = () => Android.googleAbrir();
-  $('googleUsar').onchange = e => Android.googleUsar(e.target.value === '1');
-  setTimeout(() => { $('googleUsar').value = Android.googleUsa() ? '1' : '0'; }, 500);
-  setInterval(goo, 1500);
-}
-if (window.Android && Android.favLista) {
-  const favs = () => {
-    const caja = $('favLista'); caja.textContent = '';
-    Android.favLista().split('\n').filter(r => r.includes('\t')).forEach((r, i) => {
-      const [n, d] = r.split('\t'), fila = document.createElement('div'), t = document.createElement('span'), b = document.createElement('button');
-      fila.className = 'row'; t.textContent = '★ ' + n + ' — ' + d; b.className = 'btn'; b.textContent = 'Quitar';
-      b.onclick = () => { Android.favQuita(i); favs(); };
-      fila.append(t, b); caja.append(fila);
-    });
-  };
-  $('favGuardar').onclick = () => { const n = $('favNombre').value.trim(), d = $('favDestino').value.trim(); if (n && d) { Android.favPon(n, d); $('favNombre').value = ''; $('favDestino').value = ''; favs(); } };
-  setTimeout(favs, 500);
-}
-if (window.Android && Android.paisEstado) {
-  const pais = () => { $('paisEstado').textContent = Android.paisEstado(); };
-  $('paisBajar').onclick = () => { Android.paisBajar(); pais(); };
-  $('paisBorrar').onclick = () => { Android.paisBorrar(); pais(); };
-  setInterval(pais, 1500);
-}
-$('quitarRuta').onclick = () => { $('destino').value = ''; if (window.Android) { Android.destinoCubi(''); navAhora(); } };
-if (window.Android && Android.navCompleto) setTimeout(() => { $('navCompleto').checked = Android.navCompleto(); $('destino').value = Android.destinoTexto(); }, 500);
-// la mascota de la pantalla del carro: las mismas opciones que se cambian desde Android Auto
-['carroZelda', 'carroFondo', 'carroVista', 'carroZeldaTam', 'carroPila'].forEach(k => {
-  $(k).onchange = e => { if (window.Android && Android.carroPon) Android.carroPon(k, +e.target.value); };
-  if (window.Android && Android.carroOpcion) setTimeout(() => { $(k).value = Android.carroOpcion(k); }, 500);
-});
-$('carroRegVer').onclick = () => { const p = $('carroReg'); p.hidden = false; p.textContent = window.Android && Android.carroRegistro ? Android.carroRegistro() : 'Solo en el celular.'; p.scrollTop = p.scrollHeight; };
-if (window.Android) setTimeout(() => gpsEstado(Android.gpsActivo()), 500);
-// mientras Mapi se actualiza, la app queda bloqueada (una cortina encima) para no tocar nada a mitad
-function mapiCortina() {
-  let c = $('mapiCortina');
-  const sigue = window.Android && Android.mapiActualizando && Android.mapiActualizando();
-  if (sigue && !c) {
-    c = document.createElement('div'); c.id = 'mapiCortina';
-    c.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(5,8,20,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;color:#fff;font-size:20px';
-    c.innerHTML = '<b>Actualizando Mapi</b><span id="mapiCortinaTxt"></span><small style="opacity:.8">No cierres la app ni apagues Mapi.</small>';
-    c.addEventListener('click', e => e.stopPropagation(), true); document.body.appendChild(c);
-  }
-  if (c) { $('mapiCortinaTxt').textContent = Android.mapiEstado(); if (!sigue) setTimeout(() => c.remove(), 2500); }
-  if (sigue) setTimeout(mapiCortina, 700);
-}
-$('actMapi').onclick = () => { if (window.Android && Android.actualizarMapi) { Android.actualizarMapi(); setTimeout(mapiCortina, 1500); setTimeout(mapiCortina, 6000); } };
-if (window.Android && Android.mapiEstado) setInterval(() => { $('mapiEstado').textContent = 'Mapi: ' + Android.mapiEstado(); }, 2000);
-function climaEstado(si) { $('clima').checked = si; }
-function climaTexto(s) { if (s) $('climaNota').textContent = s; }
-// "¿Dónde parqueé?": muestra cuándo se guardó y abre el punto en Maps
-function parqueoVer() {
-  if (!window.Android) return;
-  const p = Android.parqueo().split(','), hay = p.length >= 3;
-  $('parqueoIr').hidden = !hay;
-  if (hay) {
-    const d = new Date(+p[2]), hoy = new Date().toDateString() === d.toDateString();
-    $('parqueoNota').textContent = 'Última ubicación guardada: ' + (hoy ? 'hoy' : d.toLocaleDateString('es-CO', {weekday: 'long', day: 'numeric', month: 'short'}))
-      + ' a las ' + d.toLocaleTimeString('es-CO', {hour: 'numeric', minute: '2-digit'}) + '. Se guarda sola cuando Cubi se desconecta (se apagó el carro); no manda notificación y no sale del celular.';
-  }
-}
-$('parqueoIr').onclick = () => Android.abrirParqueo();
-setTimeout(parqueoVer, 600);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) parqueoVer(); });
-if (window.Android) setTimeout(() => { climaEstado(Android.climaActivo()); climaTexto(Android.climaTexto()); }, 500);
 document.querySelectorAll('.paq').forEach(b => b.onclick = () => {
-  if (!vivo) return toast('Primero conecta a Cubi por Bluetooth');
-  mandar('/ajuste?paq=' + b.dataset.paq);
-  pintarPaq(b.dataset.paq);
-  toast('Listo: Cubi ahora es ' + b.querySelector('b').textContent);
+  if (!vivo) return toast('Primero conecta a Cubi');
+  mandar('/ajuste?paq=' + b.dataset.paq); pintarPaq(b.dataset.paq); toast('Cubi ahora es ' + b.textContent.trim());
 });
-$('fr').onchange = e => mandar('/ajuste?fr=' + (e.target.value / 100));
-$('adl').onclick = () => { mandar('/ajuste?adl=1'); toast('Listo: frenar y arrancar quedaron al revés'); };
+CARAS.forEach(([n, t, c]) => {
+  const b = document.createElement('button');
+  b.className = 'face'; b.style.setProperty('--c', c); b.innerHTML = '<span class="eyes"><i></i><i></i></span>' + t;
+  b.onclick = () => mandar('/r?n=' + n); $('caras').appendChild(b);
+});
+SONIDOS.forEach(([n, t]) => { const b = document.createElement('button'); b.className = 'btn'; b.textContent = '♪ ' + t; b.onclick = () => mandar('/sonar?n=' + n); $('sonidos').appendChild(b); });
 document.querySelectorAll('[data-ev]').forEach(b => b.onclick = () => mandar('/evento?tipo=' + b.dataset.ev));
 document.querySelectorAll('[data-demo]').forEach(b => b.onclick = () => { mandar('/demo?t=' + b.dataset.demo); toast(b.dataset.demo === 'canto' ? 'Cubi está cantando…' : 'Cubi está bailando…'); });
+function letra() { if (A() && A().estadoLetra) $('letraNota').textContent = A().estadoLetra() || 'No suena música en el celular'; }
+setInterval(() => { if (tab === 'cubi') letra(); }, 2000);
 
-// ---------- actualizar por Bluetooth: Android elige el archivo, lo manda y avisa el avance ----------
-let actualizando = false;
-$('subir').onclick = () => {
-  if (!vivo) return toast('Primero conecta a Cubi por Bluetooth');
-  Android.otaElegir();
-};
-function otaEmpieza(total) {
-  actualizando = true;
-  $('bloqueo').hidden = false;
-  otaProgreso(0, total);
-}
-function otaProgreso(hecho, total) {
-  const p = Math.floor(hecho * 100 / total);
-  $('otaBarra').style.width = p + '%';
-  $('otaPct').textContent = p + ' %';
-  $('otaKb').textContent = Math.round(hecho / 1024) + ' de ' + Math.round(total / 1024) + ' KB';
-}
-function otaFin(ok, msg) {
-  actualizando = false;
-  $('bloqueo').hidden = true;
-  if (window.Android) Android.otaListo();
-  toast(ok ? '¡Listo! ' + msg : msg);
-}
-$('actCubi').onclick = () => {
-  if (!vivo) return toast('Primero conecta a Cubi por Bluetooth');
-  Android.actualizarCubi();
-};
-$('actApp').onclick = () => Android.actualizarApp();
-// versiones: app (la de este celular), firmware (el que tiene Cubi) y la última publicada en GitHub
-let vUltima = -1, vApp = -1, vFw = -1, vError = '', vCubiUlt = -1, vMapiUlt = -1;
-function versionGithub(ultima, mia, error, cubiUlt, mapiUlt) { vUltima = ultima; vApp = mia; vError = error || ''; vCubiUlt = cubiUlt === undefined ? ultima : cubiUlt; vMapiUlt = mapiUlt === undefined ? ultima : mapiUlt; notaVersiones(); }
-setInterval(() => { if (vUltima >= 0) notaVersiones(); }, 3000);   // la versión de Mapi llega cuando se conecta
-function notaVersiones() {
-  const v = n => '2.0.' + n, l = [];
-  l.push('App: ' + (vApp > 0 ? v(vApp) : '…') + (vUltima > vApp && vApp > 0 ? ' → hay nueva (' + v(vUltima) + ')' : ''));
-  l.push('Cubi: ' + (vFw < 0 ? 'conéctalo para verlo' : vFw === 0 ? 'compilado a mano'
-    : v(vFw) + (vCubiUlt > vFw ? ' → hay nuevo (' + v(vCubiUlt) + ')' : ' (el último)')));
-  const mv = window.Android && Android.mapiVersion ? Android.mapiVersion() : '', mn = mv ? parseInt(mv.split('.').pop()) || 0 : -1;
-  const mapiCon = window.Android && Android.mapiEstado && Android.mapiEstado().startsWith('Conectado');
-  l.push('Mapi: ' + (!mapiCon ? 'conéctalo para verlo' : mn < 0 ? 'versión de antes (sin número) → hay nuevo' : mv + (vMapiUlt > mn ? ' → hay nuevo (' + v(vMapiUlt) + ')' : ' (el último)')));
-  if (vUltima < 0 && vError) l.push('No pude revisar GitHub: ' + vError);
-  $('verNota').textContent = l.join(String.fromCharCode(10));
-  // ya al día: el botón se apaga (si no se pudo revisar GitHub queda prendido)
-  const appAlDia = vApp > 0 && vUltima >= 0 && vApp >= vUltima, fwAlDia = vFw > 0 && vCubiUlt >= 0 && vFw >= vCubiUlt;
-  $('actApp').disabled = appAlDia; $('actApp').textContent = appAlDia ? 'La app ya está al día' : 'Actualizar la app';
-  $('actCubi').disabled = fwAlDia; $('actCubi').textContent = fwAlDia ? 'Cubi ya está al día' : 'Actualizar a Cubi (firmware)';
-  const mapiAlDia = mn > 0 && vMapiUlt >= 0 && mn >= vMapiUlt;
-  $('actMapi').disabled = mapiAlDia || !mapiCon; $('actMapi').textContent = mapiAlDia ? 'Mapi ya está al día' : 'Actualizar a Mapi (firmware)';
-}
-
-// ---------- asistente ----------
-$('gemini').onclick = () => { if (window.Android) Android.abrirAsistente(); };
-$('permisoGemini').onclick = () => Android.pedirAbrirSolo();
-function claudeEstado() {
-  if (window.Android) $('claudeNota').textContent = Android.claudeListo()
-    ? 'Listo: Cubi conversa con Claude Haiku. La clave queda guardada solo en este celular.'
-    : 'Pega tu clave de la API de Anthropic (console.anthropic.com → API Keys). Se guarda solo en este celular.';
-}
-$('guardarClaude').onclick = () => {
-  const k = $('claveClaude').value.trim();
-  if (!k || !window.Android) return;
-  Android.claudeClave(k); $('claveClaude').value = ''; claudeEstado(); toast('Clave guardada');
-};
-$('hablarCubi').onclick = () => { if (window.Android) Android.hablarCubi(); };
-// ---------- registros: letra chica, con "Copiar" y "Enviar" ----------
-function copiar(t) { if (window.Android && Android.copiar) Android.copiar(t); else if (navigator.clipboard) navigator.clipboard.writeText(t); toast('Copiado'); }
-function enviar(t) { if (window.Android && Android.compartir) Android.compartir(t); else if (navigator.share) navigator.share({text: t}); }
-document.querySelectorAll('.log').forEach(l => {
-  const d = document.createElement('div'); d.className = 'lb';
-  [['Copiar', copiar], ['Enviar', enviar]].forEach(([t, f]) => {
-    const x = document.createElement('button'); x.textContent = t; x.onclick = () => f(l.firstElementChild.textContent.trim()); d.appendChild(x);
-  });
-  l.appendChild(d);
-});
-// todo junto, para mandárselo a quien arregla la app
-function diag() {
-  if (!window.Android) return;
-  const c = Android.caida ? Android.caida() : '';
-  $('diag').textContent = [$('verNota').textContent, $('info').textContent, 'Hola Cubi: ' + $('holaAhora').textContent,
-    'Navegación: ' + $('navAhora').textContent, c ? 'Último cierre de la app: ' + c : ''].filter(x => x).join(String.fromCharCode(10));
-}
-// ---------- capturador ----------
-function capturaEstado() {
-  if (!window.Android) return;
-  const d = JSON.parse(Android.capturaEstado() || '{}');
-  if (d.on === undefined) return;
-  $('captura').checked = d.on;
-  $('capturaNota').textContent = (d.on ? 'Capturando. ' : 'Apagado. ') + d.lineas + ' momentos guardados (' + d.kb + ' KB). Úsalo un día manejando con música y luego toca "Guardar y mandar".';
-}
-$('captura').onchange = e => { Android.capturaOn(e.target.checked); capturaEstado(); };
-$('capturaMandar').onclick = () => Android.capturaCompartir();
-$('capturaBorrar').onclick = () => { Android.capturaBorrar(); capturaEstado(); toast('Captura borrada'); };
-setTimeout(capturaEstado, 900); setInterval(() => { if (tab === 'musica') capturaEstado(); }, 5000);
-// ---------- personalidades ----------
-let personas = [], pSel = 0;
-function pintarPersonas() {
-  const s = $('persona'); s.innerHTML = '';
-  personas.forEach((p, i) => { const o = document.createElement('option'); o.value = i; o.textContent = p.n + (i === pSel ? ' (la que usa)' : ''); s.appendChild(o); });
-  s.value = pSel; $('pNombre').value = personas[pSel] ? personas[pSel].n : ''; $('pReglas').value = personas[pSel] ? personas[pSel].r : '';
-}
-function cargarPersonas() {
-  if (!window.Android) return;
-  const d = JSON.parse(Android.personasCubi() || '{}');
-  if (!d.lista) { setTimeout(cargarPersonas, 1000); return; }
-  personas = d.lista; pSel = Math.min(d.sel || 0, personas.length - 1); pintarPersonas();
-}
-const guardarPersonas = () => Android.guardarPersonasCubi(JSON.stringify(personas), pSel);
-$('persona').onchange = e => { pSel = +e.target.value; pintarPersonas(); guardarPersonas(); toast('Ahora Cubi es: ' + personas[pSel].n); };
-$('pGuardar').onclick = () => {
-  const n = $('pNombre').value.trim() || 'Sin nombre', r = $('pReglas').value.trim();
-  if (!r) { toast('Escribe cómo es Cubi'); return; }
-  personas[pSel] = {n, r}; pintarPersonas(); guardarPersonas(); toast('Guardada: Cubi ahora es ' + n);
-};
-$('pNueva').onclick = () => { personas.push({n: 'Nueva personalidad', r: 'Eres Cubi, un robot copiloto en el tablero de un carro. '}); pSel = personas.length - 1; pintarPersonas(); $('pReglas').focus(); };
-$('pBorrar').onclick = () => {
-  if (personas.length <= 1) { toast('Tiene que quedar al menos una'); return; }
-  personas.splice(pSel, 1); pSel = 0; pintarPersonas(); guardarPersonas(); toast('Borrada');
-};
-setTimeout(cargarPersonas, 900);
+// ---------- voz ----------
+$('gemini').onclick = () => { if (A()) A().abrirAsistente(); };
+$('permisoGemini').onclick = () => A().pedirAbrirSolo();
+$('hola').onchange = e => A().holaCubi(e.target.checked);
+function holaEstado(si) { $('hola').checked = si; }
 function cargarVoces() {
-  if (!window.Android) return;
-  const d = JSON.parse(Android.vocesCubi() || '{}'), sel = $('vozCubi');
+  if (!A()) return;
+  const d = JSON.parse(A().vocesCubi() || '{}'), sel = $('vozCubi');
   if (!d.voces || !d.voces.length) { setTimeout(cargarVoces, 1500); return; }   // la voz del celular tarda en arrancar
   sel.innerHTML = '';
-  d.voces.forEach((v, i) => {
-    const o = document.createElement('option');
-    o.value = v.n; o.textContent = (i === 0 ? '★ ' : '') + v.n + (v.red ? ' (internet)' : '');
-    sel.appendChild(o);
-  });
+  d.voces.forEach((v, i) => { const o = document.createElement('option'); o.value = v.n; o.textContent = (i === 0 ? '★ ' : '') + v.n + (v.red ? ' (internet)' : ''); sel.appendChild(o); });
   if (d.sel) sel.value = d.sel;
   $('tonoCubi').value = d.tono || 1.4;
 }
-const guardarVoz = () => Android.vozCubi($('vozCubi').value, parseFloat($('tonoCubi').value));
+const guardarVoz = () => A().vozCubi($('vozCubi').value, parseFloat($('tonoCubi').value));
 $('vozCubi').onchange = guardarVoz; $('tonoCubi').onchange = guardarVoz; $('probarVoz').onclick = guardarVoz;
-setTimeout(cargarVoces, 800);
 let vocesAbiertas = false;
-$('bajarVoces').onclick = () => { if (!window.Android) return; vocesAbiertas = true; Android.abrirVoces(); };
-document.addEventListener('visibilitychange', () => {   // vuelve de los ajustes: recarga la voz y la lista
+$('bajarVoces').onclick = () => { if (!A()) return; vocesAbiertas = true; A().abrirVoces(); };
+document.addEventListener('visibilitychange', () => {
   if (document.hidden || !vocesAbiertas) return;
-  vocesAbiertas = false; Android.recargarVoces(); $('vozCubi').innerHTML = ''; setTimeout(cargarVoces, 1500);
+  vocesAbiertas = false; A().recargarVoces(); $('vozCubi').innerHTML = ''; setTimeout(cargarVoces, 1500);
 });
-setTimeout(claudeEstado, 500);
-$('hola').onchange = e => Android.holaCubi(e.target.checked);
-function holaEstado(si) { $('hola').checked = si; holaAhora(); }
-function holaAhora() { if (window.Android) $('holaAhora').textContent = Android.estadoHola().split(' — La última vez')[0]; diag(); }
-setTimeout(holaAhora, 800); setInterval(holaAhora, 3000);
-function revisarPermisoGemini() {
-  if (!window.Android) return;
-  $('permisoGemini').hidden = Android.puedeAbrirSolo();
-  $('permisoMusica').hidden = Android.puedeTocarMusica();
-}
-function spotifyEstado() { if (window.Android) $('spotify').textContent = Android.spotifyConectado() ? 'Spotify conectado (tocar para desconectar)' : 'Conectar Spotify (para que Cubi ponga canciones)'; }
-$('spotify').onclick = () => Android.spotifyConectar();
-setTimeout(spotifyEstado, 600);
-$('permisoMusica').onclick = () => { Android.pedirTocarMusica(); toast('Busca Cubi y actívalo'); };
-document.addEventListener('visibilitychange', () => { if (!document.hidden) revisarPermisoGemini(); });
-function otaCancelada() {}
 
-// ---------- botones de caras y sonidos ----------
-CARAS.forEach(([n, t, c]) => {
-  const b = document.createElement('button');
-  b.className = 'face'; b.dataset.n = n; b.style.setProperty('--c', c);
-  b.innerHTML = '<span class="eyes"><i></i><i></i></span>' + t;
-  b.onclick = () => mandar('/r?n=' + n);
-  $('caras').appendChild(b);
+// ---------- Mapi ----------
+function mapi() {
+  if (!A() || !A().mapiEstado) return;
+  const e = A().mapiEstado(), si = e.startsWith('Conectado');
+  $('dotMapi').classList.toggle('on', si);
+  $('mapiPill').textContent = si ? 'Mapi conectado' : 'Mapi';
+  $('mapiEstado').textContent = e; $('mapiNota').textContent = e;
+}
+setInterval(mapi, 2000);
+
+// ---------- Mascota Auto ----------
+['carroZelda', 'carroFondo', 'carroVista', 'carroZeldaTam', 'carroPila'].forEach(k => {
+  $(k).onchange = e => { if (A() && A().carroPon) A().carroPon(k, +e.target.value); };
+  if (A() && A().carroOpcion) setTimeout(() => { $(k).value = A().carroOpcion(k); }, 500);
 });
-BAILES.forEach(([n, t, canta]) => {
-  const b = document.createElement('button');
-  b.className = 'btn'; b.textContent = t;
-  b.onclick = () => { mandar('/demo?t=' + (canta ? 'canto' : 'baile') + '&r=' + n); toast('Cubi baila: ' + t); };
-  $('bailes').appendChild(b);
-});
-SONIDOS.forEach(([n, t]) => {
-  const b = document.createElement('button');
-  b.className = 'btn'; b.textContent = t; b.onclick = () => mandar('/sonar?n=' + n);
-  $('sonidos').appendChild(b);
-});
+$('trazar').onclick = () => { if (A()) { A().destinoCubi($('destino').value); toast('Buscando la ruta…'); } };
+$('quitarRuta').onclick = () => { $('destino').value = ''; if (A()) A().destinoCubi(''); };
+$('irMaps').onclick = () => { if (A() && A().irMaps) A().irMaps(); };
+if (A() && A().destinoTexto) setTimeout(() => { $('destino').value = A().destinoTexto(); }, 500);
+function favs() {
+  if (!A() || !A().favLista) return;
+  const caja = $('favLista'); caja.textContent = '';
+  A().favLista().split('\n').filter(r => r.includes('\t')).forEach((r, i) => {
+    const [n, d] = r.split('\t'), fila = document.createElement('div'), t = document.createElement('span'), b = document.createElement('button');
+    fila.className = 'fila'; t.innerHTML = '★ <b></b><small></small>'; t.querySelector('b').textContent = n; t.querySelector('small').textContent = d;
+    b.className = 'enlace'; b.textContent = 'Quitar'; b.onclick = () => { A().favQuita(i); favs(); };
+    fila.append(t, b); caja.append(fila);
+  });
+}
+$('favGuardar').onclick = () => { const n = $('favNombre').value.trim(), d = $('favDestino').value.trim(); if (n && d && A()) { A().favPon(n, d); $('favNombre').value = ''; $('favDestino').value = ''; favs(); } };
+setTimeout(favs, 500);
+const pais = () => { if (A() && A().paisEstado) $('paisEstado').textContent = A().paisEstado(); };
+$('paisBajar').onclick = () => { A().paisBajar(); pais(); };
+$('paisBorrar').onclick = () => { A().paisBorrar(); pais(); };
+setInterval(() => { if (tab === 'auto') pais(); }, 1500);
+document.querySelectorAll('details.mas').forEach(d => d.addEventListener('toggle', () => {
+  if (d.open && d.querySelector('#carroReg')) { const p = $('carroReg'); p.textContent = A() && A().carroRegistro ? A().carroRegistro() : '…'; p.scrollTop = p.scrollHeight; }
+}));
+
+// ---------- Conexiones ----------
+function spotifyEstado() { if (!A()) return; const si = A().spotifyConectado(); $('spotify').textContent = si ? 'Desconectar' : 'Conectar'; $('spotifyNota').textContent = si ? 'Conectado' : 'Para que Cubi ponga canciones'; }
+$('spotify').onclick = () => A().spotifyConectar();
+$('permisoMusica').onclick = () => { A().pedirTocarMusica(); toast('Busca Cubi y actívalo'); };
+function permisos() {
+  if (!A()) return;
+  $('permisoGemini').hidden = A().puedeAbrirSolo();
+  $('permisoMusicaFila').hidden = A().puedeTocarMusica();
+  $('claudeCaja').hidden = !(A().claudeListo && A().claudeListo());
+  spotifyEstado();
+}
+$('quitarClaude').onclick = () => { A().claudeClave(''); permisos(); toast('Listo: Cubi conversa con Gemini'); };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) permisos(); });
+if (A() && A().googleEstado) {
+  const goo = () => { $('googleEstado').textContent = A().googleEstado(); };
+  $('googleGuardar').onclick = () => { const k = $('googleLlave').value.trim(); if (k) { A().googleLlave(k); $('googleLlave').value = ''; } else if (A().googleAceptar) A().googleAceptar(); goo(); [2000, 8000, 20000].forEach(t => setTimeout(goo, t)); };
+  $('googleQuitar').onclick = () => { A().googleLlave(''); goo(); };
+  $('googleAbrir').onclick = () => A().googleAbrir();
+  $('googleUsar').onchange = e => A().googleUsar(e.target.value === '1');
+  setTimeout(() => { $('googleUsar').value = A().googleUsa() ? '1' : '0'; goo(); }, 500);
+  setInterval(() => { if (tab === 'conexiones') goo(); }, 2000);
+}
+
+// ---------- Ajustes: viaje y parqueo ----------
+function gpsEstado(si) { $('gps').checked = si; $('gps2').checked = si; }
+$('gps').onchange = e => { A().gpsCubi(e.target.checked); gpsEstado(e.target.checked); };
+$('gps2').onchange = e => { A().gpsCubi(e.target.checked); gpsEstado(e.target.checked); };
+$('clima').onchange = e => A().climaCubi(e.target.checked);
+function climaEstado(si) { $('clima').checked = si; }
+function climaTexto(s) { if (s) $('climaNota').textContent = s; }
+function parqueoVer() {
+  if (!A()) return;
+  const p = A().parqueo().split(','), hay = p.length >= 3;
+  $('parqueoIr').hidden = !hay;
+  if (hay) {
+    const d = new Date(+p[2]), hoy = new Date().toDateString() === d.toDateString();
+    $('parqueoNota').textContent = 'Guardado ' + (hoy ? 'hoy' : d.toLocaleDateString('es-CO', {weekday: 'long', day: 'numeric', month: 'short'}))
+      + ' a las ' + d.toLocaleTimeString('es-CO', {hour: 'numeric', minute: '2-digit'}) + '.';
+  }
+}
+$('parqueoIr').onclick = () => A().abrirParqueo();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) parqueoVer(); });
+
+// ---------- actualizaciones: la app, Cubi y Mapi, cada una con su número ----------
+function otaEmpieza(total) { actualizando = true; $('otaTitulo').textContent = 'Actualizando a Cubi'; $('bloqueo').hidden = false; otaProgreso(0, total); }
+function otaProgreso(hecho, total) {
+  const p = Math.floor(hecho * 100 / total);
+  $('otaBarra').style.width = p + '%'; $('otaPct').textContent = p + ' %';
+  $('otaKb').textContent = Math.round(hecho / 1024) + ' de ' + Math.round(total / 1024) + ' KB';
+}
+function otaFin(ok, msg) { actualizando = false; $('bloqueo').hidden = true; if (A()) A().otaListo(); toast(ok ? '¡Listo! ' + msg : msg); }
+function otaCancelada() {}
+// Mapi se actualiza por su propia conexión: mientras tanto, la misma cortina con lo que va contando
+function mapiCortina() {
+  const sigue = A() && A().mapiActualizando && A().mapiActualizando();
+  if (sigue) {
+    $('otaTitulo').textContent = 'Actualizando a Mapi'; $('bloqueo').hidden = false;
+    const e = A().mapiEstado(), m = e.match(/(\d+) %/); $('otaKb').textContent = e;
+    if (m) { $('otaBarra').style.width = m[1] + '%'; $('otaPct').textContent = m[1] + ' %'; }
+    setTimeout(mapiCortina, 700);
+  } else if ($('otaTitulo').textContent === 'Actualizando a Mapi' && !$('bloqueo').hidden) {
+    $('bloqueo').hidden = true; toast(A().mapiEstado());
+  }
+}
+$('actCubi').onclick = () => { if (!vivo) return toast('Primero conecta a Cubi'); A().actualizarCubi(); };
+$('actMapi').onclick = () => { if (A() && A().actualizarMapi) { A().actualizarMapi(); [1500, 4000, 8000].forEach(t => setTimeout(mapiCortina, t)); } };
+$('actApp').onclick = () => A().actualizarApp();
+let vUltima = -1, vApp = -1, vFw = -1, vError = '', vCubiUlt = -1, vMapiUlt = -1;
+function versionGithub(ultima, mia, error, cubiUlt, mapiUlt) { vUltima = ultima; vApp = mia; vError = error || ''; vCubiUlt = cubiUlt === undefined ? ultima : cubiUlt; vMapiUlt = mapiUlt === undefined ? ultima : mapiUlt; notaVersiones(); }
+setInterval(() => { if (vUltima >= 0) notaVersiones(); }, 3000);   // la versión de Mapi llega cuando se conecta
+function boton(b, alDia, nada) { b.disabled = alDia || nada; b.textContent = alDia ? 'Al día' : 'Actualizar'; }
+function notaVersiones() {
+  const v = n => '2.0.' + n;
+  $('verApp').textContent = vApp > 0 ? v(vApp) + (vUltima > vApp ? ' · hay nueva: ' + v(vUltima) : ' · la última') : (vError ? 'No pude revisar: ' + vError : '…');
+  boton($('actApp'), vApp > 0 && vUltima >= 0 && vApp >= vUltima, false);
+  $('verCubi').textContent = vFw < 0 ? 'Conéctalo para ver su versión' : vFw === 0 ? 'Compilado a mano' : v(vFw) + (vCubiUlt > vFw ? ' · hay nueva: ' + v(vCubiUlt) : ' · la última');
+  boton($('actCubi'), vFw > 0 && vCubiUlt >= 0 && vFw >= vCubiUlt, vFw < 0);
+  const mv = A() && A().mapiVersion ? A().mapiVersion() : '', mn = mv ? parseInt(mv.split('.').pop()) || 0 : -1;
+  const con = A() && A().mapiEstado && A().mapiEstado().startsWith('Conectado');
+  $('verMapi').textContent = !con ? 'Conéctalo para ver su versión' : mn < 0 ? 'Versión de antes · hay nueva' : mv + (vMapiUlt > mn ? ' · hay nueva: ' + v(vMapiUlt) : ' · la última');
+  boton($('actMapi'), mn > 0 && vMapiUlt >= 0 && mn >= vMapiUlt, !con);
+}
+let verRevisada = 0;
+function buscarVersion(forzar) { if (!A() || (!forzar && Date.now() - verRevisada < 60000)) return; verRevisada = Date.now(); A().buscarVersion(); }
+$('buscarVer').onclick = () => { $('verApp').textContent = 'Revisando…'; buscarVersion(true); };
+document.addEventListener('visibilitychange', () => { if (!document.hidden) buscarVersion(false); });
 
 // ---------- pestañas ----------
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
-  tab = b.dataset.tab;
-  document.querySelectorAll('nav button').forEach(o => o.classList.toggle('on', o === b));
-  document.querySelectorAll('section').forEach(s => s.hidden = s.id !== 'tab-' + tab);
+function ir(t) {
+  tab = t; $('titulo').textContent = TITULOS[t];
+  document.querySelectorAll('nav button').forEach(o => o.classList.toggle('on', o.dataset.tab === t));
+  document.querySelectorAll('section').forEach(s => s.hidden = s.id !== 'tab-' + t);
   window.scrollTo(0, 0);
-});
-
-etiquetas();
-conectar();
-revisarPermisoGemini();
-if (window.Android) setTimeout(() => holaEstado(Android.holaActivo()), 500);
-// revisa GitHub al abrir, al volver a la app (máximo cada minuto) y con el botón
-let verRevisada = 0;
-function buscarVersion(forzar) {
-  if (!window.Android || (!forzar && Date.now() - verRevisada < 60000)) return;
-  verRevisada = Date.now(); Android.buscarVersion();
+  if (t === 'auto') pais();
+  if (t === 'cubi') letra();
 }
-$('buscarVer').onclick = () => { $('verNota').textContent = 'Revisando si hay versión nueva…'; buscarVersion(true); };
-document.addEventListener('visibilitychange', () => { if (!document.hidden) buscarVersion(false); });
-buscarVersion(true);
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => ir(b.dataset.tab));
+document.querySelectorAll('[data-ir]').forEach(b => b.onclick = () => ir(b.dataset.ir));
+if (TITULOS[location.hash.slice(1)]) ir(location.hash.slice(1));
+
+etiquetas(); conectar(); permisos(); mapi(); buscarVersion(true);
+setTimeout(cargarVoces, 800); setTimeout(parqueoVer, 600);
+if (A()) setTimeout(() => { holaEstado(A().holaActivo()); gpsEstado(A().gpsActivo()); climaEstado(A().climaActivo()); climaTexto(A().climaTexto()); }, 500);
 setInterval(estado, 2000);
-setInterval(audio, 150);
 </script>
 </body>
 </html>
