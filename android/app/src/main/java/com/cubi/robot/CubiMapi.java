@@ -237,7 +237,7 @@ final class CubiMapi {
             String d = !nav ? "" : sv.navDir.equals("maps_izq") ? "izq" : sv.navDir.equals("maps_der") ? "der" : sv.navDir.equals("llegamos") ? "fin" : "recto";
             // "Dirígete al nordeste hacia la Calle 5" (el primer aviso de Maps, sin metros): en Mapi va como "Sigue por Calle 5"
             String calle = sv.navCalle; boolean sigue = false;
-            if (nav && sv.navMetros < 15) {                     // Google lo manda con 0 m: salía "ya · Dirígete al nordeste."
+            if (nav && sv.metrosGiro() < 15) {                     // Google lo manda con 0 m: salía "ya · Dirígete al nordeste."
                 String u = sv.navUltima.toLowerCase(Locale.ROOT).replaceAll("[.·•…].*$", "").trim();
                 if (u.startsWith("dir") || u.startsWith("head") || u.startsWith("sig") || u.startsWith("contin")) {
                     java.util.regex.Matcher hm = java.util.regex.Pattern.compile("(?:hacia|por|toward|on) (?:la |el )?(.+)$").matcher(u);
@@ -245,7 +245,10 @@ final class CubiMapi {
                     if (calle.length() > 30) calle = calle.substring(0, 30).trim();
                 }
             }
-            String g = "/giro?d=" + d + (nav && sv.navMetros >= 0 && !sigue ? "&m=" + Math.round(sv.navMetros) : "") + (nav ? "&c=" + cod(calle) : "");
+            // los metros al giro llegan cada tanto (el aviso de Maps, a veces cada 100 m): entre aviso y aviso se descuenta
+            // lo andado con la velocidad del GPS, así bajan en vivo. Mapi sigue descontando entre segundo y segundo.
+            double mg = sv.metrosGiro();
+            String g = "/giro?d=" + d + (nav && mg >= 0 && !sigue ? "&m=" + Math.round(mg) : "") + (nav ? "&c=" + cod(calle) : "");
             if (!g.equals(yaGiro)) { yaGiro = g; mandar(g); }
             // cuánto falta y a qué hora se llega: del Google de Mascota Auto si guía; si no, del aviso de Maps/Waze; si no, de la
             // ruta de Cubi. Antes solo se leía el aviso de Maps y con el Google de Mascota Auto no salía nada.

@@ -592,7 +592,7 @@ static void pintar() {
   char b[40];
   if (nav) {
     // arriba, por la curva: cuánto falta para el giro; debajo la flecha y la calle
-    if (!strcmp(giroDir, "fin")) snprintf(b, sizeof b, giroM >= 0 && giroM > 15 ? "Llegando" : "Llegaste"); else if (giroM >= 0) metros(giroM, b, sizeof b); else b[0] = 0;
+    if (!strcmp(giroDir, "fin")) snprintf(b, sizeof b, giroM >= 0 && giroM > 15 ? "Llegando" : "Llegaste"); else if (giroM >= 0) metros(max(0, giroM - (int)(sqrtf(velX * velX + velY * velY) * (tAhora - giroT))), b, sizeof b); else b[0] = 0;   // entre aviso y aviso descuenta lo andado
     if (b[0]) textoArco(b, 195, -90, 46, BLANCO, false);
     flecha(C, b[0] ? 96 : 82, b[0] ? 54 : 62, giroDir);
     if (giroCalle[0]) texto(giroCalle, C, 136, b[0] ? 19 : 22, b[0] ? Col{205, 218, 255} : BLANCO, 1, false, 290);

@@ -1898,6 +1898,13 @@ public class CubiService extends Service {
     volatile String navDir = "", navCalle = "";
     volatile int navForma;
     volatile double navMetros = -1;
+    volatile long navMetrosCuando;         // cuándo llegaron esos metros (Maps los manda cada tanto; Mapi descuenta lo andado)
+    // los metros al giro de ahora: lo que dijo Maps (o Google) menos lo andado desde entonces, con la velocidad del GPS
+    double metrosGiro() {
+        double m = navMetros;
+        if (m >= 0 && kmh > 3) m = Math.max(0, m - kmh / 3.6 * Math.min(60000, System.currentTimeMillis() - navMetrosCuando) / 1000.0);
+        return m;
+    }
     volatile String giroEstado = "";       // para la app: si el caminito azul del carro salió o por qué no
     volatile int navDestM = -1;            // a cuánto está el destino (m) y la hora de llegada, si Maps las dio
     volatile String navLlega = "";
@@ -1973,7 +1980,7 @@ public class CubiService extends Service {
         if (glorieta && sm.find())                      // en la glorieta lo que sirve es cuál salida
             calle = "Salida " + (sm.group(1) != null ? sm.group(1) : sm.group(3) != null ? sm.group(3) : "" + (1 + Arrays.asList("primera", "segunda", "tercera", "cuarta", "quinta").indexOf(sm.group(2))));
         if (calle.length() > 26) calle = calle.substring(0, 26).trim();
-        navDir = dir; navForma = forma; navMetros = metros; navCalle = calle;
+        navDir = dir; navForma = forma; navMetros = metros; navMetrosCuando = System.currentTimeMillis(); navCalle = calle;
         // como la voz de Maps: cada giro se avisa tres veces y entre aviso y aviso Cubi sigue en lo suyo:
         // con tiempo (800 m), cuando falta poco (300 m) y cuando ya toca (80 m). Derecho, una sola vez.
         String etapa = recto ? "recto" : metros < 0 ? "cerca" : metros <= 80 ? "ya" : metros <= 300 ? "cerca" : "lejos";
@@ -2061,7 +2068,17 @@ public class CubiService extends Service {
         return null;
     }
 
+    // la canción y la letra, cada 250 ms mientras suena. Si algo falla adentro (la letra de otra canción a medio cambiar),
+    // se anota en la caja negra y se sigue: antes se podía quedar quieta la música de la pantalla del carro.
     private void seguirLetra() {
+        try { seguirLetra0(); }
+        catch (Throwable e) {
+            final String err = String.valueOf(e);
+            CubiCarroDatos.cada(this, "MUSICA_ERROR", 0, () -> err);
+            ui.removeCallbacks(seguirLetraR); ui.postDelayed(seguirLetraR, 500);
+        }
+    }
+    private void seguirLetra0() {
         ui.removeCallbacks(seguirLetraR);
         long ahora = SystemClock.elapsedRealtime();
         if (!musicaPlay || !puedeTocarMusica()) {
@@ -2078,6 +2095,8 @@ public class CubiService extends Service {
         MediaMetadata m = c == null ? null : c.getMetadata();
         PlaybackState st = c == null ? null : c.getPlaybackState();
         if (m == null || st == null) estadoLetra = "No veo qué canción suena (¿Spotify o YouTube Music en play?)";
+        final String vista = c == null ? "sin reproductor en play" : (c.getPackageName() + (m == null ? " sin datos de la canción" : ""));
+        CubiCarroDatos.cada(this, "MUSICA", 0, () -> vista + " | " + cancionTexto);   // caja negra: si la música de la pantalla se queda quieta
         if (m != null && st != null) {
             android.graphics.Bitmap car = m.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART);
             if (car == null) car = m.getBitmap(MediaMetadata.METADATA_KEY_ART);

@@ -136,7 +136,7 @@ final class CubiGoogle {
         String dir = fin && d != null && d < 30 ? "llegamos" : n.contains("LEFT") || (n.contains("U_TURN") && n.endsWith("COUNTERCLOCKWISE")) ? "maps_izq" : n.contains("RIGHT") || n.contains("U_TURN") ? "maps_der" : "maps_recto";
         String calle = p.getFullRoadName(); if (calle == null) calle = ""; if (calle.length() > 26) calle = calle.substring(0, 26).trim();
         s.navForma = n.contains("U_TURN") ? 3 : n.contains("ROUNDABOUT") ? 4 : n.contains("SLIGHT") ? 1 : n.contains("SHARP") ? 2 : n.contains("RAMP") || n.contains("FORK") || n.contains("KEEP") ? 5 : 0;
-        s.navMetros = d == null ? -1 : d; s.navCalle = fin ? "tu destino" : calle; s.navDir = dir; s.navCuando = System.currentTimeMillis(); conGiro = true;
+        s.navMetros = d == null ? -1 : d; s.navMetrosCuando = System.currentTimeMillis(); s.navCalle = fin ? "tu destino" : calle; s.navDir = dir; s.navCuando = System.currentTimeMillis(); conGiro = true;
     }
     static boolean guiando() { return conGiro && !Double.isNaN(irLat); }   // el Google de Mascota Auto está dando giros ahora
     private static void sinGiro() { CubiService s = CubiService.yo; if (conGiro && s != null) s.navDir = ""; conGiro = false; }

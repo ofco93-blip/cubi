@@ -470,7 +470,7 @@ public class CubiCarro extends CarAppService {
             } else if (nav) {
                 // el giro sin mapa: grande y al centro
                 boolean llego = s.navDir.equals("llegamos");
-                String dist = llego ? "Llegaste" : metros(s.navMetros), calle = llego ? "" : s.navCalle;
+                String dist = llego ? "Llegaste" : metros(s.metrosGiro()), calle = llego ? "" : s.navCalle;
                 float k = 1.5f, fx = x0 + 15 * u * k, fy = (y0 + y1 - pie) / 2;
                 if (!llego) flecha(c, fx, fy, 9 * u * k, s.navDir, s.navForma);
                 float tx = llego ? x0 + 8 * u * k : fx + 15 * u * k, tw = x1 - 4 * u - tx;
@@ -497,8 +497,8 @@ public class CubiCarro extends CarAppService {
                 else if (!avisoVia.isEmpty()) { d = avisoVia; f = ""; av = ""; }
                 if (!f.isEmpty()) d += (d.isEmpty() ? "" : "  ·  ") + f;
                 else if (!av.isEmpty()) d = av;
-                boolean haySeg = nav && s.navMetros >= 0 && s.kmh >= 8 && s.navMetros * 3.6 / s.kmh < 100;
-                if (haySeg) d += (d.isEmpty() ? "" : "  ·  ") + "giro en " + Math.round(s.navMetros * 3.6 / s.kmh) + " s";
+                boolean haySeg = nav && s.metrosGiro() >= 0 && s.kmh >= 8 && s.metrosGiro() * 3.6 / s.kmh < 100;
+                if (haySeg) d += (d.isEmpty() ? "" : "  ·  ") + "giro en " + Math.round(s.metrosGiro() * 3.6 / s.kmh) + " s";
                 if (!d.isEmpty()) {
                     p.setColor(0x8005070c);
                     if (sinCaja) { gr.set(x0 + 6 * u, yf - 14 * u, x1 - 4 * u, yf - 2 * u); c.drawRoundRect(gr, 6 * u, 6 * u, p); }
@@ -522,7 +522,7 @@ public class CubiCarro extends CarAppService {
                 else if (!avisoVia.isEmpty()) sub = avisoVia;
                 else {
                     sub = !f.isEmpty() ? f : !av.isEmpty() ? av : dn.isEmpty() ? calleAhora : "";   // sin destino, la calle por la que va
-                    if (nav && s.navMetros >= 0 && s.kmh >= 8 && s.navMetros * 3.6 / s.kmh < 100) sub += (sub.isEmpty() ? "" : "  ·  ") + "giro en " + Math.round(s.navMetros * 3.6 / s.kmh) + " s";
+                    if (nav && s.metrosGiro() >= 0 && s.kmh >= 8 && s.metrosGiro() * 3.6 / s.kmh < 100) sub += (sub.isEmpty() ? "" : "  ·  ") + "giro en " + Math.round(s.metrosGiro() * 3.6 / s.kmh) + " s";
                 }
                 if (google) { String gf = CubiGoogle.falta(); if (!gf.isEmpty()) sub = gf; }   // con Google: lo que falta lo dice él
                 boolean dos = !sub.isEmpty(), hayDest = !s.destinoTexto().isEmpty();
@@ -657,7 +657,7 @@ public class CubiCarro extends CarAppService {
         // La tarjeta del giro sobre el mapa: la flecha, los metros y la indicación. (x0,y0) es la esquina del mapa.
         private void tarjetaGiro(Canvas c, CubiService s, float x0, float y0, float w, float u, float k) {
             boolean llego = s.navDir.equals("llegamos");
-            String dist = llego ? "Llegaste" : metros(s.navMetros), calle = llego ? "" : s.navCalle;
+            String dist = llego ? "Llegaste" : metros(s.metrosGiro()), calle = llego ? "" : s.navCalle;
             float fx = x0 + 15 * u * k, fy = y0 + 3 * u + 14 * u * k;
             p.setStyle(Paint.Style.FILL); p.setColor(fundido ? 0x8005070c : 0xd905070c); gr.set(x0 + 3 * u, y0 + 3 * u, x0 + Math.min(w - 3 * u, 78 * u * k), y0 + 3 * u + 28 * u * k); c.drawRoundRect(gr, 4 * u, 4 * u, p);
             giroDer = gr.right; giroCy = gr.centerY();   // la pila se acomoda al lado
@@ -751,7 +751,7 @@ public class CubiCarro extends CarAppService {
             if (cc != null && (ciclo == climaCiclo || ciclo == climaCiclo + 1 || ciclo % 6 == 5)) { clip = cc; tinte = cc.equals("calor") ? CALOR : cc.equals("frio") ? FRIO : LLUVIA; }
             // Cerca de un giro (150 m) lo señala: el clip señala a un lado y para el otro se pinta sin espejo. Arranca de una
             // (no espera a que acabe el bucle) y lleva su propio reloj.
-            boolean giro = sv != null && sv.navMetros > 0 && sv.navMetros <= 150 && ahora - sv.navCuando < 60000 && (sv.navDir.equals("maps_izq") || sv.navDir.equals("maps_der"));
+            boolean giro = sv != null && sv.metrosGiro() > 0 && sv.metrosGiro() <= 150 && ahora - sv.navCuando < 60000 && (sv.navDir.equals("maps_izq") || sv.navDir.equals("maps_der"));
             if (giro) {
                 if (giroDesde == 0) giroDesde = ahora;
                 clip = "senala"; tinte = null; alReves = sv.navDir.equals("maps_izq");
@@ -1235,12 +1235,12 @@ public class CubiCarro extends CarAppService {
             float cx = (x0 + x1) / 2, alto = y1 - y0, w = x1 - x0 - 4 * u;
             final int GRIS = fundido ? 0xe6ffffff : Lienzo.GRIS, AZUL = fundido ? 0xffffffff : Lienzo.AZUL;
             int dm = sv.navDestM >= 0 ? sv.navDestM : sv.rutaFaltaM; String dl = sv.navDestM >= 0 ? sv.navLlega : sv.rutaLlega;
-            boolean hayDest = dm >= 0, haySeg = sv.navMetros >= 0 && sv.kmh >= 8 && sv.navMetros * 3.6 / sv.kmh < 100;
+            boolean hayDest = dm >= 0, haySeg = sv.metrosGiro() >= 0 && sv.kmh >= 8 && sv.metrosGiro() * 3.6 / sv.kmh < 100;
             if (hayDest) {
                 texto(c, metros(dm), cx, y0 + alto * 0.3f, alto * 0.24f, TINTA, true, Paint.Align.CENTER, w);
                 texto(c, dl.isEmpty() ? "al destino" : "llegamos " + dl, cx, y0 + alto * 0.5f, alto * 0.12f, GRIS, false, Paint.Align.CENTER, w);
             }
-            if (haySeg) texto(c, "giro en " + Math.round(sv.navMetros * 3.6 / sv.kmh) + " s", cx, y0 + alto * (hayDest ? 0.8f : 0.55f), alto * 0.15f, AZUL, true, Paint.Align.CENTER, w);
+            if (haySeg) texto(c, "giro en " + Math.round(sv.metrosGiro() * 3.6 / sv.kmh) + " s", cx, y0 + alto * (hayDest ? 0.8f : 0.55f), alto * 0.15f, AZUL, true, Paint.Align.CENTER, w);
             if (!hayDest && !haySeg && !sv.navDir.isEmpty() && System.currentTimeMillis() - sv.navCuando < 120000) texto(c, "En ruta", cx, y0 + alto * 0.55f, alto * 0.16f, GRIS, true, Paint.Align.CENTER, w);
         }
         private void ovalo(Canvas c, float cx, float cy, float rx, float ry) { gr.set(cx - rx, cy - ry, cx + rx, cy + ry); c.drawOval(gr, p); }
