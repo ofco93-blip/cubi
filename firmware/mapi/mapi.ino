@@ -27,7 +27,8 @@ static const int P_CS = 12, P_SCK = 38, P_D0 = 4, P_D1 = 5, P_D2 = 6, P_D3 = 7, 
 constexpr int D = 466;                     // la pantalla
 constexpr float C = D / 2.f;
 Arduino_DataBus *bus; Arduino_CO5300 *panel;
-uint16_t *fb;                              // la memoria del cuadro (en la PSRAM)
+uint16_t *fb;                              // la memoria del cuadro que se está dibujando (en la PSRAM)
+uint16_t *memorias[2]; int cualMem = 0; QueueHandle_t colaPantalla; SemaphoreHandle_t pantallaLibre; volatile uint32_t msEnvio = 0;
 float tAhora = 0;
 
 // ---------------------------------------------------------------- dibujo
@@ -359,7 +360,9 @@ static void mapa(float cyCarro) {
   mpx += (fijoX + velX * dtp - mpx) * k; mpy += (fijoY + velY * dtp - mpy) * k;
   if (imuAddr) {   // el giro lo pone su giroscopio (al instante y suave); el rumbo del GPS solo corrige de a poco
     mrumbo += rumboVel * dtCuadro;
-    mrumbo += (fmodf(fijoR - mrumbo + 540, 360) - 180) * (tAhora - fijoT < 3 ? 0.03f : 0);
+    // quieto, el rumbo del GPS se queda en el último y peleaba con el giroscopio: solo corrige andando (> ~11 km/h)
+    const bool anda = tAhora - fijoT < 3 && velX * velX + velY * velY > 9;
+    mrumbo += (fmodf(fijoR - mrumbo + 540, 360) - 180) * (anda ? 0.02f : 0);
   } else mrumbo += (fmodf(fijoR + velR * dtp - mrumbo + 540, 360) - 180) * k;
   const Calles &c = *callesHay;
   if (!c.nv) return;
@@ -567,12 +570,20 @@ static void pintar() {
 void setup() {
   Serial.begin(115200);
   Wire.begin(P_SDA, P_SCL, 400000);
-  fb = (uint16_t *)ps_malloc(D * D * 2);
+  memorias[0] = (uint16_t *)ps_malloc(D * D * 2); memorias[1] = (uint16_t *)ps_malloc(D * D * 2); fb = memorias[0];
   callesHay = (Calles *)ps_calloc(1, sizeof(Calles)); callesCarga = (Calles *)ps_calloc(1, sizeof(Calles));
   bus = new Arduino_ESP32QSPI(P_CS, P_SCK, P_D0, P_D1, P_D2, P_D3);
   panel = new Arduino_CO5300(bus, P_RST, 0, D, D, 6, 0, 0, 0);   // el 6: así lo trae el ejemplo de Waveshare para esta placa
   if (!panel->begin()) Serial.println("Mapi: la pantalla no arrancó");
   panel->fillScreen(0); panel->setBrightness(200);
+  // dos memorias: mientras una se manda a la pantalla (en el otro núcleo), en la otra se dibuja el cuadro siguiente
+  colaPantalla = xQueueCreate(1, sizeof(uint16_t *)); pantallaLibre = xSemaphoreCreateBinary(); xSemaphoreGive(pantallaLibre);
+  xTaskCreatePinnedToCore([](void *) {
+    uint16_t *f;
+    for (;;) if (xQueueReceive(colaPantalla, &f, portMAX_DELAY) == pdTRUE) {
+      const uint32_t t0 = millis(); panel->draw16bitRGBBitmap(0, 0, f, D, D); msEnvio = millis() - t0; xSemaphoreGive(pantallaLibre);
+    }
+  }, "pantalla", 4096, nullptr, 2, nullptr, 0);
   imuInit();
   bleInit();
   Serial.println("Mapi v" VERSION_MAPI " lista");
@@ -585,9 +596,11 @@ void loop() {
   if (reinicioEn && (int32_t)(ahora - reinicioEn) > 0) ESP.restart();   // actualizado: arranca con la versión nueva
   Orden o; int n = 0;
   while (n++ < 12 && xQueueReceive(colaBle, &o, 0) == pdTRUE) orden(String(o.t));
+  fb = memorias[cualMem];
   pintar();
   const uint32_t pintado = millis();
-  panel->draw16bitRGBBitmap(0, 0, fb, D, D);
+  xSemaphoreTake(pantallaLibre, portMAX_DELAY);          // espera a que termine de mandarse el cuadro anterior
+  xQueueSend(colaPantalla, &fb, portMAX_DELAY); cualMem ^= 1;
   if (Serial.available() && Serial.read() == 't')
-    Serial.printf("cuadro %lu ms (dibujo %lu, pantalla %lu)\n", (unsigned long)(millis() - ahora), (unsigned long)(pintado - ahora), (unsigned long)(millis() - pintado));
+    Serial.printf("cuadro %lu ms (dibujo %lu, pantalla %lu)\n", (unsigned long)(millis() - ahora), (unsigned long)(pintado - ahora), (unsigned long)msEnvio);
 }
