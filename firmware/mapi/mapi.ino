@@ -556,13 +556,13 @@ static void metros(int m, char *b, size_t n) {
   if (m < 15) snprintf(b, n, "ya"); else if (m < 1000) snprintf(b, n, "%d m", (m + 5) / 10 * 10); else snprintf(b, n, "%d,%d km", m / 1000, m % 1000 / 100);
 }
 
-// El aro del giro, por el borde (como un "cargando"): lleno a 300 m del giro y se va vaciando con el reloj hasta el
-// giro. Sólido, con las puntas redondas y un brillo suave; el resto del carril queda apagado.
+// El aro del giro, por el borde (como un "cargando"): se va llenando con el reloj desde 300 m y queda completo en el
+// giro. Sólido, con las puntas redondas y un brillo suave; por lo lleno corre un destello de la salida a la punta.
 static void aroGiro(float frac) {
   static const Col COLS[4] = {{70, 220, 130}, {255, 140, 40}, {76, 139, 245}, {60, 210, 240}};
   if (aroColor < 0 || aroColor > 3) return;
   const Col c = COLS[aroColor];
-  const float R = C - 7, w = 4, g = 8, lleno = 2 * PI * lim(frac, 0, 1);
+  const float R = C - 7, w = 4, g = 8, lleno = 2 * PI * lim(frac, 0, 1), brillo = fmodf(tAhora * 0.9f, 1) * lleno;
   for (int y = 0; y < D; y++) {
     const float dy = y + .5f - C, ro = R + g, ri = R - g;
     if (fabsf(dy) >= ro) continue;
@@ -575,6 +575,10 @@ static void aroGiro(float frac) {
         const float aro = lim(w + .5f - dd, 0, 1);
         const float a = desde <= lleno ? fmaxf(aro, lim(1 - (dd - w) / (g - w), 0, 1) * 0.28f) : aro * 0.18f;
         if (a > 0.01f) mezclar(x, y, c, a);
+        if (desde <= lleno && aro > 0) {                           // el destello: una estela de ~30° que va hacia la punta
+          const float atras = brillo - desde;
+          if (atras >= 0 && atras < 0.5f) mezclar(x, y, BLANCO, aro * 0.65f * (1 - atras / 0.5f) * lim(w + .5f - dd - 1, 0, 1));
+        }
       }
     }
   }
@@ -623,7 +627,7 @@ static void pintar() {
   if (nav) {
     // arriba, por la curva: cuánto falta para el giro; debajo la flecha y la calle
     const int gm = giroM >= 0 ? max(0, giroM - (int)(sqrtf(velX * velX + velY * velY) * (tAhora - giroT))) : -1;   // entre aviso y aviso descuenta lo andado
-    if (gm >= 0 && gm <= 300 && strcmp(giroDir, "fin")) aroGiro(gm / 300.f);   // el aro: desde 300 m del giro
+    if (gm >= 0 && gm <= 300 && strcmp(giroDir, "fin")) aroGiro(1 - gm / 300.f);   // el aro: se llena desde 300 m del giro
     if (!strcmp(giroDir, "fin")) snprintf(b, sizeof b, giroM >= 0 && giroM > 15 ? "Llegando" : "Llegaste"); else if (gm >= 0) metros(gm, b, sizeof b); else b[0] = 0;
     if (b[0]) textoArco(b, 195, -90, 46, BLANCO, false);
     flecha(C, b[0] ? 96 : 82, b[0] ? 54 : 62, giroDir);
