@@ -1113,8 +1113,10 @@ public class CubiCarro extends CarAppService {
             long ahora = System.currentTimeMillis(); float dt = olaT == 0 ? 0 : Math.min(0.1f, (ahora - olaT) / 1000f); olaT = ahora;
             double kmh = sv == null || sv.kmh < 0 ? 0 : sv.kmh;
             float empuje = kmhAntes < 0 ? 0 : (float) Math.max(-12, Math.min(12, kmh - kmhAntes)); kmhAntes = kmh;
-            olaVel += -empuje * 9 + (-olaIncl * 60 - olaVel * 5) * dt; olaIncl = Math.max(-11, Math.min(11, olaIncl + olaVel * dt));   // un resorte: se va de lado y vuelve
-            olaAmp += ((carg ? 2.2f : kmh > 3 ? 2.6f : 1.1f) + Math.min(5, Math.abs(empuje) * 1.5f) - olaAmp) * Math.min(1, dt * (Math.abs(empuje) > 0.5f ? 30 : 1.2f));
+            boolean acel = ahora - CubiCarroDatos.movido < 2000;      // el acelerómetro del carro, si lo está dando: en las curvas el líquido se va de lado
+            float meta = acel ? Math.max(-10, Math.min(10, -CubiCarroDatos.lado * 7)) : 0;
+            olaVel += (acel ? 0 : -empuje * 9) + ((meta - olaIncl) * 60 - olaVel * 5) * dt; olaIncl = Math.max(-11, Math.min(11, olaIncl + olaVel * dt));   // un resorte: se va de lado y vuelve
+            olaAmp += ((carg ? 2.2f : kmh > 3 ? 2.6f : 1.1f) + Math.min(5, Math.abs(empuje) * 1.5f) + (acel ? Math.min(4, Math.abs(CubiCarroDatos.frente) * 2.5f) : 0) - olaAmp) * Math.min(1, dt * (Math.abs(empuje) > 0.5f ? 30 : 1.2f));
             double fase = ahora % 1000000 * (carg ? 0.0062 : 0.0034);
             float late = carg ? 0.5f + 0.5f * (float) Math.sin(ahora % 100000 / 420.0) : 0;
             float e = h / 96f;

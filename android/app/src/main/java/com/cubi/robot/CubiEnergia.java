@@ -13,6 +13,7 @@ final class CubiEnergia {
     static final double KM_MEMORIA = 300;     // el promedio recuerda más o menos los últimos 300 km
     static final double KM_PESO = 20;         // al arrancar, el promedio pesa como 20 km ya recorridos
 
+    double kmPunto;            // km de autonomía por cada 1 %, aprendido de lo que dice el carro (0 = todavía no)
     double capacidad = 58.3;   // kWh. ponytail: es la total de fábrica; la utilizable puede ser ~5 % menos (ajuste en la app)
     double semilla = 14;       // kWh/100 km mientras no haya historial propio
     double promKWh, promKm;    // historial (se guarda entre viajes)
@@ -24,7 +25,10 @@ final class CubiEnergia {
 
     // Una lectura del carro. rangoKm puede venir NaN.
     void lectura(long ahoraMs, double bat, double rangoKm) {
-        double fino = rangoKm / KM_POR_PUNTO;
+        // Los km por punto no son fijos (medido en la caja negra: 5,0 al 36 % y 5,1 al 57 %): se aprenden despacio de lo que el
+        // carro va diciendo. Con la cifra fija, al 57 % la autonomía se descartaba y no se notaba que estaba cargando.
+        if (rangoKm > 0 && bat > 5) { double k = rangoKm / (bat + 0.5); kmPunto = kmPunto <= 0 ? k : kmPunto + (k - kmPunto) * 0.02; }
+        double fino = rangoKm / (kmPunto > 0 ? kmPunto : KM_POR_PUNTO);
         double soc = !Double.isNaN(fino) && Math.abs(fino - bat) <= 1.2 ? fino : bat;
         double e = soc / 100 * capacidad;
         bateria = bat; rangoCarro = rangoKm;

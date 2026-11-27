@@ -122,7 +122,7 @@ public class CubiCarroDatos extends CubiCarro {
         try {
             androidx.car.app.hardware.info.CarSensors sn = hw.getCarSensors(); int r = androidx.car.app.hardware.info.CarSensors.UPDATE_RATE_NORMAL;
             try { sn.addCompassListener(r, ex, b -> cada(cc, "BRUJULA", 30000, () -> v(b.getOrientations()))); } catch (Throwable e) { falla(cc, "Brújula", e); }
-            try { sn.addAccelerometerListener(r, ex, a -> cada(cc, "ACELEROMETRO", 60000, () -> v(a.getForces()))); } catch (Throwable e) { falla(cc, "Acelerómetro", e); }
+            try { sn.addAccelerometerListener(r, ex, a -> { mover(a.getForces()); cada(cc, "ACELEROMETRO", 60000, () -> v(a.getForces())); }); } catch (Throwable e) { falla(cc, "Acelerómetro", e); }
             try { sn.addGyroscopeListener(r, ex, g -> cada(cc, "GIROSCOPIO", 60000, () -> v(g.getRotations()))); } catch (Throwable e) { falla(cc, "Giroscopio", e); }
             if (dado(cc, Manifest.permission.ACCESS_FINE_LOCATION))
                 try { sn.addCarHardwareLocationListener(r, ex, l -> cada(cc, "UBICACION_CARRO", 60000, () -> {
@@ -130,6 +130,16 @@ public class CubiCarroDatos extends CubiCarro {
                     return c != null && c.getStatus() == CarValue.STATUS_SUCCESS && c.getValue() != null ? "llega, precision_m=" + Math.round(c.getValue().getAccuracy()) + " velocidad=" + c.getValue().hasSpeed() : v(c);
                 })); } catch (Throwable e) { falla(cc, "Ubicación del carro", e); }
         } catch (Throwable e) { falla(cc, "Sensores", e); }
+    }
+    // El acelerómetro del carro, para el líquido de la pila: lo de lado y lo de frente, sin la parte fija (la inclinación
+    // con que quedó puesto, que se va aprendiendo despacio).
+    static volatile float lado, frente; static volatile long movido; private static float baseX = Float.NaN, baseY;
+    static void mover(CarValue<java.util.List<Float>> f) {
+        if (f == null || f.getStatus() != CarValue.STATUS_SUCCESS || f.getValue() == null || f.getValue().size() < 2) return;
+        float x = f.getValue().get(0), y = f.getValue().get(1);
+        if (Float.isNaN(baseX)) { baseX = x; baseY = y; }
+        baseX += (x - baseX) * 0.003f; baseY += (y - baseY) * 0.003f;
+        lado = x - baseX; frente = y - baseY; movido = System.currentTimeMillis();
     }
     static void oirVelocidad(CarContext cc) {
         try {
