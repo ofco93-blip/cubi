@@ -277,7 +277,9 @@ final class CubiMapi {
             if (!ll.equals(yaLlega)) { yaLlega = ll; mandar(ll); }
             CubiEnergia en = CubiCarroDatos.cuentas;
             final boolean hayPila = !Double.isNaN(en.energia);
-            CubiCarroDatos.cada(sv, "MAPI_PILA", 0, () -> hayPila ? "con datos del carro" : "sin datos del carro (Mascota Auto no abierta en Android Auto)");
+            CubiCarroDatos.cada(sv, "MAPI_PILA", 0, () -> !hayPila ? "sin datos del carro (Mascota Auto no abierta en Android Auto)"
+                    : String.format(Locale.US, "con datos del carro | promedio %.1f con %d km de historial | viaje %d km %.1f kWh/100 | usa %.1f",
+                    en.promedio(), Math.round(en.promKm), Math.round(en.viajeKm), Double.isNaN(en.consumoViaje()) ? 0 : en.consumoViaje(), en.consumo()));
             if (!Double.isNaN(en.energia)) {
                 double h = en.horasParaLleno();
                 String p = String.format(Locale.US, "/pila?b=%d&r=%d&c=%d&k=%.1f&p=%.1f", Math.round(en.bateria), Math.round(en.autonomiaKm()), en.cargando ? 1 : 0,

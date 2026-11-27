@@ -726,6 +726,16 @@ public class MainActivity extends Activity {
         }
 
         // mapas sin internet: las ciudades y departamentos escogidos se guardan solo en este celular
+        // el consumo promedio que muestra el carro (kWh/100 km): con eso arranca la autonomía dinámica y de ahí sigue
+        // aprendiendo. Cuenta como 50 km ya andados a ese consumo (pesa, pero lo de los viajes lo va corrigiendo).
+        @JavascriptInterface public float consumoCarro() { CubiEnergia e = CubiCarroDatos.cuentas; return e.promKm >= 5 ? (float) e.promedio() : getSharedPreferences("cubi", 0).getFloat("energia_semilla", 14f); }
+        @JavascriptInterface
+        public void consumoCarroPon(float v) {
+            if (v < 8 || v > 35) return;
+            CubiEnergia e = CubiCarroDatos.cuentas;
+            synchronized (CubiCarroDatos.class) { e.semilla = v; e.promKm = 50; e.promKWh = v * 0.5; }
+            getSharedPreferences("cubi", 0).edit().putFloat("energia_semilla", v).putFloat("energia_prom_km", 50).putFloat("energia_prom_kwh", v * 0.5f).apply();
+        }
         @JavascriptInterface public String mapasZonas() { return getSharedPreferences("cubi", 0).getString("mapasZonas", "[]"); }
         @JavascriptInterface public void mapasGuardar(String zonas) { getSharedPreferences("cubi", 0).edit().putString("mapasZonas", zonas).apply(); }
         @JavascriptInterface public int mapasCuenta(String zonas) { return CubiMapas.cuenta(zonas); }
