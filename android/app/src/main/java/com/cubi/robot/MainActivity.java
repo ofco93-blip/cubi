@@ -725,19 +725,28 @@ public class MainActivity extends Activity {
             }).start();
         }
 
-        // mapas sin internet: la lista de ciudades se guarda solo en este celular
-        @JavascriptInterface public String mapasLugares() { return getSharedPreferences("cubi", 0).getString("mapasLugares", ""); }
+        // mapas sin internet: las ciudades y departamentos escogidos se guardan solo en este celular
+        @JavascriptInterface public String mapasZonas() { return getSharedPreferences("cubi", 0).getString("mapasZonas", "[]"); }
+        @JavascriptInterface public void mapasGuardar(String zonas) { getSharedPreferences("cubi", 0).edit().putString("mapasZonas", zonas).apply(); }
+        @JavascriptInterface public int mapasCuenta(String zonas) { return CubiMapas.cuenta(zonas); }
+        private String pais() {
+            String pais = null;
+            try { pais = ((android.telephony.TelephonyManager) getSystemService(TELEPHONY_SERVICE)).getNetworkCountryIso(); } catch (Exception ignored) { }
+            return pais == null || pais.length() != 2 ? java.util.Locale.getDefault().getCountry() : pais;
+        }
+        @JavascriptInterface
+        public void mapasBuscar(String q) {
+            new Thread(() -> {
+                String r;
+                try { r = CubiMapas.buscar(q, pais()).toString(); } catch (Exception e) { r = "null"; }
+                js("mapasOpciones(" + JSONObject.quote(q) + "," + JSONObject.quote(r) + ")");
+            }).start();
+        }
         @JavascriptInterface public float mapiAjuste(String k) { return getSharedPreferences("cubi", 0).getFloat(k, k.equals("mapiGiro") || k.equals("mapiEstilo") ? 0 : 1); }
         @JavascriptInterface public void mapiAjustar(String k, float v) { if (k.matches("mapi(Zoom|Flecha|Giro|Estilo)")) getSharedPreferences("cubi", 0).edit().putFloat(k, v).apply(); }
         @JavascriptInterface public String mapasEstado() { return CubiMapas.resumen(MainActivity.this); }
         @JavascriptInterface
-        public void mapasBajar(String lugares) {
-            getSharedPreferences("cubi", 0).edit().putString("mapasLugares", lugares).apply();
-            String pais = null;
-            try { pais = ((android.telephony.TelephonyManager) getSystemService(TELEPHONY_SERVICE)).getNetworkCountryIso(); } catch (Exception ignored) { }
-            if (pais == null || pais.length() != 2) pais = java.util.Locale.getDefault().getCountry();
-            CubiMapas.descargar(getApplicationContext(), lugares, pais);
-        }
+        public void mapasBajar() { CubiMapas.descargar(getApplicationContext(), mapasZonas()); }
 
         @JavascriptInterface
         public void actualizarMapi() {

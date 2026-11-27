@@ -447,14 +447,24 @@ static void mapa(float cyCarro) {
     }
     if (n >= 3) rellenar(qx, qy, n, c.clase[v] == 3 ? AGUA : PARQUE, 0.9f);
   }
+  // la ruta empieza donde va el carro: lo ya andado (antes del punto de la ruta más cercano) no se pinta. Por distancia y no
+  // por hacia dónde mira el carro: parado, la ruta puede salir para atrás y debe verse. Lejos de la ruta (> 80 m) va entera.
+  // ponytail: el tráfico (6 y 7) no se corta; si se ve naranja lo ya andado, cortarlo igual
+  int vCerca = -1, iCerca = 0; float dMin = 80 * 80;
+  for (int v = 0; v < c.nv; v++) if (c.clase[v] == 2) for (int i = c.ini[v]; i < c.ini[v + 1]; i++) {
+    const float dx = (c.x[i] - 128) * MAPA_M - mpx, dy = (c.y[i] - 128) * MAPA_M - mpy, d = dx * dx + dy * dy;
+    if (d < dMin) { dMin = d; vCerca = v; iCerca = i; }
+  }
   struct Pasada { uint8_t clase; Col col; float ancho; };   // ancho en metros
   // el tráfico va encima de la ruta, como en Google Maps: naranja lo lento, rojo lo trancado
   const Pasada PAS[] = {{5, RIO, 6}, {0, CALLE, 8}, {1, AVENIDA, 13}, {2, RUTA_B, 19}, {2, RUTA, 12}, {6, Col{242, 153, 0}, 12}, {7, Col{232, 69, 60}, 12}};
   for (const auto &ps : PAS) for (int v = 0; v < c.nv; v++) {
     if (c.clase[v] != ps.clase) continue;
-    const float cerca = ps.clase == 2 || ps.clase >= 6 ? 0 : CERCA;   // la ruta empieza en el carro: lo ya andado no se pinta
-    float ax, ay; aCarro(c.ini[v], ax, ay);
-    for (int i = c.ini[v] + 1; i < c.ini[v + 1]; i++) {
+    if (ps.clase == 2 && v < vCerca) continue;
+    const int i0 = ps.clase == 2 && v == vCerca ? iCerca : c.ini[v];
+    const float cerca = CERCA;
+    float ax, ay; aCarro(i0, ax, ay);
+    for (int i = i0 + 1; i < c.ini[v + 1]; i++) {
       float bx, by; aCarro(i, bx, by);
       float px = ax, py = ay, qx = bx, qy = by;
       ax = bx; ay = by;

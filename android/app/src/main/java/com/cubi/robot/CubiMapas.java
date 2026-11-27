@@ -75,24 +75,45 @@ final class CubiMapas {
         } catch (Exception e) { return null; }
     }
 
+    // ---------------------------------------------------------------- escoger dónde
+    // lo que se escribe en la app: las ciudades, pueblos y departamentos que coinciden (en el país del celular)
+    static JSONArray buscar(String q, String pais) throws Exception {
+        JSONArray r = new JSONArray(texto("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=10&accept-language=es&q=" + URLEncoder.encode(q, "UTF-8")
+                + (pais == null || pais.length() != 2 ? "" : "&countrycodes=" + pais.toLowerCase(Locale.ROOT)))), o = new JSONArray();
+        for (int i = 0; i < r.length(); i++) {
+            JSONObject x = r.getJSONObject(i); String at = x.optString("addresstype");
+            String tipo = at.equals("state") ? "Departamento" : at.equals("county") || at.equals("region") ? "Región"
+                    : at.matches("city|town|municipality") ? "Ciudad" : at.matches("village|hamlet|suburb|neighbourhood") ? "Pueblo" : null;
+            JSONArray bb = x.optJSONArray("boundingbox");
+            if (tipo == null || bb == null) continue;
+            String d = x.optString("display_name"); int coma = d.indexOf(',');
+            o.put(new JSONObject().put("n", x.optString("name")).put("d", coma < 0 ? "" : d.substring(coma + 1).trim()).put("t", tipo)
+                    .put("la", x.getDouble("lat")).put("lo", x.getDouble("lon")).put("s", bb.getDouble(0)).put("no", bb.getDouble(1)).put("w", bb.getDouble(2)).put("e", bb.getDouble(3)));
+        }
+        return o;
+    }
+    private static boolean entera(JSONObject z) { return z.optString("t").equals("Departamento") || z.optString("t").equals("Región"); }
+    // los cuadros de lo escogido: una ciudad o pueblo, 12 km a la redonda; un departamento o región, entero (su rectángulo)
+    private static Set<Long> cuadrosDe(JSONArray zs) throws Exception {
+        Set<Long> cuadros = new HashSet<>();
+        for (int i = 0; i < zs.length(); i++) {
+            JSONObject z = zs.getJSONObject(i);
+            if (entera(z)) { for (int x = tx(z.getDouble("w")); x <= tx(z.getDouble("e")); x++) for (int y = ty(z.getDouble("no")); y <= ty(z.getDouble("s")); y++) cuadros.add(((long) x << 20) | y); }
+            else alrededor(z.getDouble("la"), z.getDouble("lo"), 12000, cuadros);
+        }
+        return cuadros;
+    }
+    static int cuenta(String zonas) { try { return cuadrosDe(new JSONArray(zonas)).size(); } catch (Exception e) { return 0; } }
+
     // ---------------------------------------------------------------- la descarga
-    static void descargar(Context c, String lugares, String pais) {
+    static void descargar(Context c, String zonas) {
         if (bajando) return;
         bajando = true; estado = "Empezando…";
         new Thread(() -> {
             try {
-                List<double[]> ciudades = new ArrayList<>(); List<String> faltan = new ArrayList<>();
-                for (String l : lugares.split("[,;\\n]")) {
-                    l = l.trim(); if (l.isEmpty()) continue;
-                    estado = "Buscando " + l + "…";
-                    JSONArray r = new JSONArray(texto("https://nominatim.openstreetmap.org/search?format=json&limit=1&accept-language=es&q=" + URLEncoder.encode(l, "UTF-8")
-                            + (pais == null || pais.length() != 2 ? "" : "&countrycodes=" + pais.toLowerCase(Locale.ROOT))));
-                    Thread.sleep(1100);                                  // nominatim pide máximo una consulta por segundo
-                    if (r.length() == 0) { faltan.add(l); continue; }
-                    ciudades.add(new double[]{r.getJSONObject(0).getDouble("lat"), r.getJSONObject(0).getDouble("lon")});
-                }
-                Set<Long> cuadros = new HashSet<>();
-                for (double[] p : ciudades) alrededor(p[0], p[1], 12000, cuadros);   // cada ciudad: 12 km a la redonda
+                JSONArray zs = new JSONArray(zonas); List<double[]> ciudades = new ArrayList<>(); List<String> faltan = new ArrayList<>();
+                for (int i = 0; i < zs.length(); i++) ciudades.add(new double[]{zs.getJSONObject(i).getDouble("la"), zs.getJSONObject(i).getDouble("lo")});
+                Set<Long> cuadros = cuadrosDe(zs);
                 // las carreteras: cada ciudad se une con la más cercana de las ya unidas (árbol mínimo) por la ruta de OSRM
                 List<Integer> unidas = new ArrayList<>(); if (!ciudades.isEmpty()) unidas.add(0);
                 while (unidas.size() < ciudades.size()) {

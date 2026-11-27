@@ -250,8 +250,10 @@ pre.reg { margin: 0; max-height: 320px; overflow: auto; font: 11px/1.35 ui-monos
   </div>
   <h2>Mapas sin internet</h2>
   <div class="card">
-    <p class="note" style="margin:4px 0 10px">Las ciudades por donde andas, separadas por coma. Baja también las carreteras entre ellas; con eso las calles salen aunque no haya señal. Mejor con WiFi.</p>
-    <input type="text" id="mapasLugares" placeholder="Ej.: Cali, Palmira, Bogotá" autocomplete="off">
+    <p class="note" style="margin:4px 0 10px">Busca y agrega las ciudades o departamentos por donde andas. Una ciudad baja 12 km a la redonda; un departamento, entero. También baja las carreteras entre lo que agregues. Mejor con WiFi.</p>
+    <input type="text" id="mapasBusca" placeholder="Buscar ciudad o departamento" autocomplete="off">
+    <div id="mapasOps"></div>
+    <div id="mapasZonas" style="margin-top:8px"></div>
     <div class="fila"><span><small id="mapasNota">…</small></span><button class="enlace" id="mapasBajar">Descargar</button></div>
   </div>
 </section>
@@ -515,7 +517,33 @@ function mapi() {
   if (A().mapasEstado) $('mapasNota').textContent = A().mapasEstado();
 }
 setInterval(mapi, 2000);
-if (A() && A().mapasLugares) $('mapasLugares').value = A().mapasLugares();
+// mapas sin internet: se busca, se escoge de la lista y queda en "lo que se baja"
+let mapasZ = []; try { mapasZ = JSON.parse(A().mapasZonas()); } catch (e) { }
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+function mapasPintar() {
+  const n = A() && A().mapasCuenta ? A().mapasCuenta(JSON.stringify(mapasZ)) : 0;
+  $('mapasZonas').innerHTML = mapasZ.map((z, i) => `<div class="fila"><span>${esc(z.n)}<small>${esc(z.t)} · ${esc(z.d.split(',').slice(0, 2).join(','))}</small></span><button class="enlace" data-quita="${i}">Quitar</button></div>`).join('')
+    + (mapasZ.length ? `<p class="note" style="margin:6px 0">≈ ${n} cuadros, unos ${Math.max(1, Math.round(n * 0.012))} MB guardados (más las carreteras)${n > 6000 ? '. Es mucho: mejor con WiFi y el celular cargando.' : '.'}</p>` : '');
+  $('mapasZonas').querySelectorAll('[data-quita]').forEach(b => b.onclick = () => { mapasZ.splice(+b.dataset.quita, 1); A().mapasGuardar(JSON.stringify(mapasZ)); mapasPintar(); });
+}
+let mapasOpsL = [], mapasT;
+window.mapasOpciones = (q, r) => {
+  if (q !== $('mapasBusca').value.trim()) return;          // ya escribió otra cosa
+  let l = null; try { l = JSON.parse(r); } catch (e) { }
+  mapasOpsL = l || [];
+  $('mapasOps').innerHTML = l === null ? '<p class="note">No pude buscar (¿hay internet?).</p>' : !mapasOpsL.length ? '<p class="note">No encontré ciudades ni departamentos con ese nombre.</p>'
+    : mapasOpsL.map((o, i) => `<div class="fila"><span>${esc(o.n)}<small>${esc(o.t)} · ${esc(o.d.split(',').slice(0, 2).join(','))}</small></span><button class="enlace" data-pon="${i}">Agregar</button></div>`).join('');
+  $('mapasOps').querySelectorAll('[data-pon]').forEach(b => b.onclick = () => {
+    mapasZ.push(mapasOpsL[+b.dataset.pon]); A().mapasGuardar(JSON.stringify(mapasZ));
+    $('mapasBusca').value = ''; $('mapasOps').innerHTML = ''; mapasPintar();
+  });
+};
+$('mapasBusca').oninput = () => {
+  clearTimeout(mapasT); const q = $('mapasBusca').value.trim();
+  if (q.length < 3) { $('mapasOps').innerHTML = ''; return; }
+  mapasT = setTimeout(() => { if (A() && A().mapasBuscar) { $('mapasOps').innerHTML = '<p class="note">Buscando…</p>'; A().mapasBuscar(q); } }, 700);   // una búsqueda por pausa
+};
+mapasPintar();
 if (A() && A().mapiAjuste) $('mapiEstilo').value = Math.round(A().mapiAjuste('mapiEstilo'));
 $('mapiEstilo').onchange = e => { if (A() && A().mapiAjustar) A().mapiAjustar('mapiEstilo', +e.target.value); };
 ['mapiZoom', 'mapiFlecha', 'mapiGiro'].forEach(k => {   // se ve en Mapi al segundo, mientras se mueve
@@ -523,7 +551,7 @@ $('mapiEstilo').onchange = e => { if (A() && A().mapiAjustar) A().mapiAjustar('m
   if (A() && A().mapiAjuste) { $(k).value = A().mapiAjuste(k); pon(A().mapiAjuste(k)); }
   $(k).oninput = e => { pon(+e.target.value); if (A() && A().mapiAjustar) A().mapiAjustar(k, +e.target.value); };
 });
-$('mapasBajar').onclick = () => { const l = $('mapasLugares').value.trim(); if (l && A() && A().mapasBajar) { A().mapasBajar(l); toast('Descargando los mapas…'); } };
+$('mapasBajar').onclick = () => { if (!mapasZ.length) { toast('Primero busca y agrega una ciudad o departamento'); return; } if (A() && A().mapasBajar) { A().mapasBajar(); toast('Descargando los mapas…'); } };
 
 // ---------- Mascota Auto ----------
 ['carroZelda', 'carroFondo', 'carroVista', 'carroZeldaTam', 'carroPila'].forEach(k => {
