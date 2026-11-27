@@ -237,7 +237,7 @@ final class CubiMapi {
         if (!r.equals(yaRumbo)) { yaRumbo = r; mandar(r); }
     } };
     // la música para la pantalla de la derecha de Mapi: nombre, artista, si suena, cuánto dura y por dónde va (cada 5 s
-    // o cuando cambia), y la carátula en 120 x 120 (RGB565) cada vez que cambia la canción
+    // o cuando cambia), y la carátula en 160 x 160 (RGB565) cada vez que cambia la canción
     private String yaMusica = ""; private long yaMusicaT; private android.graphics.Bitmap yaPortada;
     private static String corta(String s, int n) { return s == null ? "" : s.length() > n ? s.substring(0, n).trim() : s; }
     private void musica(long ahora) {
@@ -253,8 +253,8 @@ final class CubiMapi {
         if (b == null || b == yaPortada || imgC == null || b.isRecycled()) return;
         yaPortada = b;
         try {
-            android.graphics.Bitmap e = android.graphics.Bitmap.createScaledBitmap(b, 120, 120, true);
-            int[] px = new int[120 * 120]; e.getPixels(px, 0, 120, 0, 0, 120, 120);
+            android.graphics.Bitmap e = android.graphics.Bitmap.createScaledBitmap(b, 160, 160, true);
+            int[] px = new int[160 * 160]; e.getPixels(px, 0, 160, 0, 0, 160, 160);
             byte[] o = new byte[px.length * 2];
             for (int i = 0; i < px.length; i++) {
                 int c = px[i], v = (((c >> 16) & 255) >> 3) << 11 | (((c >> 8) & 255) >> 2) << 5 | ((c & 255) >> 3);

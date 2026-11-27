@@ -169,7 +169,7 @@ static void dosRenglones(const char *s, float x, float cy, float tam, const Col 
 // texto por la orilla redonda: centrado en el ángulo a (grados; 0 a la derecha, 90 abajo, -90 arriba) a r del centro.
 // abajo: se lee de izquierda a derecha por la curva de abajo; si no, por la de arriba (o por los lados: a 180 se lee
 // de abajo hacia arriba, a 0 de arriba hacia abajo). Cada letra se gira para quedar parada sobre la curva.
-static void textoArco(const char *s, float r, float a, float tam, const Col &c, bool abajo) {
+template <typename P> static void arcoLetras(const char *s, float r, float a, float tam, bool abajo, P plot) {
   const float esc = tam / FUENTE_ALTO, w = anchoTexto(s, tam), dir = abajo ? -1 : 1;
   float pluma = 0;
   while (*s) {
@@ -189,9 +189,34 @@ static void textoArco(const char *s, float r, float a, float tam, const Col &c, 
         if (u0 < -1 || v0 < -1 || u0 >= l->w || v0 >= l->h) continue;
         const float fu = u - u0, fv = v - v0;
         const float al = (alfaLetra(l, u0, v0) * (1 - fu) + alfaLetra(l, u0 + 1, v0) * fu) * (1 - fv) + (alfaLetra(l, u0, v0 + 1) * (1 - fu) + alfaLetra(l, u0 + 1, v0 + 1) * fu) * fv;
-        if (al > 0.01f) mezclar(x, y, c, al);
+        if (al > 0.01f) plot(x, y, al);
       }
   }
+}
+// Cada letrero en curva se dibuja letra por letra UNA vez en su cajita (cuánto tapa cada pixel) y en los cuadros
+// siguientes solo se copia esa cajita: dibujarlo cada vez se llevaba más de la mitad del tiempo del cuadro.
+struct Arco { char s[48]; float r, a, tam; bool abajo; int x0, y0, w, h, cap; uint8_t *al; uint32_t uso; };
+static Arco arcos[8];
+static void textoArco(const char *s, float r, float a, float tam, const Col &c, bool abajo) {
+  static uint32_t reloj = 0; reloj++;
+  Arco *e = nullptr, *viejo = &arcos[0];
+  for (auto &x : arcos) {
+    if (x.al && x.r == r && x.a == a && x.tam == tam && x.abajo == abajo && !strcmp(x.s, s)) { e = &x; break; }
+    if (x.uso < viejo->uso) viejo = &x;
+  }
+  if (!e) {                                    // nuevo: primero dónde cae, luego la cajita
+    e = viejo; strlcpy(e->s, s, sizeof e->s); e->r = r; e->a = a; e->tam = tam; e->abajo = abajo;
+    int x0 = D, y0 = D, x1 = -1, y1 = -1;
+    arcoLetras(s, r, a, tam, abajo, [&](int x, int y, float) { x0 = min(x0, x); y0 = min(y0, y); x1 = max(x1, x); y1 = max(y1, y); });
+    if (x1 < 0) { e->w = e->h = 0; e->uso = reloj; if (!e->al) { e->al = (uint8_t *)ps_malloc(1); e->cap = 1; } return; }
+    e->x0 = x0; e->y0 = y0; e->w = x1 - x0 + 1; e->h = y1 - y0 + 1;
+    if (e->cap < e->w * e->h) { free(e->al); e->cap = e->w * e->h; e->al = (uint8_t *)ps_malloc(e->cap); }
+    if (!e->al) { e->cap = 0; return; }
+    memset(e->al, 0, e->w * e->h);
+    arcoLetras(s, r, a, tam, abajo, [&](int x, int y, float al) { uint8_t &v = e->al[(y - e->y0) * e->w + (x - e->x0)]; v = max(v, (uint8_t)(al * 255)); });
+  }
+  e->uso = reloj;
+  for (int y = 0; y < e->h; y++) { const uint8_t *f = e->al + y * e->w; for (int x = 0; x < e->w; x++) if (f[x]) mezclar(e->x0 + x, e->y0 + y, c, f[x] * (1 / 255.f)); }
 }
 static float angTexto(const char *s, float tam, float r) { return anchoTexto(s, tam) / r * 180 / PI; }   // cuántos grados ocupa
 static void enAng(float a, float r, float &x, float &y) { x = C + r * cosf(a * PI / 180); y = C + r * sinf(a * PI / 180); }
@@ -306,7 +331,7 @@ int altura = -10000, faltaT = -1;
 float pilaViaje = -1, pilaHoy = -1;   // km de este viaje y su consumo (kWh/100)
 // la música que suena en el celular: nombre, artista, por dónde va y cuánto dura (s), y la carátula (120 x 120)
 char musTit[48] = "", musArt[40] = ""; float musPos = 0, musDur = 0, musT = -100; bool musSuena = false;
-constexpr int POR = 120;
+constexpr int POR = 160;
 uint16_t *portada; volatile uint32_t porN = 0, porHay = 0; volatile bool porOk = false, porNueva = false; Col porTinte{70, 30, 110};
 bool rutaVisible = false;   // la ruta (y su tráfico) solo se pinta mientras se navega: al quitar la navegación se borra   // la altura sobre el mar (m) y los minutos que faltan para llegar   // los pone la app (pestaña Mapi): acercar o alejar el mapa y el tamaño de la flecha   // la calle por donde va y el límite de la vía (de Google)
 
@@ -638,23 +663,25 @@ static void paginaMusica() {
   fondoColor(Col{t.r * 0.42f + 6, t.g * 0.42f + 6, t.b * 0.42f + 10}, Col{t.r * 0.16f + 4, t.g * 0.16f + 4, t.b * 0.16f + 8});
 extern float biselF;
   const float pos = biselF >= 0 ? biselF * musDur : musSuena ? musPos + (tAhora - musT) : musPos, frac = musDur > 0 ? lim(pos / musDur, 0, 1) : 0;
-  static float vuelta = 0; if (musSuena) vuelta += dtCuadro * 0.55f;   // el disco gira (despacio) solo mientras suena
-  const float cx = C, cy = C - 34, R = 107, cs = cosf(vuelta), sn = sinf(vuelta);
-  disco(cx, cy + 6, R + 9, Col{0, 0, 0}, 0.35f);
+  static float vuelta = 0; if (musSuena) vuelta += dtCuadro * 0.35f;   // la carátula gira despacio solo mientras suena
+  const float cs = cosf(vuelta), sn = sinf(vuelta), RR = C - 2, k = POR / (2 * RR * 0.74f);   // la carátula completa (sus esquinas quedan fuera)
   if (porOk && portada) {
-    for (int y = (int)(cy - R); y <= (int)(cy + R); y++) for (int x = (int)(cx - R); x <= (int)(cx + R); x++) {
-      const float dx = x + .5f - cx, dy = y + .5f - cy, d2 = dx * dx + dy * dy;
-      if (d2 > R * R || x < 0 || y < 0 || x >= D || y >= D) continue;
-      const float u = (dx * cs + dy * sn) / R, v = (-dx * sn + dy * cs) / R;
-      const int sx = (int)lim((u * 0.5f + 0.5f) * POR, 0, POR - 1), sy = (int)lim((v * 0.5f + 0.5f) * POR, 0, POR - 1);
-      fb[y * D + x] = portada[sy * POR + sx];
+    for (int y = 0; y < D; y++) {
+      const float dy = y + .5f - C, hx = RR * RR - dy * dy; if (hx <= 0) continue;
+      const int xa = (int)(C - sqrtf(hx)), xb = (int)(C + sqrtf(hx));
+      uint16_t *f = fb + y * D;
+      for (int x = max(0, xa); x <= min(D - 1, xb); x++) {
+        const float dx = x + .5f - C;
+        const int sx = (int)(POR / 2 + (dx * cs + dy * sn) * k), sy = (int)(POR / 2 + (-dx * sn + dy * cs) * k);
+        f[x] = (sx >= 0 && sy >= 0 && sx < POR && sy < POR) ? portada[sy * POR + sx] : 0;
+      }
     }
+    vineta();                                   // la orilla se oscurece: ahí van el nombre y el aro
+    for (int y = 300; y < D; y++) fila(y, 0, D, Col{0, 0, 0}, 0.55f * (y - 300) / (D - 300.f));   // abajo, para que se lean los botones
   } else {
-    disco(cx, cy, R, Col{t.r * 0.6f, t.g * 0.6f, t.b * 0.6f}, 1);
-    textoFilo(musTit[0] ? "♪" : "Pon música", cx, cy, musTit[0] ? 60 : 24, BLANCO);
+    disco(C, C - 30, 100, Col{t.r * 0.6f, t.g * 0.6f, t.b * 0.6f}, 1);
+    textoFilo(musTit[0] ? "Bajando la carátula" : "Pon música", C, C - 30, musTit[0] ? 18 : 24, BLANCO);
   }
-  figura(cx - R - 3, cy - R - 3, cx + R + 3, cy + R + 3, BLANCO, 0.25f, [=](float x, float y) { return fabsf(dCirculo(x, y, cx, cy, R)) - 1.2f; });
-  disco(cx, cy, 15, BLANCO, 0.45f); disco(cx, cy, 13, Col{t.r * 0.2f, t.g * 0.2f, t.b * 0.2f}, 1);   // el agujerito del disco
   if (musDur > 0) aroBorde(frac, Col{255, 120, 200});
   if (musTit[0]) textoArco(musTit, 200, -90, 26, BLANCO, false);
   if (musArt[0]) textoArco(musArt, 176, -90, 16, Col{225, 210, 255}, false);
@@ -857,7 +884,22 @@ void loop() {
   if (reinicioEn && (int32_t)(ahora - reinicioEn) > 0) ESP.restart();   // actualizado: arranca con la versión nueva
   Orden o; int n = 0;
   while (n++ < 12 && xQueueReceive(colaBle, &o, 0) == pdTRUE) orden(String(o.t));
+  static int paginaVista = 1; static float transT = -100; static int transDir = 1; static uint16_t *fbAntes;
+  if (pagina != paginaVista) {                  // cambió de pantalla: se guarda la de antes para deslizarla
+    if (!fbAntes) fbAntes = (uint16_t *)ps_malloc(D * D * 2);
+    if (fbAntes) memcpy(fbAntes, fb, D * D * 2);
+    transDir = pagina > paginaVista ? 1 : -1; paginaVista = pagina; transT = tAhora;
+  }
   pintar();
+  if (fbAntes && tAhora - transT < 0.45f) {     // la nueva entra por el lado y empuja a la de antes (0,45 s, frenando al final)
+    const float p = (tAhora - transT) / 0.45f, e = 1 - (1 - p) * (1 - p) * (1 - p);
+    const int k = (int)((1 - e) * D);
+    for (int y = 0; y < D && k > 0; y++) {
+      uint16_t *f = fb + y * D, *o = fbAntes + y * D;
+      if (transDir > 0) { memmove(f + k, f, (D - k) * 2); memcpy(f, o + (D - k), k * 2); }
+      else { memmove(f, f + k, (D - k) * 2); memcpy(f + (D - k), o, k * 2); }
+    }
+  }
   const uint32_t pintado = millis();
   // ponytail: dibujar y mandar en paralelo (dos memorias, otro núcleo) dañó la pantalla en la 2.0.415 (sin calles, fondo
   // en rayas): se volvió a uno tras otro. Reintentarlo solo con Mapi en el cable para ver qué dice.
