@@ -1,6 +1,6 @@
 // ===== Mapi: la pantalla redonda del mapa, debajo del volante =====
 // Placa: Waveshare ESP32-S3-Touch-AMOLED-1.75 (redonda 466x466, CO5300 por QSPI). Siempre muestra el mapa, con la
-// estética de la pantalla grande del carro: calles azules, ruta violeta, tarjetas de vidrio y la pila de gato.
+// estética de la pantalla grande del carro: calles azules, ruta azul y los letreros por la orilla redonda.
 // Todo lo manda el celular por Bluetooth (app Cubi): las calles, dónde va el carro, el giro, la pila, el clima y la hora.
 // Sin celular queda la hora y lo último que supo.
 // La letra (fuente.h) es la de Cubi: la copia el taller de GitHub antes de compilar.
@@ -163,13 +163,63 @@ static void dosRenglones(const char *s, float x, float cy, float tam, const Col 
   char a[48]; strlcpy(a, s, min(corte + 1, (int)sizeof a));
   texto(a, x, cy - tam * 0.6f, tam, c, 1, true, cabe); texto(s + corte + 1, x, cy + tam * 0.6f, tam, c, 1, true, cabe);
 }
-// tarjeta de vidrio, como las de la pantalla grande: translúcida, más clara arriba, borde de luz y su sombra
-static void vidrio(float x0, float y0, float x1, float y1, float r, bool oscuro = false) {
-  const float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, hw = (x1 - x0) / 2, hh = (y1 - y0) / 2;
-  figura(x0, y0 + 3, x1, y1 + 5, Col{4, 6, 20}, 0.35f, [=](float px, float py) { return dCaja(px, py, cx, cy + 4, hw, hh, r); });
-  if (oscuro) figura(x0, y0, x1, y1, Col{10, 18, 52}, Col{6, 10, 32}, 0.82f, [=](float px, float py) { return dCaja(px, py, cx, cy, hw, hh, r); });
-  else figura(x0, y0, x1, y1, Col{150, 172, 255}, Col{110, 134, 232}, 0.42f, [=](float px, float py) { return dCaja(px, py, cx, cy, hw, hh, r); });
-  figura(x0, y0, x1, y1, BLANCO, 0.75f, [=](float px, float py) { return fabsf(dCaja(px, py, cx, cy, hw, hh, r)) - 1.1f; });
+
+// texto por la orilla redonda: centrado en el ángulo a (grados; 0 a la derecha, 90 abajo, -90 arriba) a r del centro.
+// abajo: se lee de izquierda a derecha por la curva de abajo; si no, por la de arriba (o por los lados: a 180 se lee
+// de abajo hacia arriba, a 0 de arriba hacia abajo). Cada letra se gira para quedar parada sobre la curva.
+static void textoArco(const char *s, float r, float a, float tam, const Col &c, bool abajo) {
+  const float esc = tam / FUENTE_ALTO, w = anchoTexto(s, tam), dir = abajo ? -1 : 1;
+  float pluma = 0;
+  while (*s) {
+    const Letra *l = letra(sigUtf8(s));
+    if (!l) continue;
+    const float av = l->avance * esc, th = a * PI / 180 + dir * (pluma + av / 2 - w / 2) / r;
+    pluma += av;
+    if (!l->w) continue;
+    const float ct = cosf(th), st = sinf(th), px = C + r * ct, py = C + r * st;
+    const float Xx = abajo ? st : -st, Xy = abajo ? -ct : ct, Yx = abajo ? ct : -ct, Yy = abajo ? st : -st;   // hacia donde se lee y hacia abajo de la letra
+    const float R = tam * 0.8f;
+    for (int y = (int)fmaxf(0, py - R); y < (int)fminf(D, py + R); y++)
+      for (int x = (int)fmaxf(0, px - R); x < (int)fminf(D, px + R); x++) {
+        const float dx = x + 0.5f - px, dy = y + 0.5f - py, lx = dx * Xx + dy * Xy, ly = dx * Yx + dy * Yy;
+        const float u = (lx + av / 2) / esc - l->x0 - 0.5f, v = ly / esc - 20 - l->y0 - 0.5f;
+        const int u0 = (int)floorf(u), v0 = (int)floorf(v);
+        if (u0 < -1 || v0 < -1 || u0 >= l->w || v0 >= l->h) continue;
+        const float fu = u - u0, fv = v - v0;
+        const float al = (alfaLetra(l, u0, v0) * (1 - fu) + alfaLetra(l, u0 + 1, v0) * fu) * (1 - fv) + (alfaLetra(l, u0, v0 + 1) * (1 - fu) + alfaLetra(l, u0 + 1, v0 + 1) * fu) * fv;
+        if (al > 0.01f) mezclar(x, y, c, al);
+      }
+  }
+}
+static float angTexto(const char *s, float tam, float r) { return anchoTexto(s, tam) / r * 180 / PI; }   // cuántos grados ocupa
+static void enAng(float a, float r, float &x, float &y) { x = C + r * cosf(a * PI / 180); y = C + r * sinf(a * PI / 180); }
+// los íconos de los datos
+static void icoArena(float cx, float cy, float r) {   // lo que falta: reloj de arena
+  const float w = r * 0.75f;
+  float ax[3] = {cx - w * .8f, cx + w * .8f, cx}, ay[3] = {cy - r, cy - r, cy}; rellenar(ax, ay, 3, Col{230, 236, 255}, 0.3f);
+  float bx[3] = {cx - w * .8f, cx + w * .8f, cx}, by[3] = {cy + r, cy + r, cy}; rellenar(bx, by, 3, Col{255, 207, 92}, 1);
+  for (int k = -1; k <= 1; k += 2) { grueso(cx + k * w * .8f, cy - r, cx, cy, 1.8f, BLANCO, 1); grueso(cx + k * w * .8f, cy + r, cx, cy, 1.8f, BLANCO, 1); }
+  grueso(cx - w, cy - r, cx + w, cy - r, 2.6f, BLANCO, 1); grueso(cx - w, cy + r, cx + w, cy + r, 2.6f, BLANCO, 1);
+}
+static void icoLlegada(float cx, float cy, float r) {   // a qué hora se llega: bandera de meta con un relojito
+  grueso(cx - r * .75f, cy + r, cx - r * .75f, cy - r, 2.4f, BLANCO, 1);
+  const float q = r * .42f;
+  for (int i = 0; i < 3; i++) for (int j = 0; j < 2; j++) {
+    const float x0 = cx - r * .75f + i * q, y0 = cy - r + j * q;
+    float px[4] = {x0, x0 + q, x0 + q, x0}, py[4] = {y0, y0, y0 + q, y0 + q};
+    rellenar(px, py, 4, (i + j) % 2 ? Col{40, 52, 100} : BLANCO, 1);
+  }
+  const float rr = r * .52f, kx = cx + r * .45f, ky = cy + r * .45f; const Col os{10, 18, 52};
+  disco(kx, ky, rr + 1.3f, os, 1); disco(kx, ky, rr, Col{255, 207, 92}, 1);
+  grueso(kx, ky, kx, ky - rr * .6f, 1.6f, os, 1); grueso(kx, ky, kx + rr * .5f, ky, 1.6f, os, 1);
+}
+static void icoMonte(float cx, float cy, float r) {   // la altura
+  float px[5] = {cx - r, cx - r * .2f, cx + r * .25f, cx + r * .5f, cx + r}, py[5] = {cy + r * .7f, cy - r * .7f, cy + r * .05f, cy - r * .3f, cy + r * .7f};
+  rellenar(px, py, 5, BLANCO, 1);
+}
+static void icoRayo(float cx, float cy, float r) {   // la pila del carro
+  float px[6] = {cx + r * .25f, cx - r * .55f, cx - r * .05f, cx - r * .25f, cx + r * .55f, cx + r * .05f}, py[6] = {cy - r, cy + r * .12f, cy + r * .12f, cy + r, cy - r * .2f, cy - r * .2f};
+  rellenar(px, py, 6, Col{120, 230, 160}, 1);
 }
 
 // ---------------------------------------------------------------- lo que manda el celular
@@ -244,7 +294,8 @@ int pilaB = -1, pilaReal = -1, pilaWltp = -1; bool pilaCarga = false; float pila
 int climaG = -1000; char climaE[12] = "", climaLugar[28] = ""; bool climaNoche = false;
 int horaMin = -1; float horaT = 0;
 char calleAhora[40] = ""; int limV = -1; bool limX = false;
-float zoomMapa = 1, tamFlecha = 1;   // los pone la app (pestaña Mapi): acercar o alejar el mapa y el tamaño de la flecha   // la calle por donde va y el límite de la vía (de Google)
+float zoomMapa = 1, tamFlecha = 1, giroPantalla = 0; bool estiloAbajo = false;   // estilo: los datos a los lados (de fábrica) o abajo
+int altura = -10000, faltaT = -1;   // la altura sobre el mar (m) y los minutos que faltan para llegar   // los pone la app (pestaña Mapi): acercar o alejar el mapa y el tamaño de la flecha   // la calle por donde va y el límite de la vía (de Google)
 
 static String decodificar(const String &s) {   // %XX y + -> espacio
   String o; o.reserve(s.length());
@@ -276,13 +327,15 @@ static void orden(const String &linea) {
   } else if (ruta == "/giro") {   // d: izq, der, recto, fin o vacío (sin ruta); m: metros; c: la calle
     strlcpy(giroDir, valor(q, "d").c_str(), sizeof giroDir); giroM = tiene(q, "m") ? valor(q, "m").toInt() : -1;
     strlcpy(giroCalle, valor(q, "c").c_str(), sizeof giroCalle); giroT = tAhora;
-  } else if (ruta == "/llega") { strlcpy(llegaTxt, valor(q, "h").c_str(), sizeof llegaTxt); faltaM = tiene(q, "d") ? valor(q, "d").toInt() : -1; }
+  } else if (ruta == "/llega") { strlcpy(llegaTxt, valor(q, "h").c_str(), sizeof llegaTxt); faltaM = tiene(q, "d") ? valor(q, "d").toInt() : -1; faltaT = tiene(q, "t") ? valor(q, "t").toInt() : -1; }
   else if (ruta == "/pila") {
     pilaB = valor(q, "b").toInt(); pilaReal = tiene(q, "r") ? valor(q, "r").toInt() : -1; pilaWltp = tiene(q, "w") ? valor(q, "w").toInt() : -1;
     pilaCarga = valor(q, "c") == "1"; pilaKw = valor(q, "k").toFloat(); pilaHoras = tiene(q, "h") ? valor(q, "h").toFloat() : -1; pilaProm = valor(q, "p").toFloat();
   } else if (ruta == "/clima") { climaG = valor(q, "t").toInt(); strlcpy(climaE, valor(q, "e").c_str(), sizeof climaE); strlcpy(climaLugar, valor(q, "l").c_str(), sizeof climaLugar); climaNoche = valor(q, "n") == "1"; }
   else if (ruta == "/hora") { horaMin = valor(q, "m").toInt(); horaT = tAhora; }
-  else if (ruta == "/ajuste") { zoomMapa = lim(valor(q, "z").toFloat(), 0.5f, 2.5f); tamFlecha = lim(valor(q, "f").toFloat(), 0.6f, 2.5f); }
+  else if (ruta == "/ajuste") { zoomMapa = lim(valor(q, "z").toFloat(), 0.5f, 2.5f); tamFlecha = lim(valor(q, "f").toFloat(), 0.6f, 2.5f);
+    giroPantalla = lim(valor(q, "g").toFloat(), -180, 180); estiloAbajo = valor(q, "e") == "1"; }
+  else if (ruta == "/alt") altura = tiene(q, "m") ? valor(q, "m").toInt() : -10000;
   else if (ruta == "/calle") strlcpy(calleAhora, valor(q, "c").c_str(), sizeof calleAhora);
   else if (ruta == "/limite") { limV = valor(q, "v").toInt(); limX = valor(q, "x") == "1"; }
 }
@@ -399,14 +452,15 @@ static void mapa(float cyCarro) {
   const Pasada PAS[] = {{5, RIO, 6}, {0, CALLE, 8}, {1, AVENIDA, 13}, {2, RUTA_B, 19}, {2, RUTA, 12}, {6, Col{242, 153, 0}, 12}, {7, Col{232, 69, 60}, 12}};
   for (const auto &ps : PAS) for (int v = 0; v < c.nv; v++) {
     if (c.clase[v] != ps.clase) continue;
+    const float cerca = ps.clase == 2 || ps.clase >= 6 ? 0 : CERCA;   // la ruta empieza en el carro: lo ya andado no se pinta
     float ax, ay; aCarro(c.ini[v], ax, ay);
     for (int i = c.ini[v] + 1; i < c.ini[v + 1]; i++) {
       float bx, by; aCarro(i, bx, by);
       float px = ax, py = ay, qx = bx, qy = by;
       ax = bx; ay = by;
-      if ((py < CERCA && qy < CERCA) || (py > LEJOS && qy > LEJOS) || (fminf(fabsf(px), fabsf(qx)) > LEJOS && px * qx > 0)) continue;
-      if (py < CERCA) { const float t = (CERCA - py) / (qy - py); px += (qx - px) * t; py = CERCA; }   // se recorta en el borde de la cámara
-      if (qy < CERCA) { const float t = (CERCA - qy) / (py - qy); qx += (px - qx) * t; qy = CERCA; }
+      if ((py < cerca && qy < cerca) || (py > LEJOS && qy > LEJOS) || (fminf(fabsf(px), fabsf(qx)) > LEJOS && px * qx > 0)) continue;
+      if (py < cerca) { const float t = (cerca - py) / (qy - py); px += (qx - px) * t; py = cerca; }   // se recorta en el borde de la cámara
+      if (qy < cerca) { const float t = (cerca - qy) / (py - qy); qx += (px - qx) * t; qy = cerca; }
       float sx0, sy0, k0, sx1, sy1, k1; proy(px, py, sx0, sy0, k0); proy(qx, qy, sx1, sy1, k1);
       if (fmaxf(sx0, sx1) < -20 || fminf(sx0, sx1) > D + 20 || fmaxf(sy0, sy1) < -20 || fminf(sy0, sy1) > D + 20) continue;
       // un cuadrilátero que se angosta con la distancia, y la unión redonda
@@ -424,23 +478,35 @@ static void carrito(float cx, float cy) {   // la flecha azul de Google, con su 
   float ox[4], oy[4]; for (int i = 0; i < 4; i++) { ox[i] = cx + (px[i] - cx) * 1.3f; oy[i] = cy + (py[i] - cy) * 1.3f + 1; }
   rellenar(ox, oy, 4, BLANCO, 1); rellenar(px, py, 4, Col{66, 133, 244}, 1);
 }
-// arriba y abajo se oscurece un poco, para que se lean las tarjetas
-static void velos() {   // con cuentas enteras sobre el 5-6-5: con decimales tardaban medio cuadro
-  // en dieciseisavos y con tramado al redondear, para que no salgan rayas
-  static const int T[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
-  const int cr = (6 >> 3) << 4, cg = (12 >> 2) << 4, cb = (40 >> 3) << 4;
-  for (int y = 0; y < 150; y++) {
-    const int a = (int)(64 * 0.62f * powf(1 - y / 150.f, 1.4f));
-    if (a <= 0) continue;
-    for (int k = 0; k < 2; k++) {
-      const int yy = k ? D - 1 - y : y; uint16_t *f = fb + yy * D;
-      for (int x = 0; x < D; x++) {
-        uint16_t q = f[x]; int r = ((q >> 11) & 31) << 4, g = ((q >> 5) & 63) << 4, b = (q & 31) << 4, t = T[(x & 3) | ((yy & 3) << 2)];
-        r = (r + (((cr - r) * a) >> 6) + t) >> 4; g = (g + (((cg - g) * a) >> 6) + t) >> 4; b = (b + (((cb - b) * a) >> 6) + t) >> 4;
-        f[x] = (uint16_t)((r << 11) | (g << 5) | b);
-      }
+// la orilla se oscurece y se funde con el mapa (nada en el centro): ahí van los letreros, sin tarjetas
+uint8_t *vela;   // cuánto se oscurece cada pixel (de 0 a 64), calculado una vez
+static void vineta() {
+  if (!vela) {
+    vela = (uint8_t *)ps_malloc(D * D);
+    for (int y = 0; y < D; y++) for (int x = 0; x < D; x++) {
+      const float t = lim((sqrtf((x + .5f - C) * (x + .5f - C) + (y + .5f - C) * (y + .5f - C)) - 150) / (C - 150), 0, 1);
+      vela[y * D + x] = (uint8_t)(64 * 0.84f * powf(t, 1.4f));
     }
   }
+  for (int i = 0; i < D * D; i++) {   // con cuentas enteras sobre el 5-6-5, hacia el azul oscuro (8, 14, 44)
+    const int a = vela[i]; if (!a) continue;
+    uint16_t &p = fb[i]; int r = p >> 11, g = (p >> 5) & 63, b = p & 31;
+    r += ((1 - r) * a) / 64; g += ((3 - g) * a) / 64; b += ((5 - b) * a) / 64;
+    p = (uint16_t)((r << 11) | (g << 5) | b);
+  }
+}
+// toda la imagen girada (la app), por si Mapi queda puesto en diagonal; sin giro se manda tal cual
+uint16_t *fbGiro;
+static uint16_t *girar() {
+  if (fabsf(giroPantalla) < 0.5f) return fb;
+  if (!fbGiro) fbGiro = (uint16_t *)ps_malloc(D * D * 2);
+  const float a = -giroPantalla * PI / 180; const int32_t c = (int32_t)(cosf(a) * 65536), s = (int32_t)(sinf(a) * 65536), m = D / 2;
+  for (int y = 0; y < D; y++) {
+    const int32_t dy = y - m; int32_t sx = (m << 16) - m * c - dy * s, sy = (m << 16) - m * s + dy * c;
+    uint16_t *o = fbGiro + y * D;
+    for (int x = 0; x < D; x++, sx += c, sy += s) { const int ix = sx >> 16, iy = sy >> 16; o[x] = (ix >= 0 && iy >= 0 && ix < D && iy < D) ? fb[iy * D + ix] : 0; }
+  }
+  return fbGiro;
 }
 // la flecha del giro
 static void flecha(float cx, float cy, float k, const char *dir) {
@@ -457,33 +523,6 @@ static void flecha(float cx, float cy, float k, const char *dir) {
   figura(cx - k, cy - k, cx + k, cy + k, BLANCO, 1, [=](float x, float y) {
     return fminf(dSegmento(x, y, cx - s * k * 0.3f, cy + k * 0.55f, cx - s * k * 0.3f, cy - k * 0.1f, w / 2), dSegmento(x, y, cx - s * k * 0.3f, cy - k * 0.1f, cx + s * k * 0.2f, cy - k * 0.1f, w / 2)); });
   float px[3] = {cx + s * k * 0.62f, cx + s * k * 0.14f, cx + s * k * 0.14f}, py[3] = {cy - k * 0.1f, cy - k * 0.48f, cy + k * 0.28f}; rellenar(px, py, 3, BLANCO, 1);
-}
-// la pila: la cabeza de gato de vidrio, llena hasta el porcentaje (con ola), y el número adentro
-static float dGato(float x, float y, float cx, float cy, float h) {
-  const float hr = h * 0.44f, hy = cy + h * 0.08f;
-  float d = (sqrtf((x - cx) * (x - cx) / (hr * hr) + (y - hy) * (y - hy) / (hr * hr * 0.74f)) - 1) * hr * 0.86f;
-  for (int s = -1; s <= 1; s += 2) d = fminf(d, dTriangulo(x, y, cx + s * hr * 0.08f, hy - hr * 0.78f, cx + s * hr * 0.76f, hy - hr * 1.3f, cx + s * hr * 0.98f, hy - hr * 0.2f));
-  return d;
-}
-static void pila(float cx, float cy, float h) {
-  if (pilaB < 0) return;
-  const int pc = (int)lim(pilaB, 0, 100);
-  const Col liq0 = pc < 15 ? Col{255, 154, 138} : pc < 35 ? Col{255, 224, 138} : Col{168, 255, 203}, liq1 = pc < 15 ? Col{240, 68, 58} : pc < 35 ? Col{245, 165, 36} : Col{47, 196, 122};
-  const float x0 = cx - h * 0.5f, y0 = cy - h * 0.5f, x1 = cx + h * 0.5f, y1 = cy + h * 0.55f;
-  if (pilaCarga) { const float late = 0.5f + 0.5f * sinf(tAhora * 6); figura(x0 - 8, y0 - 8, x1 + 8, y1 + 8, liq1, 0.25f + 0.25f * late, [=](float x, float y) { return dGato(x, y, cx, cy, h) - 5; }); }
-  figura(x0, y0, x1, y1, BLANCO, 0.95f, [=](float x, float y) { return dGato(x, y, cx, cy, h); });
-  figura(x0, y0, x1, y1, Col{40, 62, 160}, Col{24, 40, 120}, 1, [=](float x, float y) { return dGato(x, y, cx, cy, h) + h * 0.05f; });
-  const float nivel = cy + h * 0.46f - h * 0.86f * pc / 100, amp = h * (pilaCarga ? 0.03f : 0.015f), fase = tAhora * (pilaCarga ? 6.f : 2.5f);
-  figura(x0, nivel - amp * 2, x1, y1, liq0, liq1, 1, [=](float x, float y) { return fmaxf(dGato(x, y, cx, cy, h) + h * 0.05f, (nivel + amp * sinf(x * 0.25f + fase)) - y); });
-  if (pilaCarga) for (int i = 0; i < 4; i++) {           // burbujas que suben
-    float sube = fmodf(tAhora * 22 + i * 11, fmaxf(4, cy + h * 0.4f - nivel)), bx = cx - h * 0.22f + i * h * 0.15f;
-    disco(bx, cy + h * 0.4f - sube, 1.6f + (i % 2), BLANCO, 0.7f);
-  }
-  char t[6]; snprintf(t, sizeof t, "%d", pc);
-  textoFilo(t, cx - (pilaCarga ? h * 0.08f : 0), cy + h * 0.15f, h * (pc == 100 ? 0.3f : 0.36f), BLANCO);
-  if (pilaCarga) { const float rx = cx + anchoTexto(t, h * 0.36f) / 2 + h * 0.02f, ry = cy + h * 0.12f, k = h * 0.1f;
-    float px[6] = {rx + k * 0.25f, rx - k * 0.6f, rx - k * 0.05f, rx - k * 0.3f, rx + k * 0.6f, rx + k * 0.05f}, py[6] = {ry - k, ry + k * 0.15f, ry + k * 0.15f, ry + k, ry - k * 0.2f, ry - k * 0.2f};
-    rellenar(px, py, 6, Col{255, 247, 194}, 1); }
 }
 static void nube(float cx, float cy, float r) {
   const bool sol = !strcmp(climaE, "despejado") && !climaNoche, luna = !strcmp(climaE, "despejado") && climaNoche;
@@ -505,6 +544,25 @@ static void metros(int m, char *b, size_t n) {
   if (m < 15) snprintf(b, n, "ya"); else if (m < 1000) snprintf(b, n, "%d m", (m + 5) / 10 * 10); else snprintf(b, n, "%d,%d km", m / 1000, m % 1000 / 100);
 }
 
+static void altTexto(char *b, size_t n) { if (altura >= 1000) snprintf(b, n, "%d.%03d m", altura / 1000, altura % 1000); else snprintf(b, n, "%d m", altura); }
+// abajo, en las dos pantallas: lo que alcanza la pila con el consumo de ahora (o la carga) y la altura por la curva
+static void datosAbajo() {
+  char b[40];
+  if (pilaCarga) {
+    snprintf(b, sizeof b, pilaKw > 0.3f ? "Cargando %.1f kW" : "Cargando", pilaKw); for (char *p = b; *p; p++) if (*p == '.') *p = ',';
+    const float w = anchoTexto(b, 21), x0 = C - (w + 24) / 2; icoRayo(x0 + 8, 392, 11); texto(b, x0 + 24, 392, 21, BLANCO, 1, true);
+  } else if (pilaReal >= 0) {
+    char p[16] = ""; if (pilaProm > 0) { snprintf(p, sizeof p, "%.1f kWh", pilaProm); for (char *q = p; *q; q++) if (*q == '.') *q = ','; }
+    snprintf(b, sizeof b, "%d km", pilaReal);
+    const float w1 = anchoTexto(b, 22), w2 = p[0] ? anchoTexto(p, 15) + 8 : 0, x0 = C - (w1 + w2 + 24) / 2;
+    icoRayo(x0 + 8, 392, 11); texto(b, x0 + 24, 392, 22, BLANCO, 1, true);
+    if (p[0]) texto(p, x0 + 32 + w1, 393, 15, Col{205, 218, 255}, 1, true);
+  }
+  if (altura > -1000) {
+    altTexto(b, sizeof b); float x, y;
+    textoArco(b, 200, 85, 19, Col{205, 218, 255}, true); enAng(85 + angTexto(b, 19, 200) / 2 + 6, 200, x, y); icoMonte(x, y, 10);
+  }
+}
 static void pintar() {
   fondo();
   // el giro se queda hasta que el celular diga que ya no hay ruta (parado, Maps no manda avisos nuevos); sin celular, 3 min
@@ -514,53 +572,46 @@ static void pintar() {
     textoFilo("Actualizando", C, 200, 40, BLANCO); textoFilo(p, C, 260, 56, BLANCO);
     return;
   }
-  const float cyCarro = nav ? 322 : 312;
+  const float cyCarro = 292;
   mapa(cyCarro);
-  velos();
+  vineta();
   carrito(C, cyCarro);
   char b[40];
-  if (nav) {                                                 // arriba: la tarjeta del giro
-    vidrio(78, 46, 388, 156, 32, true);
-    flecha(134, 101, 74, giroDir);
+  if (nav) {
+    // arriba, por la curva: cuánto falta para el giro; debajo la flecha y la calle
     if (!strcmp(giroDir, "fin")) snprintf(b, sizeof b, giroM >= 0 && giroM > 15 ? "Llegando" : "Llegaste"); else if (giroM >= 0) metros(giroM, b, sizeof b); else b[0] = 0;
-    if (b[0]) {
-      texto(b, 186, giroCalle[0] ? 84 : 101, 44, BLANCO, 1, true, 190);
-      if (giroCalle[0]) texto(giroCalle, 188, 128, 21, Col{205, 218, 255}, 1, true, 186);
-    } else if (giroCalle[0]) dosRenglones(giroCalle, 186, 101, 25, BLANCO, 190);   // sin metros ("Dirígete al noroeste…"): la indicación en grande, en dos renglones
-    if (pilaB >= 0 || llegaTxt[0] || faltaM >= 0) {           // sin pila ni hora de llegada, la tarjeta de abajo sobra
-    vidrio(124, 336, 342, 412, 34);                          // abajo: la pila, a qué hora se llega y lo que falta
-    pila(165, 373, 56);
-    if (llegaTxt[0]) { snprintf(b, sizeof b, "llega %s", llegaTxt); texto(b, 202, 358, 23, BLANCO, 1, true, 132); }
-    char f[16] = "", r[12] = ""; if (faltaM >= 0) metros(faltaM, f, sizeof f); if (pilaReal >= 0) snprintf(r, sizeof r, "%d km", pilaReal);
-    snprintf(b, sizeof b, "%s%s%s", f, f[0] && r[0] ? "  ·  " : "", r); texto(b, 202, 389, 16, Col{225, 232, 255}, 1, true, 132);
+    if (b[0]) textoArco(b, 195, -90, 46, BLANCO, false);
+    flecha(C, b[0] ? 96 : 82, b[0] ? 54 : 62, giroDir);
+    if (giroCalle[0]) texto(giroCalle, C, 136, b[0] ? 19 : 22, b[0] ? Col{205, 218, 255} : BLANCO, 1, false, 290);
+    char t[16] = ""; if (faltaT >= 0) { if (faltaT < 60) snprintf(t, sizeof t, "%d min", faltaT); else snprintf(t, sizeof t, "%d h %02d", faltaT / 60, faltaT % 60); }
+    float x, y;
+    if (!estiloAbajo) {
+      // a los lados, por la orilla: a la izquierda lo que falta (de abajo hacia arriba), a la derecha la hora de llegada
+      if (t[0]) { textoArco(t, 205, 184, 27, BLANCO, false); enAng(184 - angTexto(t, 27, 205) / 2 - 8, 203, x, y); icoArena(x, y, 12); }
+      if (llegaTxt[0]) { textoArco(llegaTxt, 205, 6, 30, BLANCO, false); enAng(6 - angTexto(llegaTxt, 30, 205) / 2 - 9, 203, x, y); icoLlegada(x, y, 14); }
+      datosAbajo();
+    } else {
+      // la otra opción: abajo, lo que falta y la altura en una fila y la hora de llegada por la curva
+      char a[16] = ""; if (altura > -1000) altTexto(a, sizeof a);
+      const float w1 = t[0] ? anchoTexto(t, 21) + 22 : 0, w2 = a[0] ? anchoTexto(a, 21) + 22 : 0; float xx = C - (w1 + w2 + (t[0] && a[0] ? 18 : 0)) / 2;
+      if (t[0]) { icoArena(xx + 8, 362, 11); texto(t, xx + 22, 362, 21, BLANCO, 1, true); xx += w1 + 18; }
+      if (a[0]) { icoMonte(xx + 8, 362, 11); texto(a, xx + 22, 362, 21, BLANCO, 1, true); }
+      if (llegaTxt[0]) { textoArco(llegaTxt, 188, 86, 32, BLANCO, true); enAng(86 + angTexto(llegaTxt, 32, 188) / 2 + 9, 190, x, y); icoLlegada(x, y, 16); }
     }
-  } else {                                                   // sin ruta: la hora grande, el clima y la pila con la autonomía
+  } else {                                                   // sin ruta: la hora grande, el clima, la calle y abajo la pila y la altura
     horaTexto(b, sizeof b);
-    if (b[0]) textoFilo(b, C, 96, 84, BLANCO);
+    if (b[0]) textoFilo(b, C, 92, 80, BLANCO);
     if (climaG > -1000) {
       char g[40]; snprintf(g, sizeof g, "%d°  %s", climaG, climaLugar);
-      const float w = fminf(170, anchoTexto(g, 24)), x0 = C - (w + 54) / 2;
-      vidrio(x0, 160, x0 + w + 54, 206, 23); nube(x0 + 26, 182, 16); texto(g, x0 + 46, 182, 24, BLANCO, 1, true, 170);
+      const float w = fminf(200, anchoTexto(g, 22)), x0 = C - (w + 40) / 2;
+      nube(x0 + 14, 152, 15); texto(g, x0 + 36, 152, 22, BLANCO, 1, true, 200);
     }
-    if (calleAhora[0]) textoFilo(calleAhora, C, climaG > -1000 ? 228 : 182, 19, Col{220, 228, 255}, false, 300);   // la calle por donde va
-    if (pilaB >= 0) {
-      vidrio(96, 330, 370, 418, 40);
-      pila(146, 373, 66);
-      if (pilaCarga) {
-        snprintf(b, sizeof b, pilaKw > 0.3f ? "Cargando %.1f kW" : "Cargando", pilaKw); for (char *p = b; *p; p++) if (*p == '.') *p = ',';
-        texto(b, 190, 356, 24, BLANCO, 1, true, 168);
-        if (pilaHoras >= 0) { snprintf(b, sizeof b, "lleno en %d h %02d", (int)pilaHoras, (int)(pilaHoras * 60) % 60); texto(b, 190, 390, 18, Col{225, 232, 255}, 1, true, 168); }
-      } else {
-        if (pilaReal >= 0) { snprintf(b, sizeof b, "Real %d km", pilaReal); texto(b, 190, 356, 26, BLANCO, 1, true, 168); }
-        char w[16] = "", p[16] = ""; if (pilaWltp >= 0) snprintf(w, sizeof w, "WLTP %d km", pilaWltp); if (pilaProm > 0) snprintf(p, sizeof p, "%.1f", pilaProm);
-        for (char *q = p; *q; q++) if (*q == '.') *q = ',';
-        snprintf(b, sizeof b, "%s%s%s", w, w[0] && p[0] ? " · " : "", p); texto(b, 190, 390, 18, Col{225, 232, 255}, 1, true, 168);
-      }
-    }
+    if (calleAhora[0]) texto(calleAhora, C, 186, 18, Col{205, 218, 255}, 1, false, 290);   // la calle por donde va
+    datosAbajo();
   }
   // el límite de velocidad de la vía, como la señal de tránsito; si va pasado, el aro rojo late
   if (limV > 0) {
-    const float sx = 404, sy = 236, r = 27, late = limX ? 0.5f + 0.5f * sinf(tAhora * 9) : 0;
+    float sx, sy; enAng(140, 168, sx, sy); const float r = 27, late = limX ? 0.5f + 0.5f * sinf(tAhora * 9) : 0;
     if (limX) disco(sx, sy, r + 8, Col{232, 69, 60}, 0.25f + 0.35f * late);
     disco(sx, sy, r, Col{232, 40, 40}, 1); disco(sx, sy, r - 5.5f, BLANCO, 1);
     char v[6]; snprintf(v, sizeof v, "%d", limV); texto(v, sx, sy, limV >= 100 ? 20 : 24, Col{20, 20, 24});
@@ -594,7 +645,7 @@ void loop() {
   const uint32_t pintado = millis();
   // ponytail: dibujar y mandar en paralelo (dos memorias, otro núcleo) dañó la pantalla en la 2.0.415 (sin calles, fondo
   // en rayas): se volvió a uno tras otro. Reintentarlo solo con Mapi en el cable para ver qué dice.
-  panel->draw16bitRGBBitmap(0, 0, fb, D, D);
+  panel->draw16bitRGBBitmap(0, 0, girar(), D, D);
   if (Serial.available() && Serial.read() == 't')
     Serial.printf("cuadro %lu ms (dibujo %lu, pantalla %lu)\n", (unsigned long)(millis() - ahora), (unsigned long)(pintado - ahora), (unsigned long)(millis() - pintado));
 }

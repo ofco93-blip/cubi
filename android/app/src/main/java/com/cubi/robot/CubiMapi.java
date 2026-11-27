@@ -49,7 +49,7 @@ final class CubiMapi {
     private final ArrayDeque<Paq> cola = new ArrayDeque<>();
     private volatile String estado = "Buscando a Mapi…";
     private static volatile List<String> ultMapa; private static volatile int ultVias; private static volatile String ultCierre;
-    private String yaGiro = "", yaLlega = "", yaPila = "", yaClima = "", yaLimite = "", yaAjuste = ""; private long yaHora, yaSinGps, yaCalle, yaLim;
+    private String yaGiro = "", yaLlega = "", yaPila = "", yaClima = "", yaLimite = "", yaAjuste = "", yaAlt = ""; private long yaHora, yaSinGps, yaCalle, yaLim;
     private volatile int limiteAhora = -1; private double limLa = Double.NaN, limLo;
     // la actualización
     private byte[] fw; private int enviados; private volatile boolean actualizando, terminando;
@@ -132,7 +132,7 @@ final class CubiMapi {
     private void empezar() {
         if (listo) return;
         listo = true; version = ""; estado = "Conectado · firmware anterior a la 2.0.400 (toca Actualizar Mapi).";
-        yaGiro = yaLlega = yaPila = yaClima = yaLimite = yaAjuste = ""; yaHora = 0; yaCalle = 0;            // recién conectado: se manda todo otra vez
+        yaGiro = yaLlega = yaPila = yaClima = yaLimite = yaAjuste = yaAlt = ""; yaHora = 0; yaCalle = 0;            // recién conectado: se manda todo otra vez
         mandar("/hola");                                               // ¿qué versión tiene? (la de antes no contesta)
         ui.post(this::mandarMapa);
     }
@@ -247,7 +247,15 @@ final class CubiMapi {
             }
             String g = "/giro?d=" + d + (nav && sv.navMetros >= 0 && !sigue ? "&m=" + Math.round(sv.navMetros) : "") + (nav ? "&c=" + cod(calle) : "");
             if (!g.equals(yaGiro)) { yaGiro = g; mandar(g); }
-            String ll = "/llega?h=" + cod(nav ? sv.navLlega : "") + (nav && sv.navDestM >= 0 ? "&d=" + sv.navDestM : "");
+            // los minutos que faltan, de la hora de llegada ("8:58", "8:58 p. m." o "20:58"); el viaje cabe en 12 h
+            int faltan = -1;
+            java.util.regex.Matcher hl = java.util.regex.Pattern.compile("(\\d{1,2})[:.](\\d{2})").matcher(nav ? sv.navLlega : "");
+            if (hl.find()) {
+                java.util.Calendar c = java.util.Calendar.getInstance();
+                int ahoraM = c.get(java.util.Calendar.HOUR_OF_DAY) * 60 + c.get(java.util.Calendar.MINUTE), llM = Integer.parseInt(hl.group(1)) * 60 + Integer.parseInt(hl.group(2));
+                faltan = ((llM - ahoraM) % 720 + 720) % 720;
+            }
+            String ll = "/llega?h=" + cod(nav ? sv.navLlega : "") + (nav && sv.navDestM >= 0 ? "&d=" + sv.navDestM : "") + (faltan >= 0 ? "&t=" + faltan : "");
             if (!ll.equals(yaLlega)) { yaLlega = ll; mandar(ll); }
             CubiEnergia en = CubiCarroDatos.cuentas;
             if (!Double.isNaN(en.energia)) {
@@ -269,8 +277,12 @@ final class CubiMapi {
                 limLa = la; limLo = lo;
             }
             android.content.SharedPreferences pr = sv.getSharedPreferences("cubi", 0);   // el zoom y la flecha (pestaña Mapi)
-            String aj = String.format(Locale.US, "/ajuste?z=%.2f&f=%.2f", pr.getFloat("mapiZoom", 1), pr.getFloat("mapiFlecha", 1));
+            String aj = String.format(Locale.US, "/ajuste?z=%.2f&f=%.2f&g=%.0f&e=%d", pr.getFloat("mapiZoom", 1), pr.getFloat("mapiFlecha", 1),
+                    pr.getFloat("mapiGiro", 0), Math.round(pr.getFloat("mapiEstilo", 0)));
             if (!aj.equals(yaAjuste)) { yaAjuste = aj; mandar(aj); }
+            int alt = sv.altura != Integer.MIN_VALUE ? sv.altura : sv.climaAltura;   // la altura del GPS (o la del clima)
+            String al = "/alt" + (alt == Integer.MIN_VALUE ? "" : "?m=" + alt);
+            if (!al.equals(yaAlt)) { yaAlt = al; mandar(al); }
             String lm = "/limite?v=" + limiteAhora + "&x=" + (limiteAhora > 0 && sv.kmh > limiteAhora + 5 ? 1 : 0);   // x: va pasado del límite
             if (!lm.equals(yaLimite)) { yaLimite = lm; mandar(lm); }
             if (sv.climaGrados != Integer.MIN_VALUE) {
