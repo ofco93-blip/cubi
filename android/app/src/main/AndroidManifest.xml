@@ -92,7 +92,7 @@
         <meta-data android:name="androidx.car.app.minCarApiLevel" android:value="1" />
         <!-- recibe los giros de la navegación de Google (solo dentro de la app) -->
         <service android:name=".CubiGiros" android:exported="false" />
-        <service android:name=".CubiCarroDatos" android:label="Cubi" android:icon="@drawable/ic_launcher" android:exported="true">
+        <service android:name=".CubiCarroDatos" android:label="Mascota Auto" android:icon="@drawable/ic_launcher" android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />
                 <category android:name="androidx.car.app.category.NAVIGATION" />

@@ -271,7 +271,7 @@ section[hidden] { display: none; }
 
 <!-- ================= MAPA ================= -->
 <section id="tab-mapa" hidden>
-  <div class="grupo robot"><b>El robot</b><small>La pantalla chiquita que va sobre el tablero</small></div>
+  <div class="grupo robot"><b>Cubi</b><small>El robot de pantalla chiquita, sobre el tablero</small></div>
   <h2>Mapa en el robot</h2>
   <div class="card"><p class="note">Por ahora Cubi no muestra mapas ni flechas de giro: eso va en Mapi.</p></div>
   <div class="card" hidden>
@@ -289,7 +289,7 @@ section[hidden] { display: none; }
       Mapa completo apagado: Cubi con la manito o el volante y la tarjeta con el mini mapa. Prendido: el mapa en toda la pantalla, con el carrito, la ruta y arriba la barra con el giro, los metros y la calle.</p>
     </details>
   </div>
-  <div class="grupo auto"><b>La pantalla del carro</b><small>Android Auto: lo que sale al abrir Cubi en la pantalla grande</small></div>
+  <div class="grupo auto"><b>Mascota Auto</b><small>Zelda en la pantalla del carro (Android Auto)</small></div>
   <h2>Destino y ruta</h2>
   <div class="card">
     <p class="note">Con Cubi abierto en la pantalla del carro (Android Auto) y una ruta puesta, el mapa sale allá en cualquiera de los modos; para eso el celular le manda tu posición a OpenStreetMap (overpass-api.de), igual que en “Solo el mapa”, y necesita “Usar el GPS” prendido.<br><br>Solo los avisos: muestra la flecha cuando se acerca un giro y sigue cantando y reaccionando a lo demás. Solo el mapa: se queda fijo en el mapa mientras haya ruta. Sirve con Google Maps o con Waze; si los dos tienen ruta a la vez, manda Google Maps.</p>
@@ -327,7 +327,7 @@ section[hidden] { display: none; }
 
 <!-- ================= MASCOTAS ================= -->
 <section id="tab-mascotas" hidden>
-  <div class="grupo robot"><b>El robot</b><small>La pantalla chiquita que va sobre el tablero</small></div>
+  <div class="grupo robot"><b>Cubi</b><small>El robot de pantalla chiquita, sobre el tablero</small></div>
   <h2>Mascota del robot</h2>
   <div class="card">
     <div class="paqs">
@@ -344,8 +344,8 @@ section[hidden] { display: none; }
     </details>
   </div>
   <div class="grupo robot"><b>Mapi</b><small>La pantalla redonda del mapa, debajo del volante</small></div>
-  <div class="card"><p class="note" id="mapiEstado">Buscando a Mapi…</p><button class="btn" id="mapiActualizar" style="width:100%;margin-top:10px">Actualizar Mapi</button><p class="note">Mapi va por su cuenta: se conecta directo a este celular, no pasa por Cubi (puede estar Cubi apagado). Siempre muestra el mapa: el giro, la pila del carro, el clima y la hora. Para el mapa hay que tener prendido “Usar el GPS”.</p></div>
-  <div class="grupo auto"><b>La pantalla del carro</b><small>Android Auto: lo que sale al abrir Cubi en la pantalla grande</small></div>
+  <div class="card"><p class="note" id="mapiEstado">Buscando a Mapi…</p><p class="note">Mapi va por su cuenta: se conecta directo a este celular, no pasa por Cubi (puede estar Cubi apagado). Siempre muestra el mapa: el giro, la pila del carro, el clima y la hora. Para el mapa hay que tener prendido “Usar el GPS”.</p></div>
+  <div class="grupo auto"><b>Mascota Auto</b><small>Zelda en la pantalla del carro (Android Auto)</small></div>
   <h2>Mascota de Android Auto</h2>
   <div class="card">
     <div class="row"><span>Personaje</span></div>
@@ -397,7 +397,8 @@ section[hidden] { display: none; }
     <p class="note" id="verNota" style="white-space:pre-line">Revisando si hay versión nueva…</p>
     <button class="btn main" id="actApp">Actualizar la app</button>
     <button class="btn main" id="actCubi">Actualizar a Cubi (firmware)</button>
-    <p class="note">El firmware va por Bluetooth: tarda unos minutos y la app queda bloqueada hasta que termine.</p>
+    <button class="btn main" id="actMapi">Actualizar a Mapi (firmware)</button>
+    <p class="note">Son tres cosas aparte, cada una con su número: la app (con Mascota Auto), Cubi y Mapi. Cubi y Mapi solo piden actualizarse cuando cambia su firmware, no cada vez que cambia la app. El firmware va por Bluetooth: tarda unos minutos y la app queda bloqueada hasta que termine.</p>
     <button class="btn" id="buscarVer">Buscar versión nueva</button>
     <button class="btn" id="subir" hidden>Subir un firmware desde un archivo</button>
   </div>
@@ -652,7 +653,7 @@ function mapiCortina() {
   if (c) { $('mapiCortinaTxt').textContent = Android.mapiEstado(); if (!sigue) setTimeout(() => c.remove(), 2500); }
   if (sigue) setTimeout(mapiCortina, 700);
 }
-$('mapiActualizar').onclick = () => { if (window.Android && Android.actualizarMapi) { Android.actualizarMapi(); setTimeout(mapiCortina, 1500); setTimeout(mapiCortina, 6000); } };
+$('actMapi').onclick = () => { if (window.Android && Android.actualizarMapi) { Android.actualizarMapi(); setTimeout(mapiCortina, 1500); setTimeout(mapiCortina, 6000); } };
 if (window.Android && Android.mapiEstado) setInterval(() => { $('mapiEstado').textContent = 'Mapi: ' + Android.mapiEstado(); }, 2000);
 function climaEstado(si) { $('clima').checked = si; }
 function climaTexto(s) { if (s) $('climaNota').textContent = s; }
@@ -711,19 +712,25 @@ $('actCubi').onclick = () => {
 };
 $('actApp').onclick = () => Android.actualizarApp();
 // versiones: app (la de este celular), firmware (el que tiene Cubi) y la última publicada en GitHub
-let vUltima = -1, vApp = -1, vFw = -1, vError = '';
-function versionGithub(ultima, mia, error) { vUltima = ultima; vApp = mia; vError = error || ''; notaVersiones(); }
+let vUltima = -1, vApp = -1, vFw = -1, vError = '', vCubiUlt = -1, vMapiUlt = -1;
+function versionGithub(ultima, mia, error, cubiUlt, mapiUlt) { vUltima = ultima; vApp = mia; vError = error || ''; vCubiUlt = cubiUlt === undefined ? ultima : cubiUlt; vMapiUlt = mapiUlt === undefined ? ultima : mapiUlt; notaVersiones(); }
+setInterval(() => { if (vUltima >= 0) notaVersiones(); }, 3000);   // la versión de Mapi llega cuando se conecta
 function notaVersiones() {
   const v = n => '2.0.' + n, l = [];
   l.push('App: ' + (vApp > 0 ? v(vApp) : '…') + (vUltima > vApp && vApp > 0 ? ' → hay nueva (' + v(vUltima) + ')' : ''));
-  l.push('Firmware de Cubi: ' + (vFw < 0 ? 'conéctalo para verlo' : vFw === 0 ? 'compilado a mano'
-    : v(vFw) + (vUltima > vFw ? ' → hay nuevo (' + v(vUltima) + ')' : ' (el último)')));
+  l.push('Cubi: ' + (vFw < 0 ? 'conéctalo para verlo' : vFw === 0 ? 'compilado a mano'
+    : v(vFw) + (vCubiUlt > vFw ? ' → hay nuevo (' + v(vCubiUlt) + ')' : ' (el último)')));
+  const mv = window.Android && Android.mapiVersion ? Android.mapiVersion() : '', mn = mv ? parseInt(mv.split('.').pop()) || 0 : -1;
+  const mapiCon = window.Android && Android.mapiEstado && Android.mapiEstado().startsWith('Conectado');
+  l.push('Mapi: ' + (!mapiCon ? 'conéctalo para verlo' : mn < 0 ? 'versión de antes (sin número) → hay nuevo' : mv + (vMapiUlt > mn ? ' → hay nuevo (' + v(vMapiUlt) + ')' : ' (el último)')));
   if (vUltima < 0 && vError) l.push('No pude revisar GitHub: ' + vError);
   $('verNota').textContent = l.join(String.fromCharCode(10));
   // ya al día: el botón se apaga (si no se pudo revisar GitHub queda prendido)
-  const appAlDia = vApp > 0 && vUltima >= 0 && vApp >= vUltima, fwAlDia = vFw > 0 && vUltima >= 0 && vFw >= vUltima;
+  const appAlDia = vApp > 0 && vUltima >= 0 && vApp >= vUltima, fwAlDia = vFw > 0 && vCubiUlt >= 0 && vFw >= vCubiUlt;
   $('actApp').disabled = appAlDia; $('actApp').textContent = appAlDia ? 'La app ya está al día' : 'Actualizar la app';
   $('actCubi').disabled = fwAlDia; $('actCubi').textContent = fwAlDia ? 'Cubi ya está al día' : 'Actualizar a Cubi (firmware)';
+  const mapiAlDia = mn > 0 && vMapiUlt >= 0 && mn >= vMapiUlt;
+  $('actMapi').disabled = mapiAlDia || !mapiCon; $('actMapi').textContent = mapiAlDia ? 'Mapi ya está al día' : 'Actualizar a Mapi (firmware)';
 }
 
 // ---------- asistente ----------

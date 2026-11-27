@@ -37,12 +37,29 @@ jobs:
           cp android/instalador/build/outputs/apk/release/instalador-release.apk FermataAA.apk
 
       - uses: arduino/setup-arduino-cli@v2
+      # Cada parte (la app, Cubi y Mapi) lleva su número. El de Cubi y el de Mapi solo cambian cuando cambia su código:
+      # se compara la huella de sus archivos con la de la versión anterior (versiones.json); si es la misma, se queda
+      # con el número que tenía. La app siempre lleva el número de esta compilación.
+      - name: Versiones de cada parte
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          N=${{ github.run_number }}
+          HC=$(git ls-files -s firmware/cubi ':!firmware/cubi/version.h' | sha1sum | cut -c1-12)
+          HM=$(git ls-files -s firmware/mapi firmware/cubi/fuente.h | sha1sum | cut -c1-12)
+          gh release download -R ${{ github.repository }} -p versiones.json -O antes.json 2>/dev/null || echo '{}' > antes.json
+          VC=$(python3 -c "import json;a=json.load(open('antes.json'));print(a['cubi'] if a.get('cubiHash')=='$HC' else $N)")
+          VM=$(python3 -c "import json;a=json.load(open('antes.json'));print(a['mapi'] if a.get('mapiHash')=='$HM' else $N)")
+          echo "{\"app\":$N,\"cubi\":$VC,\"cubiHash\":\"$HC\",\"mapi\":$VM,\"mapiHash\":\"$HM\"}" > versiones.json
+          cat versiones.json
+          echo "VC=$VC" >> $GITHUB_ENV; echo "VM=$VM" >> $GITHUB_ENV
+
       - name: Firmware
         run: |
           arduino-cli core update-index --additional-urls "$URL_ESP32"
           arduino-cli core install esp32:esp32@3.3.12 --additional-urls "$URL_ESP32"
           # el firmware sabe su número de versión (la app lo muestra)
-          N=${{ github.run_number }}
+          N=$VC
           { echo '#pragma once'; echo "#define VERSION_FW $N"; echo "#define VERSION_FW_TXT \"$N\""; } > firmware/cubi/version.h
           arduino-cli lib install "GFX Library for Arduino@1.6.9" "arduinoFFT@2.0.4" "XPowersLib@0.3.3"
           arduino-cli compile --fqbn "esp32:esp32:waveshare_esp32_s3_touch_amoled_18:PSRAM=enabled,CDCOnBoot=cdc" --build-property upload.maximum_size=5242880 --output-dir out firmware/cubi 2>&1 | tee compilar.log || { grep -m8 "error" compilar.log | sed "s/^/::error::/"; exit 1; }
@@ -52,7 +69,7 @@ jobs:
       - name: Firmware de Mapi
         run: |
           cp firmware/cubi/fuente.h firmware/mapi/fuente.h
-          echo "#define VERSION_MAPI \"2.0.${{ github.run_number }}\"" > firmware/mapi/version.h
+          echo "#define VERSION_MAPI \"2.0.$VM\"" > firmware/mapi/version.h
           arduino-cli compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,CDCOnBoot=cdc" --output-dir out_mapi firmware/mapi 2>&1 | tee mapi.log || { grep -m8 "error" mapi.log | sed "s/^/::error::/"; exit 1; }
           cp out_mapi/mapi.ino.bin mapi.ino.bin
 
@@ -75,13 +92,14 @@ jobs:
         if: github.ref == 'refs/heads/main'
         with:
           tag_name: v2.0.${{ github.run_number }}
-          name: Cubi v2.0.${{ github.run_number }}
+          name: v2.0.${{ github.run_number }}
           body: |
             - **Cubi.apk**: ábrelo desde el celular para instalar o actualizar la app.
-            - **cubi.ino.bin**: en la app, Ajustes › Actualizar el robot.
+            - **cubi.ino.bin** y **mapi.ino.bin**: el firmware de Cubi y el de Mapi; se ponen desde la app, en Ajustes › Actualizaciones (solo cuando cambian).
             - **FermataAA.apk**: app aparte para compartir; baja Fermata Auto y lo instala de forma que salga en Android Auto.
           files: |
             Cubi.apk
             cubi.ino.bin
             mapi.ino.bin
+            versiones.json
             FermataAA.apk

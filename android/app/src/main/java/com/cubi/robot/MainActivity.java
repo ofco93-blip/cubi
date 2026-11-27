@@ -200,6 +200,11 @@ public class MainActivity extends Activity {
         }
     }
 
+    // el número de cada parte en esa versión (versiones.json): la app, Cubi y Mapi. null si la versión no lo trae.
+    private JSONObject versiones(JSONObject v) {
+        try { return new JSONObject(new String(descargar(urlArchivo(v, "versiones.json")), "UTF-8")); } catch (Exception e) { return null; }
+    }
+
     private String urlArchivo(JSONObject v, String nombre) throws Exception {
         JSONArray a = v.getJSONArray("assets");
         for (int i = 0; i < a.length(); i++)
@@ -632,6 +637,8 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public boolean mapiActualizando() { return CubiMapi.actualizando(); }
         @JavascriptInterface
+        public String mapiVersion() { return CubiMapi.version(); }
+        @JavascriptInterface
         public boolean googleUsa() { return CubiGoogle.elegido(MainActivity.this); }
         @JavascriptInterface
         public void googleUsar(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("mapaGoogle", si).apply(); }
@@ -690,8 +697,9 @@ public class MainActivity extends Activity {
         public void buscarVersion() {
             new Thread(() -> {
                 try {
-                    JSONObject v = ultimaVersion();
-                    js("versionGithub(" + numero(v.getString("tag_name")) + "," + miVersion() + ")");
+                    JSONObject v = ultimaVersion(), vs = versiones(v);
+                    int ult = numero(v.getString("tag_name"));
+                    js("versionGithub(" + ult + "," + miVersion() + ",''" + "," + (vs == null ? ult : vs.optInt("cubi", ult)) + "," + (vs == null ? ult : vs.optInt("mapi", ult)) + ")");
                 } catch (Exception e) {
                     js("versionGithub(-1,0," + JSONObject.quote(e.getMessage()) + ")");
                 }
@@ -721,7 +729,8 @@ public class MainActivity extends Activity {
                 try {
                     js("toast('Descargando el firmware de Mapi…')");
                     if (!CubiMapi.listo()) { js("toast('Mapi no está conectado')"); return; }
-                    JSONObject v = ultimaVersion(); String ult = v.getString("tag_name").replaceFirst("^v", "");
+                    JSONObject v = ultimaVersion(), vs = versiones(v);
+                    String ult = vs != null && vs.has("mapi") ? "2.0." + vs.getInt("mapi") : v.getString("tag_name").replaceFirst("^v", "");
                     if (ult.equals(CubiMapi.version())) { js("toast(" + JSONObject.quote("Mapi ya tiene la última versión (" + ult + ")") + ")"); return; }
                     byte[] fw = descargar(urlArchivo(v, "mapi.ino.bin"));
                     if (CubiMapi.yo != null) CubiMapi.yo.ota(fw);
