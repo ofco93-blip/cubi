@@ -193,6 +193,7 @@ public class CubiService extends Service {
     @Override
     public int onStartCommand(Intent i, int flags, int id) {
         buscar();
+        if (CubiMapi.yo == null) CubiMapi.yo = new CubiMapi(this);   // Mapi, la pantalla redonda del mapa: su propia conexión
         return START_STICKY;
     }
 
@@ -202,6 +203,7 @@ public class CubiService extends Service {
     @Override
     public void onDestroy() {
         if (gatt != null) gatt.close();
+        if (CubiMapi.yo != null) { CubiMapi.yo.parar(); CubiMapi.yo = null; }
         oido = null;
         if (oyeGps != null) ((LocationManager) getSystemService(LOCATION_SERVICE)).removeUpdates(oyeGps);
         if (voz != null) voz.shutdown();
@@ -518,7 +520,7 @@ public class CubiService extends Service {
     // Solo con "Modo mapa" prendido y una ruta andando. La posición sale del celular hacia overpass-api.de (el servicio
     // público de OpenStreetMap) cada vez que se avanza unos 110 m, para pedir las calles de 240 m a la redonda.
     private volatile double mapaLat0, mapaLon0;
-    private volatile boolean mapaListo, mapaCargando, mapaForzar;
+    volatile boolean mapaListo; private volatile boolean mapaCargando, mapaForzar;   // mapaListo: también lo mira Mapi
     private long mapaPedido;
     volatile float mapaRumbo;
     volatile double mapaDx, mapaDy;                 // dónde va el carro respecto al centro del mapa bajado (m)
@@ -987,11 +989,11 @@ public class CubiService extends Service {
 
     private void mapaGps(Location l) {
         long ahora = System.currentTimeMillis();
-        if (!(navMapa() || carroMapa()) || !navActiva()) return;
+        if (!(navMapa() || carroMapa() || CubiMapi.listo()) || !navActiva()) return;
         // el destino guardado se vuelve a buscar al arrancar (una vez por minuto si falla)
         if (Double.isNaN(destLat) && !destinoTexto().isEmpty() && !destBuscando && ahora - destIntento > 60000) destino(destinoTexto());
         boolean hayDestino = !Double.isNaN(destLat);
-        if (ahora - navCuando > 120000 && !hayDestino && !carroMapa()) return;   // sin ruta ni destino solo hay mapa para la pantalla del carro
+        if (ahora - navCuando > 120000 && !hayDestino && !carroMapa() && !CubiMapi.listo()) return;   // sin ruta ni destino solo hay mapa para la pantalla del carro
         if (l.hasBearing() && l.hasSpeed() && l.getSpeed() > 1.5f) mapaRumbo = l.getBearing();   // parado, el rumbo del GPS no sirve
         final double lat = l.getLatitude(), lon = l.getLongitude();
         posLat = lat; posLon = lon;
@@ -1018,7 +1020,7 @@ public class CubiService extends Service {
             if (viajeAntes != null && l.hasSpeed() && l.getSpeed() > 1) viajeM += l.distanceTo(viajeAntes);
             viajeAntes = l;
         }
-        if (navMapa() && (!mapaListo || lejos > 130 || mapaForzar) && !mapaCargando && (ahora - mapaPedido > 8000 || mapaForzar)) {
+        if ((navMapa() || CubiMapi.listo()) && (!mapaListo || lejos > 130 || mapaForzar) && !mapaCargando && (ahora - mapaPedido > 8000 || mapaForzar)) {
             mapaPedido = ahora; mapaCargando = true; mapaForzar = false;
             new Thread(() -> bajarCalles(lat, lon)).start();
         }
@@ -1191,6 +1193,7 @@ public class CubiService extends Service {
             // el cierre va en un mensaje de vías (repite un tramo corto) para que también lo entienda el Cubi viejo
             String cierre = todas.get(0).length() > 197 ? todas.get(0).substring(0, 197) : todas.get(0);
             mapaLat0 = lat; mapaLon0 = lon; mapaListo = true; mapaDx = mapaDy = 0; mapaZonas = extra; mapaTramos = todas;
+            CubiMapi.mapa(mensajes, deVias, cierre);         // las mismas calles para Mapi
             if (alRobot) enviar("asis|/mapa?w=" + cierre + "&f=1");
             mapaEstado = "Mini mapa: " + todas.size() + " tramos de calle" + (ruta.isEmpty() ? "" : ", con la ruta") + (extra.isEmpty() ? "" : ", " + extra.size() + " de agua y parques") + ".";
         } catch (Exception e) {
