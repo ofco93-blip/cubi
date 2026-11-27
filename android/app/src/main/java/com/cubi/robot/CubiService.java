@@ -1000,7 +1000,7 @@ public class CubiService extends Service {
 
     private void mapaGps(Location l) {
         long ahora = System.currentTimeMillis();
-        if (!(navMapa() || carroMapa() || CubiMapi.listo()) || !navActiva()) return;
+        if (!(navMapa() || carroMapa() || CubiMapi.listo()) || (!navActiva() && !CubiMapi.listo())) return;
         // el destino guardado se vuelve a buscar al arrancar (una vez por minuto si falla)
         if (Double.isNaN(destLat) && !destinoTexto().isEmpty() && !destBuscando && ahora - destIntento > 60000) destino(destinoTexto());
         boolean hayDestino = !Double.isNaN(destLat);
@@ -1844,7 +1844,10 @@ public class CubiService extends Service {
     }
 
     // modo mapa: Cubi se queda fijo en la pantalla de navegación mientras haya ruta (para probar cómo sería un segundo Cubi solo de mapas)
-    boolean navMapa() { return getSharedPreferences("cubi", 0).getBoolean("navMapa", false); }
+    // Por ahora el robot Cubi no lleva nada de mapas (ni mini mapa ni flechas de giro): eso va en Mapi. Para volver a
+    // dárselos, CUBI_MAPAS = true (y quitar el "hidden" de su tarjeta en index.html).
+    static final boolean CUBI_MAPAS = false;
+    boolean navMapa() { return CUBI_MAPAS && getSharedPreferences("cubi", 0).getBoolean("navMapa", false); }
     void navMapaOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("navMapa", si).apply(); mapaListo = false; gps(); }
     boolean navActiva() { return getSharedPreferences("cubi", 0).getBoolean("nav", true); }
     void navOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("nav", si).apply(); if (!si) navUltima = ""; }
@@ -1955,7 +1958,7 @@ public class CubiService extends Service {
         giroAvisado = giro; flechaAntes = dir + etapa; flechaCuando = ahora;
         String q = "";
         try { if (!calle.isEmpty()) q = "&t=" + URLEncoder.encode(calle, "UTF-8").replace("+", "%20"); } catch (Exception ignored) { }
-        enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : "") + "&f=" + forma + q + destino + (mapa ? "&q=1" : ""));
+        if (CUBI_MAPAS) enviar("asis|/r?n=" + dir + (metros >= 0 ? "&m=" + Math.round(metros) : "") + "&f=" + forma + q + destino + (mapa ? "&q=1" : ""));
     }
 
     // el resumen del viaje en el aviso de Maps: "25 min · 12 km · 5:42 p. m." (cuánto falta, a cuánto está el destino y la hora de llegada)

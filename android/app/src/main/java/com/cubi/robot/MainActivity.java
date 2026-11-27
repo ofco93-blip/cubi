@@ -630,6 +630,8 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String mapiEstado() { return CubiMapi.estado(); }
         @JavascriptInterface
+        public boolean mapiActualizando() { return CubiMapi.actualizando(); }
+        @JavascriptInterface
         public boolean googleUsa() { return CubiGoogle.elegido(MainActivity.this); }
         @JavascriptInterface
         public void googleUsar(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("mapaGoogle", si).apply(); }
@@ -718,7 +720,10 @@ public class MainActivity extends Activity {
             new Thread(() -> {
                 try {
                     js("toast('Descargando el firmware de Mapi…')");
-                    byte[] fw = descargar(urlArchivo(ultimaVersion(), "mapi.ino.bin"));
+                    if (!CubiMapi.listo()) { js("toast('Mapi no está conectado')"); return; }
+                    JSONObject v = ultimaVersion(); String ult = v.getString("tag_name").replaceFirst("^v", "");
+                    if (ult.equals(CubiMapi.version())) { js("toast(" + JSONObject.quote("Mapi ya tiene la última versión (" + ult + ")") + ")"); return; }
+                    byte[] fw = descargar(urlArchivo(v, "mapi.ino.bin"));
                     if (CubiMapi.yo != null) CubiMapi.yo.ota(fw);
                 } catch (Exception e) {
                     js("toast(" + JSONObject.quote("No pude descargar el firmware de Mapi: " + e.getMessage()) + ")");

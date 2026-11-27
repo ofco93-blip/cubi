@@ -273,7 +273,8 @@ section[hidden] { display: none; }
 <section id="tab-mapa" hidden>
   <div class="grupo robot"><b>El robot</b><small>La pantalla chiquita que va sobre el tablero</small></div>
   <h2>Mapa en el robot</h2>
-  <div class="card">
+  <div class="card"><p class="note">Por ahora Cubi no muestra mapas ni flechas de giro: eso va en Mapi.</p></div>
+  <div class="card" hidden>
     <div class="row"><span>Con una ruta, el robot muestra</span></div>
     <select id="navModo" aria-label="Qué muestra Cubi con una ruta">
       <option value="avisos">Solo los avisos de giro</option>
@@ -343,7 +344,7 @@ section[hidden] { display: none; }
     </details>
   </div>
   <div class="grupo robot"><b>Mapi</b><small>La pantalla redonda del mapa, debajo del volante</small></div>
-  <div class="card"><p class="note" id="mapiEstado">Buscando a Mapi…</p><button class="btn" id="mapiActualizar" style="width:100%;margin-top:10px">Actualizar Mapi</button><p class="note">Mapi siempre muestra el mapa: el giro, la pila del carro, el clima y la hora. Se conecta solo, aparte de Cubi. Para el mapa hay que tener prendido “Usar el GPS”.</p></div>
+  <div class="card"><p class="note" id="mapiEstado">Buscando a Mapi…</p><button class="btn" id="mapiActualizar" style="width:100%;margin-top:10px">Actualizar Mapi</button><p class="note">Mapi va por su cuenta: se conecta directo a este celular, no pasa por Cubi (puede estar Cubi apagado). Siempre muestra el mapa: el giro, la pila del carro, el clima y la hora. Para el mapa hay que tener prendido “Usar el GPS”.</p></div>
   <div class="grupo auto"><b>La pantalla del carro</b><small>Android Auto: lo que sale al abrir Cubi en la pantalla grande</small></div>
   <h2>Mascota de Android Auto</h2>
   <div class="card">
@@ -638,7 +639,20 @@ if (window.Android && Android.navCompleto) setTimeout(() => { $('navCompleto').c
 });
 $('carroRegVer').onclick = () => { const p = $('carroReg'); p.hidden = false; p.textContent = window.Android && Android.carroRegistro ? Android.carroRegistro() : 'Solo en el celular.'; p.scrollTop = p.scrollHeight; };
 if (window.Android) setTimeout(() => gpsEstado(Android.gpsActivo()), 500);
-$('mapiActualizar').onclick = () => { if (window.Android && Android.actualizarMapi) Android.actualizarMapi(); };
+// mientras Mapi se actualiza, la app queda bloqueada (una cortina encima) para no tocar nada a mitad
+function mapiCortina() {
+  let c = $('mapiCortina');
+  const sigue = window.Android && Android.mapiActualizando && Android.mapiActualizando();
+  if (sigue && !c) {
+    c = document.createElement('div'); c.id = 'mapiCortina';
+    c.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(5,8,20,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;color:#fff;font-size:20px';
+    c.innerHTML = '<b>Actualizando Mapi</b><span id="mapiCortinaTxt"></span><small style="opacity:.8">No cierres la app ni apagues Mapi.</small>';
+    c.addEventListener('click', e => e.stopPropagation(), true); document.body.appendChild(c);
+  }
+  if (c) { $('mapiCortinaTxt').textContent = Android.mapiEstado(); if (!sigue) setTimeout(() => c.remove(), 2500); }
+  if (sigue) setTimeout(mapiCortina, 700);
+}
+$('mapiActualizar').onclick = () => { if (window.Android && Android.actualizarMapi) { Android.actualizarMapi(); setTimeout(mapiCortina, 1500); setTimeout(mapiCortina, 6000); } };
 if (window.Android && Android.mapiEstado) setInterval(() => { $('mapiEstado').textContent = 'Mapi: ' + Android.mapiEstado(); }, 2000);
 function climaEstado(si) { $('clima').checked = si; }
 function climaTexto(s) { if (s) $('climaNota').textContent = s; }

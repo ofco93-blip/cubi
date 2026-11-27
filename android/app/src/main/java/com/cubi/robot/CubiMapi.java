@@ -137,6 +137,7 @@ final class CubiMapi {
     }
     private volatile String version = "";
     static String version() { CubiMapi m = yo; return m == null ? "" : m.version; }
+    static boolean actualizando() { CubiMapi m = yo; return m != null && m.actualizando; }
 
     private void llega(byte[] v) {
         String s = new String(v, StandardCharsets.UTF_8).trim();
@@ -222,7 +223,8 @@ final class CubiMapi {
                 mandar("/hora?m=" + (c.get(java.util.Calendar.HOUR_OF_DAY) * 60 + c.get(java.util.Calendar.MINUTE)));
                 yaGiro = "";                                               // y el giro otra vez, por si Mapi se reinició
             }
-            boolean nav = !sv.navDir.isEmpty() && ahora - sv.navCuando < 120000;
+            // hay ruta mientras siga el aviso de navegación de Maps (o haya destino puesto en Cubi): al quitarla, Mapi vuelve al mapa normal
+            boolean nav = !sv.navDir.isEmpty() && ahora - sv.navCuando < 120000 && (Oyente.rutaViva() || sv.destinoPunto() != null);
             String d = !nav ? "" : sv.navDir.equals("maps_izq") ? "izq" : sv.navDir.equals("maps_der") ? "der" : sv.navDir.equals("llegamos") ? "fin" : "recto";
             String g = "/giro?d=" + d + (nav && sv.navMetros >= 0 ? "&m=" + Math.round(sv.navMetros) : "") + (nav ? "&c=" + cod(sv.navCalle) : "");
             if (!g.equals(yaGiro)) { yaGiro = g; mandar(g); }
