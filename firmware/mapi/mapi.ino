@@ -28,6 +28,7 @@ float tAhora = 0;
 
 // ---------------------------------------------------------------- dibujo
 struct Col { float r, g, b; };
+struct V { float x, y, z; };
 static const Col BLANCO{255, 255, 255};
 static inline float lim(float v, float a, float b) { return v < a ? a : v > b ? b : v; }
 static inline uint16_t empacar(float r, float g, float b) {
@@ -187,7 +188,6 @@ static void mapaVias(const char *w, bool primero, bool fin) {
 // arriba es horario: con los dos vectores en el mismo marco, el rumbo sube con -(giro · arriba).
 // ponytail: si el sentido saliera al revés en esta placa, cambiar GIRO_SIGNO (se ve: el mapa gira al lado contrario).
 #define GIRO_SIGNO 1
-struct V { float x, y, z; };
 uint8_t imuAddr = 0; V gravedad{0, 0, 1}; float sesgo = 0, rumboVel = 0, dtCuadro = 0;
 static void i2cW(uint8_t a, uint8_t r, uint8_t v) { Wire.beginTransmission(a); Wire.write(r); Wire.write(v); Wire.endTransmission(); }
 static bool i2cR(uint8_t a, uint8_t r, uint8_t *b, uint8_t n) {
@@ -346,30 +346,52 @@ static void mapa(float cyCarro) {
   } else mrumbo += (fmodf(fijoR + velR * dtp - mrumbo + 540, 360) - 180) * k;
   const Calles &c = *callesHay;
   if (!c.nv) return;
-  const float esc = 0.62f, h = -mrumbo * PI / 180, ch = cosf(h), sh = sinf(h);   // el mapa gira: adelante del carro queda arriba
-  auto P = [&](int i, float &x, float &y) {
+  // Acostado, como los navegadores: una cámara detrás y arriba del carro mirando hacia adelante. Lo de lejos se achica
+  // y sube hacia el horizonte. Medidas en metros; (x a la derecha, y hacia adelante del carro).
+  const float F = 470, ALTO = 150, ATRAS = 150, IN = 0.82f, cI = cosf(IN), sI = sinf(IN), CERCA = -110, LEJOS = 560;
+  const float cy0 = cyCarro + F * (ATRAS * sI - ALTO * cI) / (ATRAS * cI + ALTO * sI);
+  auto proy = [&](float x, float y, float &sx, float &sy, float &kk) {
+    const float prof = (y + ATRAS) * cI + ALTO * sI; kk = F / prof; sx = C + x * kk; sy = cy0 - ((y + ATRAS) * sI - ALTO * cI) * kk;
+  };
+  const float h = mrumbo * PI / 180, ch = cosf(h), sh = sinf(h);
+  auto aCarro = [&](int i, float &x, float &y) {   // del mapa (este, norte) al carro (derecha, adelante)
     const float dx = (c.x[i] - 128) * MAPA_M - mpx, dy = (c.y[i] - 128) * MAPA_M - mpy;
-    x = C + (dx * ch - dy * sh) * esc; y = cyCarro - (dx * sh + dy * ch) * esc;
+    x = dx * ch - dy * sh; y = dx * sh + dy * ch;
   };
   // los colores del mapa de Google de la pantalla grande (CubiGoogle.ESTILO), con la ruta azul de Google
   static const Col AGUA{12, 42, 85}, PARQUE{18, 48, 63}, CALLE{42, 58, 102}, AVENIDA{58, 77, 128}, RIO{16, 52, 104}, RUTA_B{26, 86, 196}, RUTA{76, 139, 245};
-  for (int v = 0; v < c.nv; v++) if (c.clase[v] == 3 || c.clase[v] == 4) {   // agua y parques
-    float px[72], py[72]; int n = 0;
-    for (int i = c.ini[v]; i < c.ini[v + 1] && n < 72; i++, n++) P(i, px[n], py[n]);
-    if (n >= 3) rellenar(px, py, n, c.clase[v] == 3 ? AGUA : PARQUE, 0.85f);
+  for (int v = 0; v < c.nv; v++) {                 // agua y parques: lo que queda detrás de la cámara se recorta
+    if (c.clase[v] != 3 && c.clase[v] != 4) continue;
+    float qx[72], qy[72], kk, ax, ay; int n = 0;
+    aCarro(c.ini[v + 1] - 1, ax, ay);
+    for (int i = c.ini[v]; i < c.ini[v + 1]; i++) {
+      float bx, by; aCarro(i, bx, by);
+      const float da = ay - CERCA, db = by - CERCA;
+      if ((da >= 0) != (db >= 0) && n < 71) { proy(ax + (bx - ax) * da / (da - db), CERCA, qx[n], qy[n], kk); n++; }
+      if (db >= 0 && n < 71) { proy(bx, by, qx[n], qy[n], kk); n++; }
+      ax = bx; ay = by;
+    }
+    if (n >= 3) rellenar(qx, qy, n, c.clase[v] == 3 ? AGUA : PARQUE, 0.9f);
   }
-  struct Pasada { uint8_t clase; Col col; float ancho; };
-  const Pasada PAS[] = {{5, RIO, 4}, {0, CALLE, 5}, {1, AVENIDA, 9}, {2, RUTA_B, 16}, {2, RUTA, 10}};
+  struct Pasada { uint8_t clase; Col col; float ancho; };   // ancho en metros
+  const Pasada PAS[] = {{5, RIO, 6}, {0, CALLE, 8}, {1, AVENIDA, 13}, {2, RUTA_B, 19}, {2, RUTA, 12}};
   for (const auto &ps : PAS) for (int v = 0; v < c.nv; v++) {
     if (c.clase[v] != ps.clase) continue;
-    float ax, ay; P(c.ini[v], ax, ay);
+    float ax, ay; aCarro(c.ini[v], ax, ay);
     for (int i = c.ini[v] + 1; i < c.ini[v + 1]; i++) {
-      float bx, by; P(i, bx, by);
-      if (!(fmaxf(ax, bx) < -10 || fminf(ax, bx) > D + 10 || fmaxf(ay, by) < -10 || fminf(ay, by) > D + 10)) {
-        grueso(ax, ay, bx, by, ps.ancho, ps.col, 1);
-        disco(bx, by, ps.ancho / 2, ps.col, 1);           // la unión redonda
-      }
+      float bx, by; aCarro(i, bx, by);
+      float px = ax, py = ay, qx = bx, qy = by;
       ax = bx; ay = by;
+      if ((py < CERCA && qy < CERCA) || (py > LEJOS && qy > LEJOS) || (fminf(fabsf(px), fabsf(qx)) > LEJOS && px * qx > 0)) continue;
+      if (py < CERCA) { const float t = (CERCA - py) / (qy - py); px += (qx - px) * t; py = CERCA; }   // se recorta en el borde de la cámara
+      if (qy < CERCA) { const float t = (CERCA - qy) / (py - qy); qx += (px - qx) * t; qy = CERCA; }
+      float sx0, sy0, k0, sx1, sy1, k1; proy(px, py, sx0, sy0, k0); proy(qx, qy, sx1, sy1, k1);
+      if (fmaxf(sx0, sx1) < -20 || fminf(sx0, sx1) > D + 20 || fmaxf(sy0, sy1) < -20 || fminf(sy0, sy1) > D + 20) continue;
+      // un cuadrilátero que se angosta con la distancia, y la unión redonda
+      const float w0 = ps.ancho * k0 / 2, w1 = ps.ancho * k1 / 2, ddx = sx1 - sx0, ddy = sy1 - sy0, l = sqrtf(ddx * ddx + ddy * ddy) + 1e-4f, nx = -ddy / l, ny = ddx / l;
+      float X[4] = {sx0 + nx * w0, sx1 + nx * w1, sx1 - nx * w1, sx0 - nx * w0}, Y[4] = {sy0 + ny * w0, sy1 + ny * w1, sy1 - ny * w1, sy0 - ny * w0};
+      rellenar(X, Y, 4, ps.col, 1);
+      disco(sx1, sy1, w1, ps.col, 1);
     }
   }
 }
@@ -469,7 +491,7 @@ static void pintar() {
     textoFilo("Actualizando", C, 200, 40, BLANCO); textoFilo(p, C, 260, 56, BLANCO);
     return;
   }
-  const float cyCarro = nav ? 300 : 286;
+  const float cyCarro = nav ? 322 : 312;
   mapa(cyCarro);
   velos();
   carrito(C, cyCarro);
