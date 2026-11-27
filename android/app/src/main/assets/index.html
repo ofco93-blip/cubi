@@ -241,6 +241,12 @@ pre.reg { margin: 0; max-height: 320px; overflow: auto; font: 11px/1.35 ui-monos
     <div class="fila"><span>Usar el GPS<small>Sin GPS usa la última ubicación del celular</small></span><label class="sw"><input type="checkbox" id="gps2"><i></i></label></div>
     <div class="fila"><span>Actualizar a Mapi</span><button class="enlace" data-ir="ajustes">En Ajustes</button></div>
   </div>
+  <h2>Mapas sin internet</h2>
+  <div class="card">
+    <p class="note" style="margin:4px 0 10px">Las ciudades por donde andas, separadas por coma. Baja también las carreteras entre ellas; con eso las calles salen aunque no haya señal. Mejor con WiFi.</p>
+    <input type="text" id="mapasLugares" placeholder="Ej.: Cali, Palmira, Bogotá" autocomplete="off">
+    <div class="fila"><span><small id="mapasNota">…</small></span><button class="enlace" id="mapasBajar">Descargar</button></div>
+  </div>
 </section>
 
 <!-- ================= MASCOTA AUTO: Zelda en la pantalla del carro ================= -->
@@ -499,8 +505,11 @@ function mapi() {
   $('dotMapi').classList.toggle('on', si);
   $('mapiPill').textContent = si ? 'Mapi conectado' : 'Mapi';
   $('mapiEstado').textContent = e; $('mapiNota').textContent = e;
+  if (A().mapasEstado) $('mapasNota').textContent = A().mapasEstado();
 }
 setInterval(mapi, 2000);
+if (A() && A().mapasLugares) $('mapasLugares').value = A().mapasLugares();
+$('mapasBajar').onclick = () => { const l = $('mapasLugares').value.trim(); if (l && A() && A().mapasBajar) { A().mapasBajar(l); toast('Descargando los mapas…'); } };
 
 // ---------- Mascota Auto ----------
 ['carroZelda', 'carroFondo', 'carroVista', 'carroZeldaTam', 'carroPila'].forEach(k => {

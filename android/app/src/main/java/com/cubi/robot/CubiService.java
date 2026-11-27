@@ -1159,13 +1159,15 @@ public class CubiService extends Service {
 
     private void bajarCalles(double lat, double lon) {
         try {
-            if (Double.isNaN(aguaLat) || Math.hypot((lat - aguaLat) * 111320, (lon - aguaLon) * 111320 * Math.cos(Math.toRadians(lat))) > 800)
+            JSONArray els = CubiMapas.leer(this, lat, lon, 400);    // primero lo guardado en el celular (mapas sin internet)
+            final boolean guardado = els != null;
+            if (!guardado && (Double.isNaN(aguaLat) || Math.hypot((lat - aguaLat) * 111320, (lon - aguaLon) * 111320 * Math.cos(Math.toRadians(lat))) > 800))
                 try { bajarAguaGrande(lat, lon); } catch (Exception e) { aguaLat = lat; aguaLon = lon; }   // sin el agua grande igual salen las calles; se reintenta 800 m más adelante
             String donde = "(around:360," + String.format(Locale.US, "%.5f,%.5f", lat, lon) + ");";
             String q = "[out:json][timeout:10];(way[highway~\"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|living_street)(_link)?$\"]" + donde
                     + "way[natural=water]" + donde + "way[waterway~\"^(river|stream|canal)$\"]" + donde + "way[leisure~\"^(park|garden)$\"]" + donde + ");out geom;";
-            JSONArray els = null; Exception falla = null;   // el servidor principal se cae seguido: si no responde, el de respaldo
-            for (String sv : new String[]{"https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"}) try {
+            Exception falla = null;   // el servidor principal se cae seguido: si no responde, el de respaldo
+            if (!guardado) for (String sv : new String[]{"https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"}) try {
                 JSONObject r = new JSONObject(bajarTexto(sv + "?data=" + URLEncoder.encode(q, "UTF-8"), 12000, 1));
                 if (r.has("remark")) throw new java.io.IOException(r.optString("remark"));
                 els = r.getJSONArray("elements"); break;
@@ -1179,7 +1181,7 @@ public class CubiService extends Service {
                 int a = Math.max(0, tr[0]), z = Math.min(tr[1], rla.length - 1);
                 if (tr[2] > 0 && z > a) tramos(java.util.Arrays.copyOfRange(rla, a, z + 1), java.util.Arrays.copyOfRange(rlo, a, z + 1), lat, lon, tr[2] == 1 ? "6" : "7", ruta);
             }
-            for (double[][] a : aguaGrande) poligono(a[0], a[1], lat, lon, "3", zonas);
+            if (!guardado) for (double[][] a : aguaGrande) poligono(a[0], a[1], lat, lon, "3", zonas);   // lo guardado ya trae los embalses
             for (int e = 0; e < els.length(); e++) {
                 JSONObject w = els.getJSONObject(e);
                 JSONArray g = w.optJSONArray("geometry");
@@ -1234,7 +1236,7 @@ public class CubiService extends Service {
             mapaLat0 = lat; mapaLon0 = lon; mapaListo = true; mapaDx = mapaDy = 0; mapaZonas = extra; mapaTramos = todas;
             CubiMapi.mapa(mensajes, deVias, cierre);         // las mismas calles para Mapi
             if (alRobot) enviar("asis|/mapa?w=" + cierre + "&f=1");
-            mapaEstado = "Mini mapa: " + todas.size() + " tramos de calle" + (ruta.isEmpty() ? "" : ", con la ruta") + (extra.isEmpty() ? "" : ", " + extra.size() + " de agua y parques") + ".";
+            mapaEstado = "Mini mapa: " + todas.size() + " tramos de calle" + (ruta.isEmpty() ? "" : ", con la ruta") + (extra.isEmpty() ? "" : ", " + extra.size() + " de agua y parques") + (guardado ? " (del mapa guardado)." : ".");
         } catch (Exception e) {
             mapaEstado = "Mini mapa: no pude bajar las calles (¿hay internet?).";
         } finally {

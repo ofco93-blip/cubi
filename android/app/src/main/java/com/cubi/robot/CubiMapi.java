@@ -236,16 +236,16 @@ final class CubiMapi {
             boolean nav = !sv.navDir.isEmpty() && ((CubiGoogle.guiando() && sv.destinoPunto() != null) || (Oyente.rutaViva() && ahora - sv.navCuando < 120000));
             String d = !nav ? "" : sv.navDir.equals("maps_izq") ? "izq" : sv.navDir.equals("maps_der") ? "der" : sv.navDir.equals("llegamos") ? "fin" : "recto";
             // "Dirígete al nordeste hacia la Calle 5" (el primer aviso de Maps, sin metros): en Mapi va como "Sigue por Calle 5"
-            String calle = sv.navCalle;
-            if (nav && sv.navMetros < 0) {
-                String u = sv.navUltima.replaceAll("[.·•…].*$", "").trim();
+            String calle = sv.navCalle; boolean sigue = false;
+            if (nav && sv.navMetros < 15) {                     // Google lo manda con 0 m: salía "ya · Dirígete al nordeste."
+                String u = sv.navUltima.toLowerCase(Locale.ROOT).replaceAll("[.·•…].*$", "").trim();
                 if (u.startsWith("dir") || u.startsWith("head") || u.startsWith("sig") || u.startsWith("contin")) {
                     java.util.regex.Matcher hm = java.util.regex.Pattern.compile("(?:hacia|por|toward|on) (?:la |el )?(.+)$").matcher(u);
-                    d = "recto"; calle = hm.find() ? "Sigue por " + titulo(hm.group(1)) : "Sigue derecho";
+                    d = "recto"; sigue = true; calle = hm.find() ? "Sigue por " + titulo(hm.group(1)) : "Sigue derecho";
                     if (calle.length() > 30) calle = calle.substring(0, 30).trim();
                 }
             }
-            String g = "/giro?d=" + d + (nav && sv.navMetros >= 0 ? "&m=" + Math.round(sv.navMetros) : "") + (nav ? "&c=" + cod(calle) : "");
+            String g = "/giro?d=" + d + (nav && sv.navMetros >= 0 && !sigue ? "&m=" + Math.round(sv.navMetros) : "") + (nav ? "&c=" + cod(calle) : "");
             if (!g.equals(yaGiro)) { yaGiro = g; mandar(g); }
             String ll = "/llega?h=" + cod(nav ? sv.navLlega : "") + (nav && sv.navDestM >= 0 ? "&d=" + sv.navDestM : "");
             if (!ll.equals(yaLlega)) { yaLlega = ll; mandar(ll); }

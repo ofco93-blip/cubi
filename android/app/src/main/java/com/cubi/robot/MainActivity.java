@@ -725,6 +725,18 @@ public class MainActivity extends Activity {
             }).start();
         }
 
+        // mapas sin internet: la lista de ciudades se guarda solo en este celular
+        @JavascriptInterface public String mapasLugares() { return getSharedPreferences("cubi", 0).getString("mapasLugares", ""); }
+        @JavascriptInterface public String mapasEstado() { return CubiMapas.resumen(MainActivity.this); }
+        @JavascriptInterface
+        public void mapasBajar(String lugares) {
+            getSharedPreferences("cubi", 0).edit().putString("mapasLugares", lugares).apply();
+            String pais = null;
+            try { pais = ((android.telephony.TelephonyManager) getSystemService(TELEPHONY_SERVICE)).getNetworkCountryIso(); } catch (Exception ignored) { }
+            if (pais == null || pais.length() != 2) pais = java.util.Locale.getDefault().getCountry();
+            CubiMapas.descargar(getApplicationContext(), lugares, pais);
+        }
+
         @JavascriptInterface
         public void actualizarMapi() {
             new Thread(() -> {
