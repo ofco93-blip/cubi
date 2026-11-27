@@ -154,6 +154,15 @@ static void textoFilo(const char *s, float x, float cy, float tam, const Col &c,
   for (int i = 0; i < 8; i++) texto(s, x + k * cosf(i * PI / 4), cy + k * sinf(i * PI / 4), tam, o, 0.55f, izq, cabe);
   texto(s, x, cy, tam, c, 1, izq, cabe);
 }
+// un texto largo en dos renglones (cortado en el espacio más cercano a la mitad); si aún no cabe, se achica
+static void dosRenglones(const char *s, float x, float cy, float tam, const Col &c, float cabe) {
+  if (anchoTexto(s, tam) <= cabe) { texto(s, x, cy, tam, c, 1, true, cabe); return; }
+  const int n = strlen(s); int corte = -1;
+  for (int i = 0; i < n; i++) if (s[i] == ' ' && (corte < 0 || abs(i - n / 2) < abs(corte - n / 2))) corte = i;
+  if (corte < 0) { texto(s, x, cy, tam, c, 1, true, cabe); return; }
+  char a[48]; strlcpy(a, s, min(corte + 1, (int)sizeof a));
+  texto(a, x, cy - tam * 0.6f, tam, c, 1, true, cabe); texto(s + corte + 1, x, cy + tam * 0.6f, tam, c, 1, true, cabe);
+}
 // tarjeta de vidrio, como las de la pantalla grande: translúcida, más clara arriba, borde de luz y su sombra
 static void vidrio(float x0, float y0, float x1, float y1, float r, bool oscuro = false) {
   const float cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, hw = (x1 - x0) / 2, hh = (y1 - y0) / 2;
@@ -505,13 +514,17 @@ static void pintar() {
     vidrio(78, 46, 388, 156, 32, true);
     flecha(134, 101, 74, giroDir);
     if (!strcmp(giroDir, "fin")) snprintf(b, sizeof b, giroM >= 0 && giroM > 15 ? "Llegando" : "Llegaste"); else if (giroM >= 0) metros(giroM, b, sizeof b); else b[0] = 0;
-    if (b[0]) texto(b, 186, giroCalle[0] ? 84 : 101, 44, BLANCO, 1, true, 190);
-    if (giroCalle[0]) texto(giroCalle, 188, 128, 21, Col{205, 218, 255}, 1, true, 186);
+    if (b[0]) {
+      texto(b, 186, giroCalle[0] ? 84 : 101, 44, BLANCO, 1, true, 190);
+      if (giroCalle[0]) texto(giroCalle, 188, 128, 21, Col{205, 218, 255}, 1, true, 186);
+    } else if (giroCalle[0]) dosRenglones(giroCalle, 186, 101, 25, BLANCO, 190);   // sin metros ("Dirígete al noroeste…"): la indicación en grande, en dos renglones
+    if (pilaB >= 0 || llegaTxt[0] || faltaM >= 0) {           // sin pila ni hora de llegada, la tarjeta de abajo sobra
     vidrio(124, 336, 342, 412, 34);                          // abajo: la pila, a qué hora se llega y lo que falta
     pila(165, 373, 56);
     if (llegaTxt[0]) { snprintf(b, sizeof b, "llega %s", llegaTxt); texto(b, 202, 358, 23, BLANCO, 1, true, 132); }
     char f[16] = "", r[12] = ""; if (faltaM >= 0) metros(faltaM, f, sizeof f); if (pilaReal >= 0) snprintf(r, sizeof r, "%d km", pilaReal);
     snprintf(b, sizeof b, "%s%s%s", f, f[0] && r[0] ? "  ·  " : "", r); texto(b, 202, 389, 16, Col{225, 232, 255}, 1, true, 132);
+    }
   } else {                                                   // sin ruta: la hora grande, el clima y la pila con la autonomía
     horaTexto(b, sizeof b);
     if (b[0]) textoFilo(b, C, 96, 84, BLANCO);
