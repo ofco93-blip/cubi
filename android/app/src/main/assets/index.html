@@ -147,6 +147,16 @@ nav button.on { color: #fff; background: rgba(255, 255, 255, .14); }
 #otaPct { font-size: 28px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .lista-fav .fila { padding: 10px 16px; }
 pre.reg { margin: 0; max-height: 320px; overflow: auto; font: 11px/1.35 ui-monospace, monospace; white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; padding: 12px 16px; color: var(--muted); }
+/* el aro del giro: cada color se ve animado, llenándose como en Mapi */
+.aros { display: flex; gap: 10px; flex-wrap: wrap; padding: 4px 0 10px; }
+.aro { background: none; border: 2px solid transparent; border-radius: 16px; padding: 6px 6px 4px; color: var(--ink); font: inherit; font-size: 12px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.aro.si { border-color: var(--ink); background: rgba(255, 255, 255, .08); }
+.aro svg { width: 52px; height: 52px; transform: rotate(-90deg); }
+.aro .carril { fill: none; stroke-width: 5; opacity: .2; }
+.aro .lleno { fill: none; stroke-width: 5; stroke-linecap: round; stroke-dasharray: 126; stroke-dashoffset: 126; animation: aroLlena 2.6s ease-in infinite; }
+.aro .chispa { fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-dasharray: 10 116; opacity: .75; animation: aroChispa 1.1s linear infinite; }
+@keyframes aroLlena { 0% { stroke-dashoffset: 126; } 80%, 100% { stroke-dashoffset: 0; } }
+@keyframes aroChispa { from { stroke-dashoffset: 126; } to { stroke-dashoffset: 0; } }
 </style>
 </head>
 <body>
@@ -247,7 +257,8 @@ pre.reg { margin: 0; max-height: 320px; overflow: auto; font: 11px/1.35 ui-monos
     <div class="fila"><span>Tamaño de la flecha<small id="mapiFlechaV">100 %</small></span><input type="range" id="mapiFlecha" min="0.6" max="2.5" step="0.1" value="1" style="width:50%"></div>
     <div class="fila"><span>Girar la pantalla<small id="mapiGiroV">0°</small></span><input type="range" id="mapiGiro" min="-180" max="180" step="1" value="0" style="width:50%"></div>
     <div class="fila"><span>Consumo promedio del carro<small>kWh/100 km, el que muestra el carro desde que lo restableciste. De ahí sale la autonomía.</small></span><input type="number" id="consumoCarro" min="8" max="35" step="0.1" inputmode="decimal" style="width:5.5em"></div>
-    <div class="fila"><span>Aro del giro<small>Se va llenando desde 300 m y queda completo en el giro</small></span><select id="mapiAro" aria-label="Aro del giro"><option value="0">Verde</option><option value="1">Naranja</option><option value="2">Azul</option><option value="3">Cian</option><option value="4">Sin aro</option></select></div>
+    <div class="fila"><span>Aro del giro<small>Se va llenando desde 300 m y queda completo en el giro</small></span></div>
+    <div class="aros" id="mapiAros"></div>
     <div class="fila"><span>Datos del viaje</span><select id="mapiEstilo" aria-label="Datos del viaje"><option value="0">A los lados</option><option value="1">Abajo</option></select></div>
   </div>
   <h2>Mapas sin internet</h2>
@@ -554,8 +565,18 @@ $('consumoCarro').onchange = e => {
   if (A() && A().consumoCarroPon) { A().consumoCarroPon(v); toast('Listo: la autonomía arranca con ' + v.toFixed(1) + ' kWh/100 km'); }
 };
 $('mapiEstilo').onchange = e => { if (A() && A().mapiAjustar) A().mapiAjustar('mapiEstilo', +e.target.value); };
-if (A() && A().mapiAjuste) $('mapiAro').value = Math.round(A().mapiAjuste('mapiAro'));
-$('mapiAro').onchange = e => { if (A() && A().mapiAjustar) A().mapiAjustar('mapiAro', +e.target.value); };
+{ // los colores del aro, cada uno con su animación; tocar uno lo escoge (Mapi cambia al segundo)
+  const aros = [['Verde', '#46dc82'], ['Naranja', '#ff8c28'], ['Azul', '#4c8bf5'], ['Cian', '#3cd2f0'], ['Sin aro', '']];
+  let aroSel = A() && A().mapiAjuste ? Math.round(A().mapiAjuste('mapiAro')) : 0;
+  const pinta = () => {
+    $('mapiAros').innerHTML = aros.map(([n, c], i) => `<button class="aro${i === aroSel ? ' si' : ''}" data-aro="${i}" aria-label="Aro ${n}">`
+      + `<svg viewBox="0 0 48 48"><circle class="carril" cx="24" cy="24" r="20" stroke="${c || '#8899bb'}"/>`
+      + (c ? `<circle class="lleno" cx="24" cy="24" r="20" stroke="${c}"/><circle class="chispa" cx="24" cy="24" r="20"/>` : '')
+      + `</svg>${n}</button>`).join('');
+    $('mapiAros').querySelectorAll('[data-aro]').forEach(b => b.onclick = () => { aroSel = +b.dataset.aro; if (A() && A().mapiAjustar) A().mapiAjustar('mapiAro', aroSel); pinta(); });
+  };
+  pinta();
+}
 ['mapiZoom', 'mapiFlecha', 'mapiGiro'].forEach(k => {   // se ve en Mapi al segundo, mientras se mueve
   const pon = v => { $(k + 'V').textContent = k === 'mapiGiro' ? Math.round(v) + '°' : Math.round(v * 100) + ' %'; };
   if (A() && A().mapiAjuste) { $(k).value = A().mapiAjuste(k); pon(A().mapiAjuste(k)); }
