@@ -247,15 +247,27 @@ final class CubiMapi {
             }
             String g = "/giro?d=" + d + (nav && sv.navMetros >= 0 && !sigue ? "&m=" + Math.round(sv.navMetros) : "") + (nav ? "&c=" + cod(calle) : "");
             if (!g.equals(yaGiro)) { yaGiro = g; mandar(g); }
-            // los minutos que faltan, de la hora de llegada ("8:58", "8:58 p. m." o "20:58"); el viaje cabe en 12 h
-            int faltan = -1;
-            java.util.regex.Matcher hl = java.util.regex.Pattern.compile("(\\d{1,2})[:.](\\d{2})").matcher(nav ? sv.navLlega : "");
-            if (hl.find()) {
-                java.util.Calendar c = java.util.Calendar.getInstance();
-                int ahoraM = c.get(java.util.Calendar.HOUR_OF_DAY) * 60 + c.get(java.util.Calendar.MINUTE), llM = Integer.parseInt(hl.group(1)) * 60 + Integer.parseInt(hl.group(2));
-                faltan = ((llM - ahoraM) % 720 + 720) % 720;
-            }
-            String ll = "/llega?h=" + cod(nav ? sv.navLlega : "") + (nav && sv.navDestM >= 0 ? "&d=" + sv.navDestM : "") + (faltan >= 0 ? "&t=" + faltan : "");
+            // cuánto falta y a qué hora se llega: del Google de Mascota Auto si guía; si no, del aviso de Maps/Waze; si no, de la
+            // ruta de Cubi. Antes solo se leía el aviso de Maps y con el Google de Mascota Auto no salía nada.
+            int faltan = -1, faltaM = -1; String llega = "";
+            if (nav && CubiGoogle.guiando()) {
+                CubiGoogle.falta();
+                if (CubiGoogle.faltaSeg >= 0) {
+                    faltan = Math.max(1, Math.round(CubiGoogle.faltaSeg / 60f)); faltaM = CubiGoogle.faltaMet;
+                    java.util.Calendar c = java.util.Calendar.getInstance(); c.add(java.util.Calendar.SECOND, CubiGoogle.faltaSeg);
+                    llega = new java.text.SimpleDateFormat(android.text.format.DateFormat.is24HourFormat(sv) ? "H:mm" : "h:mm", Locale.US).format(c.getTime());
+                }
+            } else if (nav && !sv.navLlega.isEmpty()) {
+                llega = sv.navLlega; faltaM = sv.navDestM;
+                // los minutos, de la hora de llegada ("8:58", "8:58 p. m." o "20:58"); el viaje cabe en 12 h
+                java.util.regex.Matcher hl = java.util.regex.Pattern.compile("(\\d{1,2})[:.](\\d{2})").matcher(llega);
+                if (hl.find()) {
+                    java.util.Calendar c = java.util.Calendar.getInstance();
+                    int ahoraM = c.get(java.util.Calendar.HOUR_OF_DAY) * 60 + c.get(java.util.Calendar.MINUTE), llM = Integer.parseInt(hl.group(1)) * 60 + Integer.parseInt(hl.group(2));
+                    faltan = ((llM - ahoraM) % 720 + 720) % 720;
+                }
+            } else if (nav && sv.rutaFaltaMin >= 0) { faltan = sv.rutaFaltaMin; faltaM = sv.rutaFaltaM; llega = sv.rutaLlega; }
+            String ll = "/llega?h=" + cod(llega) + (faltaM >= 0 ? "&d=" + faltaM : "") + (faltan >= 0 ? "&t=" + faltan : "");
             if (!ll.equals(yaLlega)) { yaLlega = ll; mandar(ll); }
             CubiEnergia en = CubiCarroDatos.cuentas;
             if (!Double.isNaN(en.energia)) {

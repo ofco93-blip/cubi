@@ -99,6 +99,7 @@ final class CubiGoogle {
     }
     // lo que falta según Google ("12 min  ·  5,3 km  ·  llega 2:15"); vacío si no hay ruta. Se pregunta cada 2 s, no cada cuadro.
     private static String faltaTxt = ""; private static long faltaEn;
+    static volatile int faltaSeg = -1, faltaMet = -1;   // lo mismo en números (para Mapi); se ponen al llamar falta()
     static String falta() {
         Navigator n = nav; long t = System.currentTimeMillis();
         if (n == null || Double.isNaN(irLat)) return "";
@@ -106,7 +107,8 @@ final class CubiGoogle {
         faltaEn = t;
         try {
             com.google.android.libraries.navigation.TimeAndDistance td = n.getCurrentTimeAndDistance();
-            if (td == null || td.getMeters() <= 0) return faltaTxt = "";
+            if (td == null || td.getMeters() <= 0) { faltaSeg = faltaMet = -1; return faltaTxt = ""; }
+            faltaSeg = td.getSeconds(); faltaMet = td.getMeters();
             int seg = td.getSeconds(), min = Math.max(1, Math.round(seg / 60f)); double km = td.getMeters() / 1000.0;
             java.util.Calendar cal = java.util.Calendar.getInstance(); cal.add(java.util.Calendar.SECOND, seg);
             int hh = cal.get(java.util.Calendar.HOUR);
