@@ -253,8 +253,13 @@ static void bleInit() {
 }
 
 // ---------------------------------------------------------------- las piezas de la pantalla
-static void fondo() {   // el azul de la pantalla grande, más oscuro abajo
-  for (int y = 0; y < D; y++) { uint16_t v = empacar(14 + 6.f * y / D, 34 + 14.f * y / D, 130 + 22.f * y / D); uint16_t *f = fb + y * D; for (int x = 0; x < D; x++) f[x] = v; }
+uint16_t *fondoFijo;
+static void fondo() {   // el azul de la pantalla grande, más oscuro abajo: se pinta una vez y luego solo se copia
+  if (!fondoFijo) {
+    fondoFijo = (uint16_t *)ps_malloc(D * D * 2);
+    for (int y = 0; y < D; y++) { uint16_t v = empacar(14 + 6.f * y / D, 34 + 14.f * y / D, 130 + 22.f * y / D); for (int x = 0; x < D; x++) fondoFijo[y * D + x] = v; }
+  }
+  memcpy(fb, fondoFijo, D * D * 2);
 }
 static void mapa(float cyCarro) {
   const float dtp = lim(tAhora - fijoT, 0, 1.6f), k = 0.25f;   // sigue andando con la velocidad que traía; se corrige suave
@@ -294,8 +299,19 @@ static void carrito(float cx, float cy) {
   rellenar(ox, oy, 4, Col{40, 70, 170}, 1); rellenar(px, py, 4, BLANCO, 1);
 }
 // arriba y abajo se oscurece un poco, para que se lean las tarjetas
-static void velos() {
-  for (int y = 0; y < 150; y++) { float a = 0.62f * powf(1 - y / 150.f, 1.4f); for (int x = 0; x < D; x++) { mezclar(x, y, Col{6, 12, 40}, a); mezclar(x, D - 1 - y, Col{6, 12, 40}, a); } }
+static void velos() {   // con cuentas enteras sobre el 5-6-5: con decimales tardaban medio cuadro
+  const int cr = 6 >> 3, cg = 12 >> 2, cb = 40 >> 3;
+  for (int y = 0; y < 150; y++) {
+    const int a = (int)(64 * 0.62f * powf(1 - y / 150.f, 1.4f));
+    if (a <= 0) continue;
+    for (int k = 0; k < 2; k++) {
+      uint16_t *f = fb + (k ? D - 1 - y : y) * D;
+      for (int x = 0; x < D; x++) {
+        uint16_t q = f[x]; int r = (q >> 11) & 31, g = (q >> 5) & 63, b = q & 31;
+        r += ((cr - r) * a) >> 6; g += ((cg - g) * a) >> 6; b += ((cb - b) * a) >> 6; f[x] = (uint16_t)((r << 11) | (g << 5) | b);
+      }
+    }
+  }
 }
 // la flecha del giro
 static void flecha(float cx, float cy, float k, const char *dir) {
@@ -425,8 +441,8 @@ void loop() {
   Orden o; int n = 0;
   while (n++ < 12 && xQueueReceive(colaBle, &o, 0) == pdTRUE) orden(String(o.t));
   pintar();
+  const uint32_t pintado = millis();
   panel->draw16bitRGBBitmap(0, 0, fb, D, D);
-  static uint32_t tc = 0;
-  if (Serial.available() && Serial.read() == 't') Serial.printf("cuadro %lu ms\n", (unsigned long)(millis() - ahora));
-  (void)tc;
+  if (Serial.available() && Serial.read() == 't')
+    Serial.printf("cuadro %lu ms (dibujo %lu, pantalla %lu)\n", (unsigned long)(millis() - ahora), (unsigned long)(pintado - ahora), (unsigned long)(millis() - pintado));
 }
