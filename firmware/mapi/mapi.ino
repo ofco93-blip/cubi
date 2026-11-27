@@ -11,6 +11,7 @@
 #include <BLE2902.h>
 #include <Wire.h>
 #include <Update.h>
+#include <functional>
 #include "fuente.h"
 #include "TouchDrvCSTXXX.hpp"           // el táctil (CST9217), de SensorLib
 
@@ -169,7 +170,7 @@ static void dosRenglones(const char *s, float x, float cy, float tam, const Col 
 // texto por la orilla redonda: centrado en el ángulo a (grados; 0 a la derecha, 90 abajo, -90 arriba) a r del centro.
 // abajo: se lee de izquierda a derecha por la curva de abajo; si no, por la de arriba (o por los lados: a 180 se lee
 // de abajo hacia arriba, a 0 de arriba hacia abajo). Cada letra se gira para quedar parada sobre la curva.
-template <typename P> static void arcoLetras(const char *s, float r, float a, float tam, bool abajo, P plot) {
+static void arcoLetras(const char *s, float r, float a, float tam, bool abajo, const std::function<void(int, int, float)> &plot) {
   const float esc = tam / FUENTE_ALTO, w = anchoTexto(s, tam), dir = abajo ? -1 : 1;
   float pluma = 0;
   while (*s) {
@@ -706,7 +707,28 @@ static void paginaCarro() {
   const int pc = (int)lim(pilaB, 0, 100);
   const Col liq = pc < 15 ? Col{240, 68, 58} : pc < 35 ? Col{245, 165, 36} : Col{90, 225, 150};
   rellenar(px, py, 14, Col{40, 62, 160}, 1);
-  rellenar(px, py, 14, liq, 1, oy + (92.5f - 83.5f * pc / 100.f) * sc);
+  // el líquido vivo: ondea, se ladea con lo que siente Mapi (su acelerómetro) y cargando suben burbujas
+  const float nivel = oy + (92.5f - 83.5f * pc / 100.f) * sc;
+  static float ladeo = 0; ladeo += (lim(gravedad.x * 45, -16, 16) - ladeo) * 0.25f;
+  const float fase = tAhora * (pilaCarga ? 4.2f : 2.4f), amp = pilaCarga ? 4.5f : 3;
+  auto sup = [&](float x) { return nivel + ladeo * (x - C) / 95 + amp * sinf(x * 0.055f + fase) + amp * 0.45f * sinf(x * 0.13f - fase * 1.3f); };
+  const Col liq2{liq.r * 0.55f, liq.g * 0.55f, liq.b * 0.55f};
+  for (int y = (int)fmaxf(0, nivel - 24); y < (int)(oy + 93 * sc) && y < D; y++) {
+    const float yc = y + 0.5f; float xs[16]; int m = 0;
+    for (int i = 0; i < 14 && m < 16; i++) { const int j = (i + 1) % 14; if ((py[i] <= yc) != (py[j] <= yc)) xs[m++] = px[i] + (yc - py[i]) * (px[j] - px[i]) / (py[j] - py[i]); }
+    for (int i = 1; i < m; i++) { const float v = xs[i]; int j = i; while (j > 0 && xs[j - 1] > v) { xs[j] = xs[j - 1]; j--; } xs[j] = v; }
+    const float k = lim((yc - nivel) / (oy + 93 * sc - nivel), 0, 1);
+    const Col cl{liq.r + (liq2.r - liq.r) * k, liq.g + (liq2.g - liq.g) * k, liq.b + (liq2.b - liq.b) * k};
+    for (int q = 0; q + 1 < m; q += 2) for (int x = (int)ceilf(xs[q]); x <= (int)xs[q + 1] && x < D; x++) {
+      const float d = yc - sup(x + 0.5f);
+      if (d >= 0) mezclar(x, y, cl, lim(d + 0.5f, 0, 1));
+      if (d > -1.8f && d < 1.2f) mezclar(x, y, BLANCO, 0.55f * (1 - fabsf(d + 0.3f) / 1.5f));   // el brillo de la superficie
+    }
+  }
+  if (pilaCarga) for (int i = 0; i < 5; i++) {   // burbujas que suben
+    const float alto = oy + 88 * sc - nivel, sube = fmodf(tAhora * 38 + i * 29, fmaxf(10, alto)), bx = C - 50 + i * 25 + 4 * sinf(fase + i);
+    disco(bx, oy + 88 * sc - sube, 2.5f + (i % 2), BLANCO, 0.7f * (1 - sube / fmaxf(10, alto)));
+  }
   for (int i = 0; i < 14; i++) { const int j = (i + 1) % 14; grueso(px[i], py[i], px[j], py[j], 3, BLANCO, 1); }
   char b[32]; snprintf(b, sizeof b, "%d", pc); textoFilo(b, C, oy + 58 * sc, 46, BLANCO); texto("%", C, oy + 76 * sc, 18, BLANCO, 0.9f);
   if (pilaReal >= 0) { snprintf(b, sizeof b, "Real %d km", pilaReal); textoArco(b, 205, 184, 26, BLANCO, false); }
