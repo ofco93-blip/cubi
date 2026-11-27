@@ -241,6 +241,11 @@ pre.reg { margin: 0; max-height: 320px; overflow: auto; font: 11px/1.35 ui-monos
     <div class="fila"><span>Usar el GPS<small>Sin GPS usa la última ubicación del celular</small></span><label class="sw"><input type="checkbox" id="gps2"><i></i></label></div>
     <div class="fila"><span>Actualizar a Mapi</span><button class="enlace" data-ir="ajustes">En Ajustes</button></div>
   </div>
+  <h2>Cómo se ve</h2>
+  <div class="card">
+    <div class="fila"><span>Zoom del mapa<small id="mapiZoomV">100 %</small></span><input type="range" id="mapiZoom" min="0.5" max="2.5" step="0.1" value="1" style="width:50%"></div>
+    <div class="fila"><span>Tamaño de la flecha<small id="mapiFlechaV">100 %</small></span><input type="range" id="mapiFlecha" min="0.6" max="2.5" step="0.1" value="1" style="width:50%"></div>
+  </div>
   <h2>Mapas sin internet</h2>
   <div class="card">
     <p class="note" style="margin:4px 0 10px">Las ciudades por donde andas, separadas por coma. Baja también las carreteras entre ellas; con eso las calles salen aunque no haya señal. Mejor con WiFi.</p>
@@ -509,6 +514,11 @@ function mapi() {
 }
 setInterval(mapi, 2000);
 if (A() && A().mapasLugares) $('mapasLugares').value = A().mapasLugares();
+['mapiZoom', 'mapiFlecha'].forEach(k => {           // se ve en Mapi al segundo, mientras se mueve
+  const pon = v => { $(k + 'V').textContent = Math.round(v * 100) + ' %'; };
+  if (A() && A().mapiAjuste) { $(k).value = A().mapiAjuste(k); pon(A().mapiAjuste(k)); }
+  $(k).oninput = e => { pon(+e.target.value); if (A() && A().mapiAjustar) A().mapiAjustar(k, +e.target.value); };
+});
 $('mapasBajar').onclick = () => { const l = $('mapasLugares').value.trim(); if (l && A() && A().mapasBajar) { A().mapasBajar(l); toast('Descargando los mapas…'); } };
 
 // ---------- Mascota Auto ----------

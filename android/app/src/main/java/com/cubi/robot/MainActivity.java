@@ -727,6 +727,8 @@ public class MainActivity extends Activity {
 
         // mapas sin internet: la lista de ciudades se guarda solo en este celular
         @JavascriptInterface public String mapasLugares() { return getSharedPreferences("cubi", 0).getString("mapasLugares", ""); }
+        @JavascriptInterface public float mapiAjuste(String k) { return getSharedPreferences("cubi", 0).getFloat(k, 1); }
+        @JavascriptInterface public void mapiAjustar(String k, float v) { if (k.equals("mapiZoom") || k.equals("mapiFlecha")) getSharedPreferences("cubi", 0).edit().putFloat(k, v).apply(); }
         @JavascriptInterface public String mapasEstado() { return CubiMapas.resumen(MainActivity.this); }
         @JavascriptInterface
         public void mapasBajar(String lugares) {

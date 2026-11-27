@@ -243,7 +243,8 @@ char giroDir[8] = "", giroCalle[40] = "", llegaTxt[8] = ""; int giroM = -1, falt
 int pilaB = -1, pilaReal = -1, pilaWltp = -1; bool pilaCarga = false; float pilaKw = 0, pilaHoras = -1, pilaProm = 0;
 int climaG = -1000; char climaE[12] = "", climaLugar[28] = ""; bool climaNoche = false;
 int horaMin = -1; float horaT = 0;
-char calleAhora[40] = ""; int limV = -1; bool limX = false;   // la calle por donde va y el límite de la vía (de Google)
+char calleAhora[40] = ""; int limV = -1; bool limX = false;
+float zoomMapa = 1, tamFlecha = 1;   // los pone la app (pestaña Mapi): acercar o alejar el mapa y el tamaño de la flecha   // la calle por donde va y el límite de la vía (de Google)
 
 static String decodificar(const String &s) {   // %XX y + -> espacio
   String o; o.reserve(s.length());
@@ -281,6 +282,7 @@ static void orden(const String &linea) {
     pilaCarga = valor(q, "c") == "1"; pilaKw = valor(q, "k").toFloat(); pilaHoras = tiene(q, "h") ? valor(q, "h").toFloat() : -1; pilaProm = valor(q, "p").toFloat();
   } else if (ruta == "/clima") { climaG = valor(q, "t").toInt(); strlcpy(climaE, valor(q, "e").c_str(), sizeof climaE); strlcpy(climaLugar, valor(q, "l").c_str(), sizeof climaLugar); climaNoche = valor(q, "n") == "1"; }
   else if (ruta == "/hora") { horaMin = valor(q, "m").toInt(); horaT = tAhora; }
+  else if (ruta == "/ajuste") { zoomMapa = lim(valor(q, "z").toFloat(), 0.5f, 2.5f); tamFlecha = lim(valor(q, "f").toFloat(), 0.6f, 2.5f); }
   else if (ruta == "/calle") strlcpy(calleAhora, valor(q, "c").c_str(), sizeof calleAhora);
   else if (ruta == "/limite") { limV = valor(q, "v").toInt(); limX = valor(q, "x") == "1"; }
 }
@@ -367,7 +369,7 @@ static void mapa(float cyCarro) {
   if (!c.nv) return;
   // Acostado, como los navegadores: una cámara detrás y arriba del carro mirando hacia adelante. Lo de lejos se achica
   // y sube hacia el horizonte. Medidas en metros; (x a la derecha, y hacia adelante del carro).
-  const float F = 470, ALTO = 150, ATRAS = 150, IN = 0.82f, cI = cosf(IN), sI = sinf(IN), CERCA = -110, LEJOS = 560;
+  const float F = 470 * zoomMapa, ALTO = 150, ATRAS = 150, IN = 0.82f, cI = cosf(IN), sI = sinf(IN), CERCA = -110, LEJOS = 560;
   const float cy0 = cyCarro + F * (ATRAS * sI - ALTO * cI) / (ATRAS * cI + ALTO * sI);
   auto proy = [&](float x, float y, float &sx, float &sy, float &kk) {
     const float prof = (y + ATRAS) * cI + ALTO * sI; kk = F / prof; sx = C + x * kk; sy = cy0 - ((y + ATRAS) * sI - ALTO * cI) * kk;
@@ -416,8 +418,9 @@ static void mapa(float cyCarro) {
   }
 }
 static void carrito(float cx, float cy) {   // la flecha azul de Google, con su borde blanco
-  disco(cx, cy, 30, Col{66, 133, 244}, 0.18f);
-  float px[4] = {cx, cx + 13, cx, cx - 13}, py[4] = {cy - 17, cy + 14, cy + 7, cy + 14};
+  const float t = tamFlecha;
+  disco(cx, cy, 30 * t, Col{66, 133, 244}, 0.18f);
+  float px[4] = {cx, cx + 13 * t, cx, cx - 13 * t}, py[4] = {cy - 17 * t, cy + 14 * t, cy + 7 * t, cy + 14 * t};
   float ox[4], oy[4]; for (int i = 0; i < 4; i++) { ox[i] = cx + (px[i] - cx) * 1.3f; oy[i] = cy + (py[i] - cy) * 1.3f + 1; }
   rellenar(ox, oy, 4, BLANCO, 1); rellenar(px, py, 4, Col{66, 133, 244}, 1);
 }

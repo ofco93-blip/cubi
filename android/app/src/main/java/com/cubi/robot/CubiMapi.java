@@ -49,7 +49,7 @@ final class CubiMapi {
     private final ArrayDeque<Paq> cola = new ArrayDeque<>();
     private volatile String estado = "Buscando a Mapi…";
     private static volatile List<String> ultMapa; private static volatile int ultVias; private static volatile String ultCierre;
-    private String yaGiro = "", yaLlega = "", yaPila = "", yaClima = "", yaLimite = ""; private long yaHora, yaSinGps, yaCalle, yaLim;
+    private String yaGiro = "", yaLlega = "", yaPila = "", yaClima = "", yaLimite = "", yaAjuste = ""; private long yaHora, yaSinGps, yaCalle, yaLim;
     private volatile int limiteAhora = -1; private double limLa = Double.NaN, limLo;
     // la actualización
     private byte[] fw; private int enviados; private volatile boolean actualizando, terminando;
@@ -132,7 +132,7 @@ final class CubiMapi {
     private void empezar() {
         if (listo) return;
         listo = true; version = ""; estado = "Conectado · firmware anterior a la 2.0.400 (toca Actualizar Mapi).";
-        yaGiro = yaLlega = yaPila = yaClima = yaLimite = ""; yaHora = 0; yaCalle = 0;            // recién conectado: se manda todo otra vez
+        yaGiro = yaLlega = yaPila = yaClima = yaLimite = yaAjuste = ""; yaHora = 0; yaCalle = 0;            // recién conectado: se manda todo otra vez
         mandar("/hola");                                               // ¿qué versión tiene? (la de antes no contesta)
         ui.post(this::mandarMapa);
     }
@@ -268,6 +268,9 @@ final class CubiMapi {
                 }
                 limLa = la; limLo = lo;
             }
+            android.content.SharedPreferences pr = sv.getSharedPreferences("cubi", 0);   // el zoom y la flecha (pestaña Mapi)
+            String aj = String.format(Locale.US, "/ajuste?z=%.2f&f=%.2f", pr.getFloat("mapiZoom", 1), pr.getFloat("mapiFlecha", 1));
+            if (!aj.equals(yaAjuste)) { yaAjuste = aj; mandar(aj); }
             String lm = "/limite?v=" + limiteAhora + "&x=" + (limiteAhora > 0 && sv.kmh > limiteAhora + 5 ? 1 : 0);   // x: va pasado del límite
             if (!lm.equals(yaLimite)) { yaLimite = lm; mandar(lm); }
             if (sv.climaGrados != Integer.MIN_VALUE) {
