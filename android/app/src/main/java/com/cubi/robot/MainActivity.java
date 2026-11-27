@@ -714,6 +714,19 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public void actualizarMapi() {
+            new Thread(() -> {
+                try {
+                    js("toast('Descargando el firmware de Mapi…')");
+                    byte[] fw = descargar(urlArchivo(ultimaVersion(), "mapi.ino.bin"));
+                    if (CubiMapi.yo != null) CubiMapi.yo.ota(fw);
+                } catch (Exception e) {
+                    js("toast(" + JSONObject.quote("No pude descargar el firmware de Mapi: " + e.getMessage()) + ")");
+                }
+            }).start();
+        }
+
+        @JavascriptInterface
         public void actualizarCubi() {
             new Thread(() -> {
                 try {

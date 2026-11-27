@@ -343,7 +343,7 @@ section[hidden] { display: none; }
     </details>
   </div>
   <div class="grupo robot"><b>Mapi</b><small>La pantalla redonda del mapa, debajo del volante</small></div>
-  <div class="card"><p class="note" id="mapiEstado">Buscando a Mapi…</p><p class="note">Mapi siempre muestra el mapa: el giro, la pila del carro, el clima y la hora. Se conecta solo, aparte de Cubi. Para el mapa hay que tener prendido “Usar el GPS”.</p></div>
+  <div class="card"><p class="note" id="mapiEstado">Buscando a Mapi…</p><button class="btn" id="mapiActualizar" style="width:100%;margin-top:10px">Actualizar Mapi</button><p class="note">Mapi siempre muestra el mapa: el giro, la pila del carro, el clima y la hora. Se conecta solo, aparte de Cubi. Para el mapa hay que tener prendido “Usar el GPS”.</p></div>
   <div class="grupo auto"><b>La pantalla del carro</b><small>Android Auto: lo que sale al abrir Cubi en la pantalla grande</small></div>
   <h2>Mascota de Android Auto</h2>
   <div class="card">
@@ -638,6 +638,7 @@ if (window.Android && Android.navCompleto) setTimeout(() => { $('navCompleto').c
 });
 $('carroRegVer').onclick = () => { const p = $('carroReg'); p.hidden = false; p.textContent = window.Android && Android.carroRegistro ? Android.carroRegistro() : 'Solo en el celular.'; p.scrollTop = p.scrollHeight; };
 if (window.Android) setTimeout(() => gpsEstado(Android.gpsActivo()), 500);
+$('mapiActualizar').onclick = () => { if (window.Android && Android.actualizarMapi) Android.actualizarMapi(); };
 if (window.Android && Android.mapiEstado) setInterval(() => { $('mapiEstado').textContent = 'Mapi: ' + Android.mapiEstado(); }, 2000);
 function climaEstado(si) { $('clima').checked = si; }
 function climaTexto(s) { if (s) $('climaNota').textContent = s; }

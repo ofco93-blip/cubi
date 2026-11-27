@@ -987,6 +987,17 @@ public class CubiService extends Service {
         return mejor;
     }
 
+    // Para Mapi, sin posición del GPS (adentro, o con el GPS apagado): el mapa se arma con la última ubicación que
+    // tenga el celular (de cualquier fuente). La ubicación no sale del celular más que como siempre (las calles).
+    @SuppressLint("MissingPermission")
+    void mapaSinGps() {
+        try {
+            LocationManager lm = (LocationManager) getSystemService(LOCATION_SERVICE); Location mejor = null;
+            for (String p : lm.getProviders(true)) { Location l = lm.getLastKnownLocation(p); if (l != null && (mejor == null || l.getTime() > mejor.getTime())) mejor = l; }
+            if (mejor != null) mapaGps(mejor);
+        } catch (SecurityException ignored) { }
+    }
+
     private void mapaGps(Location l) {
         long ahora = System.currentTimeMillis();
         if (!(navMapa() || carroMapa() || CubiMapi.listo()) || !navActiva()) return;
