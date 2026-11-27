@@ -570,7 +570,7 @@ public class CubiService extends Service {
         float total = ac[ac.length - 1], falta = total - ac[k];
         int min = total <= 0 ? 0 : (int) Math.round(rutaDura * falta / total / 60);
         rutaFaltaM = Math.round(falta); rutaFaltaMin = min;
-        if (falta < 60 && Math.hypot((la[la.length - 1] - lat) * 111320, (lo[lo.length - 1] - lon) * 111320 * kx) < 120) { llegue(); return; }   // llegó: se acaba la ruta y queda el resumen
+        if (falta < 60 && Math.hypot((la[la.length - 1] - lat) * 111320, (lo[lo.length - 1] - lon) * 111320 * kx) < 120) { llegue("a menos de 60 m del final de la ruta"); return; }   // llegó: se acaba la ruta y queda el resumen
         rutaLlega = new java.text.SimpleDateFormat(android.text.format.DateFormat.is24HourFormat(this) ? "H:mm" : "h:mm", Locale.US).format(new java.util.Date(System.currentTimeMillis() + min * 60000L));
     }
     private volatile boolean rutaCalculando, destBuscando;
@@ -585,7 +585,8 @@ public class CubiService extends Service {
     // El viaje: lo andado y el tiempo desde que se puso el destino; al llegar queda el resumen un rato en la pantalla del carro.
     private double viajeM; private long viajeDesde; private Location viajeAntes;
     volatile String resumen = ""; volatile long resumenCuando;
-    private void llegue() {
+    private void llegue(String motivo) {
+        CubiCarroDatos.registrar(this, "DESTINO_QUITADO llegada: " + motivo);   // caja negra: el destino se quitaba solo a medio camino
         if (viajeDesde > 0 && viajeM > 200) {
             long min = Math.max(1, (System.currentTimeMillis() - viajeDesde) / 60000);
             resumen = "Llegaste" + (destNombre.isEmpty() || destNombre.equals("el destino") ? "" : " a " + destNombre) + "  ·  " + String.format(Locale.US, "%.1f km", viajeM / 1000).replace('.', ',')
@@ -1930,7 +1931,7 @@ public class CubiService extends Service {
                 && ahora - llegadaAvisada > 60000) {
             llegadaAvisada = ahora;
             navDecision = "¡llegamos!"; navDir = "llegamos";
-            if (!destinoTexto().isEmpty()) llegue();                  // Maps dijo que llegó: la ruta propia también se acaba
+            if (!destinoTexto().isEmpty()) llegue("el aviso de Maps: " + s);   // Maps dijo que llegó: la ruta propia también se acaba
             enviar("asis|/r?n=llegamos");
             return;
         }

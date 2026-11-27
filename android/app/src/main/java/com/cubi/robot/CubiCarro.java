@@ -289,7 +289,7 @@ public class CubiCarro extends CarAppService {
             if (lienzo.tocaListas(x, y)) { getScreenManager().push(new Listas(getCarContext())); return; }   // la pastilla de la canción: tus listas de Spotify
             if (lienzo.tocaVoz(x, y)) { CubiGoogle.vozSiguiente(getCarContext()); return; }   // el parlante: voz completa, solo alertas o callada
             if (lienzo.tocaCentrar(x, y)) { if (goo != null) goo.centrar(); return; }                    // el botón de centrar: el mapa vuelve al carro
-            if (lienzo.tocaCancelar(x, y)) { if (CubiService.yo != null) CubiService.yo.destino(""); return; }   // la X: quita el destino y su ruta
+            if (lienzo.tocaCancelar(x, y)) { CubiCarroDatos.registrar(getCarContext(), "DESTINO_QUITADO la X de la pantalla del carro"); if (CubiService.yo != null) CubiService.yo.destino(""); return; }   // la X: quita el destino y su ruta
             if (lienzo.tocaDestino(x, y)) { getScreenManager().push(new Buscar(getCarContext())); return; }   // el botón Destino del mapa
             int k = lienzo.boton(x, y);
             if (k != 2 && CubiService.yo != null) CubiService.yo.musicaTecla(k);

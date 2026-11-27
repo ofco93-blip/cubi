@@ -615,6 +615,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public void destinoCubi(String txt) {
+            if (txt == null || txt.trim().isEmpty()) CubiCarroDatos.registrar(MainActivity.this, "DESTINO_QUITADO desde la app del celular");
             if (CubiService.yo != null) CubiService.yo.destino(txt);
         }
 
