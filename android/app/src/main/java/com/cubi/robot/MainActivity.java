@@ -555,6 +555,21 @@ public class MainActivity extends Activity {
             return k.equals("carroFondo") ? p.getInt(k, -1) : p.getInt("carroVista", p.getBoolean("carroSola", false) ? 1 : 0);
         }
 
+        // lo último que anotó la caja negra del carro (CubiCarroDatos): se ve y se copia desde la pestaña, sin cable
+        @JavascriptInterface
+        public String carroRegistro() {
+            try {
+                java.io.File f = new java.io.File(getExternalFilesDir(null), "datos_carro.txt");
+                if (!f.exists()) return "Todavía no hay nada: conecta el celular al carro y abre Cubi en la pantalla.";
+                try (java.io.RandomAccessFile r = new java.io.RandomAccessFile(f, "r")) {
+                    long n = r.length(); byte[] b = new byte[(int) Math.min(n, 24000)];
+                    r.seek(n - b.length); r.readFully(b);
+                    String t = new String(b, "UTF-8"); int i = t.indexOf('\n');
+                    return n > b.length && i >= 0 ? t.substring(i + 1) : t;   // si se cortó, desde el primer renglón completo
+                }
+            } catch (Exception e) { return "No pude leer el registro: " + e; }
+        }
+
         @JavascriptInterface
         public void carroPon(String k, int v) {
             android.content.SharedPreferences.Editor e = getSharedPreferences("cubi", 0).edit();

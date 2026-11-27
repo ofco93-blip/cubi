@@ -361,6 +361,9 @@ section[hidden] { display: none; }
     <div class="row"><span>Pila del carro</span></div>
     <select id="carroPila" aria-label="Pila del carro en la pantalla"><option value="0">Cabeza de gato de vidrio</option><option value="1">Cabeza oscura con aro de luz</option><option value="2">Pastilla de vidrio con orejas</option><option value="3">No mostrar</option></select>
     <p class="note">La batería y la autonomía que el carro le pasa a Android Auto (hay que aceptar “Información del vehículo” en el celular). Sin destino sale arriba con los kilómetros reales y el consumo; con destino queda solo el gatito con el número, junto a los botones.</p>
+    <button class="btn" id="carroRegVer" style="width:100%;margin-top:10px">Ver lo que ha dicho el carro</button>
+    <pre id="carroReg" hidden style="max-height:320px;overflow:auto;font-size:11px;line-height:1.35;white-space:pre-wrap;word-break:break-word;user-select:text;-webkit-user-select:text;background:rgba(0,0,0,.35);border-radius:12px;padding:10px;margin-top:10px"></pre>
+    <p class="note">La caja negra: Cubi anota todo lo que el carro le pasa a Android Auto (batería, carga, velocidad, kilometraje, sensores, y también lo que el carro no quiso dar). Se guarda solo en este celular; mantén oprimido el texto para copiarlo.</p>
     <p class="note">Es lo que sale al abrir Cubi en la pantalla del carro. Son las mismas opciones del botón “Opciones” de esa pantalla: lo que cambies aquí se ve allá al instante. El robot sigue con su propia cara.</p>
   </div>
 </section>
@@ -631,6 +634,7 @@ if (window.Android && Android.navCompleto) setTimeout(() => { $('navCompleto').c
   $(k).onchange = e => { if (window.Android && Android.carroPon) Android.carroPon(k, +e.target.value); };
   if (window.Android && Android.carroOpcion) setTimeout(() => { $(k).value = Android.carroOpcion(k); }, 500);
 });
+$('carroRegVer').onclick = () => { const p = $('carroReg'); p.hidden = false; p.textContent = window.Android && Android.carroRegistro ? Android.carroRegistro() : 'Solo en el celular.'; p.scrollTop = p.scrollHeight; };
 if (window.Android) setTimeout(() => gpsEstado(Android.gpsActivo()), 500);
 function climaEstado(si) { $('clima').checked = si; }
 function climaTexto(s) { if (s) $('climaNota').textContent = s; }

@@ -34,6 +34,7 @@ import java.util.concurrent.Executor;
 public class CubiCarroDatos extends CubiCarro {
     static final String TAG = "CubiDatos";
     static final String P_FUEL = "com.google.android.gms.permission.CAR_FUEL";
+    static final String P_SPEED = "com.google.android.gms.permission.CAR_SPEED", P_MILEAGE = "com.google.android.gms.permission.CAR_MILEAGE";
 
     static final CubiEnergia cuentas = new CubiEnergia();   // el promedio vive mientras viva la app y se guarda en las preferencias
     static boolean cargado, pedido, avisoCarga;
@@ -72,13 +73,75 @@ public class CubiCarroDatos extends CubiCarro {
         crudo = ""; avisoCarga = false;
         registrar(cc, "CONEXION nivel=" + cc.getCarAppApiLevel());
         if (cc.getCarAppApiLevel() < 3) { registrar(cc, "Android Auto muy viejo para dar datos del carro"); return; }
-        if (ContextCompat.checkSelfPermission(cc, P_FUEL) == PackageManager.PERMISSION_GRANTED) { oir(cc); return; }
-        if (pedido) return;   // se pide una sola vez por arranque
+        final boolean fuel = dado(cc, P_FUEL);
+        if (fuel) oir(cc);
+        oirTodo(cc);                                       // la caja negra: todo lo demás que el carro quiera decir
+        java.util.ArrayList<String> faltan = new java.util.ArrayList<>();
+        for (String q : new String[]{P_FUEL, P_SPEED, P_MILEAGE}) if (!dado(cc, q)) faltan.add(q);
+        if (faltan.isEmpty() || pedido) return;            // se pide una sola vez por arranque
         pedido = true;
-        // el permiso se concede en el celular (con el carro quieto): sale como "Información del vehículo"
-        cc.requestPermissions(Arrays.asList(P_FUEL), (dados, negados) -> {
-            if (dados.contains(P_FUEL)) oir(cc); else registrar(cc, "Falta el permiso de datos del carro (acéptalo en el celular)");
+        // los permisos se conceden en el celular (con el carro quieto): salen como "Información del vehículo" y velocidad
+        cc.requestPermissions(faltan, (dados, negados) -> {
+            if (!fuel && dados.contains(P_FUEL)) oir(cc);
+            if (dados.contains(P_SPEED)) oirVelocidad(cc);
+            if (dados.contains(P_MILEAGE)) oirKm(cc);
+            if (!negados.isEmpty()) registrar(cc, "PERMISOS sin aceptar: " + negados);
         });
+    }
+
+    static boolean dado(CarContext cc, String permiso) { return ContextCompat.checkSelfPermission(cc, permiso) == PackageManager.PERMISSION_GRANTED; }
+    static void falla(CarContext cc, String que, Throwable e) { registrar(cc, que + ": error " + e.getClass().getSimpleName() + " " + e.getMessage()); }
+
+    // Una línea por tema ("clave") como mucho cada "ms", y solo si cambió: los sensores hablan decenas de veces por segundo.
+    interface Txt { String t(); }
+    static final java.util.HashMap<String, Long> cuando = new java.util.HashMap<>();
+    static final java.util.HashMap<String, String> dicho = new java.util.HashMap<>();
+    static void cada(CarContext cc, String clave, long ms, Txt x) {
+        long t = System.currentTimeMillis(); Long a = cuando.get(clave);
+        if (a != null && t - a < ms) return;
+        String linea = x.t();
+        if (linea.equals(dicho.get(clave))) return;
+        cuando.put(clave, t); dicho.put(clave, linea); registrar(cc, clave + " " + linea);
+    }
+
+    // LA CAJA NEGRA: se le pide al carro todo lo que Android Auto sabe entregar y se anota tal cual llegue (o por qué no
+    // llegó: "sin dato, estado N"), para revisar después qué sirve. Solo LEE; nada toca el carro.
+    // Android Auto no entrega códigos de falla (eso es del puerto OBD, que en este carro está cerrado).
+    // La ubicación del carro se anota sin coordenadas (solo si llega y con qué precisión).
+    static void oirTodo(CarContext cc) {
+        cuando.clear(); dicho.clear();
+        Executor ex = ContextCompat.getMainExecutor(cc);
+        CarHardwareManager hw = cc.getCarService(CarHardwareManager.class);
+        CarInfo info = hw.getCarInfo();
+        try { registrar(cc, "ANFITRION " + cc.getHostInfo()); } catch (Throwable e) { }
+        try { info.fetchModel(ex, m -> registrar(cc, "MODELO marca=" + v(m.getManufacturer()) + " modelo=" + v(m.getName()) + " año=" + v(m.getYear()))); } catch (Throwable e) { falla(cc, "Modelo", e); }
+        try { info.fetchEnergyProfile(ex, q -> registrar(cc, "TIPO_ENERGIA conectores=" + v(q.getEvConnectorTypes()) + " combustibles=" + v(q.getFuelTypes()))); } catch (Throwable e) { falla(cc, "Tipo de energía", e); }
+        try { info.addTollListener(ex, t -> cada(cc, "PEAJE", 0, () -> "tarjeta=" + v(t.getCardState()))); } catch (Throwable e) { falla(cc, "Peaje", e); }
+        if (dado(cc, P_SPEED)) oirVelocidad(cc);
+        if (dado(cc, P_MILEAGE)) oirKm(cc);
+        try {
+            androidx.car.app.hardware.info.CarSensors sn = hw.getCarSensors(); int r = androidx.car.app.hardware.info.CarSensors.UPDATE_RATE_NORMAL;
+            try { sn.addCompassListener(r, ex, b -> cada(cc, "BRUJULA", 30000, () -> v(b.getOrientations()))); } catch (Throwable e) { falla(cc, "Brújula", e); }
+            try { sn.addAccelerometerListener(r, ex, a -> cada(cc, "ACELEROMETRO", 60000, () -> v(a.getForces()))); } catch (Throwable e) { falla(cc, "Acelerómetro", e); }
+            try { sn.addGyroscopeListener(r, ex, g -> cada(cc, "GIROSCOPIO", 60000, () -> v(g.getRotations()))); } catch (Throwable e) { falla(cc, "Giroscopio", e); }
+            if (dado(cc, Manifest.permission.ACCESS_FINE_LOCATION))
+                try { sn.addCarHardwareLocationListener(r, ex, l -> cada(cc, "UBICACION_CARRO", 60000, () -> {
+                    CarValue<Location> c = l.getLocation();
+                    return c != null && c.getStatus() == CarValue.STATUS_SUCCESS && c.getValue() != null ? "llega, precision_m=" + Math.round(c.getValue().getAccuracy()) + " velocidad=" + c.getValue().hasSpeed() : v(c);
+                })); } catch (Throwable e) { falla(cc, "Ubicación del carro", e); }
+        } catch (Throwable e) { falla(cc, "Sensores", e); }
+    }
+    static void oirVelocidad(CarContext cc) {
+        try {
+            cc.getCarService(CarHardwareManager.class).getCarInfo().addSpeedListener(ContextCompat.getMainExecutor(cc),
+                    n -> cada(cc, "VELOCIDAD", 5000, () -> "real_m_s=" + v(n.getRawSpeedMetersPerSecond()) + " tablero_m_s=" + v(n.getDisplaySpeedMetersPerSecond()) + " unidad=" + v(n.getSpeedDisplayUnit())));
+        } catch (Throwable e) { falla(cc, "Velocidad", e); }
+    }
+    static void oirKm(CarContext cc) {
+        try {
+            cc.getCarService(CarHardwareManager.class).getCarInfo().addMileageListener(ContextCompat.getMainExecutor(cc),
+                    n -> cada(cc, "KILOMETRAJE", 30000, () -> "odometro_m=" + v(n.getOdometerMeters()) + " unidad=" + v(n.getDistanceDisplayUnit())));
+        } catch (Throwable e) { falla(cc, "Kilometraje", e); }
     }
 
     static void oir(CarContext cc) {
@@ -86,7 +149,7 @@ public class CubiCarroDatos extends CubiCarro {
         CarInfo info = cc.getCarService(CarHardwareManager.class).getCarInfo();
         try {
             info.addEnergyLevelListener(ex, n -> {
-                String t = "ENERGIA bat=" + v(n.getBatteryPercent()) + " rango_m=" + v(n.getRangeRemainingMeters());
+                String t = "ENERGIA bat=" + v(n.getBatteryPercent()) + " rango_m=" + v(n.getRangeRemainingMeters()) + " baja=" + v(n.getEnergyIsLow());
                 if (t.equals(crudo)) return;   // el carro repite el dato unas 3 veces por segundo: solo se atiende si cambió
                 crudo = t;
                 registrar(cc, t);
@@ -139,7 +202,7 @@ public class CubiCarroDatos extends CubiCarro {
     }
 
     // Registro en el celular: Android/data/com.cubi.robot/files/datos_carro.txt (se lee después por cable).
-    // Solo escribe cuando la línea cambia. ponytail: tope de 2 MB y deja de escribir; si se vuelve fijo, rotar el archivo.
+    // Solo escribe cuando la línea cambia. Al llegar a 2 MB guarda ese como datos_carro_anterior.txt y sigue en uno nuevo.
     static String ultima = "";
     static synchronized void registrar(CarContext cc, String linea) {
         Log.i(TAG, linea);
@@ -147,7 +210,10 @@ public class CubiCarroDatos extends CubiCarro {
         ultima = linea;
         try {
             java.io.File f = new java.io.File(cc.getExternalFilesDir(null), "datos_carro.txt");
-            if (f.length() > 2_000_000) return;
+            if (f.length() > 2_000_000) {                   // lleno: el anterior queda aparte y se sigue en uno nuevo
+                java.io.File viejo = new java.io.File(cc.getExternalFilesDir(null), "datos_carro_anterior.txt");
+                viejo.delete(); f.renameTo(viejo);
+            }
             String hora = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(new java.util.Date());
             try (java.io.FileWriter w = new java.io.FileWriter(f, true)) { w.write(hora + " " + linea + "\n"); }
         } catch (Throwable e) { Log.w(TAG, "registro", e); }
