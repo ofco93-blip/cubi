@@ -1181,18 +1181,68 @@ public class CubiCarro extends CarAppService {
             pq.setStyle(Paint.Style.FILL); pq.setColor(0xffffffff); pq.setShader(shBri); c.drawOval(W * 0.04f, ey - ry, W * 0.96f, ey + ry, pq); pq.setShader(null);   // el brillo de arriba
             c.restore();
             pq.setStyle(Paint.Style.STROKE); pq.setStrokeWidth(osc ? 2 : 3.4f); pq.setColor(0xffffffff); pq.setShader(shBor); c.drawPath(pilaF, pq); pq.setShader(null);   // el borde de luz
-            String t = String.valueOf(pc);                             // el número, adentro
-            float tam = pas ? 34 : pc == 100 ? 27 : 32, cx = (pas ? 82 : 50) - (carg ? 7 : 0), cy = pas ? 76 : 71;
+            chispas(c, dt, ahora, ny, carg, pas, nx, c0, c2);           // si se sacude: gotitas que rebosan y chispitas
+            String t = String.valueOf(pc);                             // el número, adentro (más arriba) y debajo el %
+            float tam = pas ? 34 : pc == 100 ? 27 : 32, cx = (pas ? 82 : 50) - (carg ? 7 : 0), cy = pas ? 76 : 63;
             ptq.setTypeface(Typeface.DEFAULT_BOLD); ptq.setTextSize(tam); ptq.setTextAlign(Paint.Align.CENTER); ptq.setLetterSpacing(-0.03f);
             ptq.setStyle(Paint.Style.STROKE); ptq.setStrokeWidth(3.2f); ptq.setStrokeJoin(Paint.Join.ROUND); ptq.setColor(0x8007123d); c.drawText(t, cx, cy, ptq);
             ptq.setStyle(Paint.Style.FILL); ptq.setColor(0xffffffff); c.drawText(t, cx, cy, ptq);
+            {   // el porcentaje: en el gato debajo del número; en la pastilla al lado
+                float pt = pas ? 18 : 15, px = pas ? cx + ptq.measureText(t) / 2 + 2 : cx, py = pas ? cy : cy + 17;
+                ptq.setTextSize(pt); ptq.setTextAlign(pas ? Paint.Align.LEFT : Paint.Align.CENTER);
+                ptq.setStyle(Paint.Style.STROKE); ptq.setStrokeWidth(2.4f); ptq.setColor(0x8007123d); c.drawText("%", px, py, ptq);
+                ptq.setStyle(Paint.Style.FILL); ptq.setColor(0xe6ffffff); c.drawText("%", px, py, ptq);
+                ptq.setTextSize(tam); ptq.setTextAlign(Paint.Align.CENTER);
+            }
             if (carg) {                                               // el rayito, que late
-                float z = tam / 32f * (0.92f + 0.14f * late), rx = cx + ptq.measureText(t) / 2 + 8 * tam / 32f, ry2 = cy - tam * 0.34f;
+                float z = tam / 32f * (0.92f + 0.14f * late), rx = cx + ptq.measureText(t) / 2 + 8 * tam / 32f + (pas ? 16 : 0), ry2 = cy - tam * 0.34f;
                 pilaR.rewind(); pilaR.moveTo(rx + 2.5f * z, ry2 - 11 * z); pilaR.lineTo(rx - 6.5f * z, ry2 + 2 * z); pilaR.lineTo(rx - z, ry2 + 2 * z); pilaR.lineTo(rx - 3.5f * z, ry2 + 11 * z); pilaR.lineTo(rx + 6.5f * z, ry2 - 3 * z); pilaR.lineTo(rx + z, ry2 - 3 * z); pilaR.close();
                 pq.setStyle(Paint.Style.STROKE); pq.setStrokeWidth(1.6f); pq.setColor(0x8007123d); c.drawPath(pilaR, pq);
                 pq.setStyle(Paint.Style.FILL); pq.setColor(0xfffff7c2); c.drawPath(pilaR, pq);
             }
             c.restore();
+        }
+        // Cuando el carro sacude el líquido (curva, frenada, acelerón) rebosa un poquito: saltan gotitas del lado que sube y
+        // chispitas de electricidad que se apagan solas. Sutil: pocas a la vez y solo con sacudidas de verdad (o cargando).
+        // En las medidas del dibujo (100 x 96); salen por fuera del gato, sin recorte.
+        private final float[] chX = new float[14], chY = new float[14], chVx = new float[14], chVy = new float[14], chV = new float[14];
+        private final boolean[] chRayo = new boolean[14];
+        private final java.util.Random azar = new java.util.Random();
+        private final Path chP = new Path();
+        private void chispas(Canvas c, float dt, long ahora, float ny, boolean carg, boolean pas, float nx, int cLiq, int cBorde) {
+            float sacude = Math.abs(olaVel) / 45f + Math.max(0, olaAmp - 3.2f) / 3f;   // 0 quieto; ~1 una curva o frenada fuerte
+            float tasa = (sacude > 0.35f ? Math.min(14, (sacude - 0.35f) * 18) : 0) + (carg ? 0.8f : 0);   // cuántas por segundo
+            if (dt > 0 && azar.nextFloat() < tasa * dt) for (int i = 0; i < chV.length; i++) if (chV[i] <= 0) {
+                boolean izq = olaIncl > 0 ? azar.nextFloat() < 0.8f : azar.nextFloat() < 0.2f;   // sale del lado que sube
+                float x0 = pas ? nx : izq ? 18 + azar.nextFloat() * 14 : 68 + azar.nextFloat() * 14;
+                chX[i] = x0; chY[i] = pas ? 40 + azar.nextFloat() * 40 : ny + olaIncl * (x0 - 50) / 50f - 2;
+                chVx[i] = pas ? 12 + azar.nextFloat() * 18 : (izq ? -1 : 1) * (6 + azar.nextFloat() * 16);
+                chVy[i] = -(28 + azar.nextFloat() * 30) * (0.7f + Math.min(1.2f, sacude) * 0.5f);
+                chRayo[i] = carg || azar.nextFloat() < 0.45f; chV[i] = chRayo[i] ? 0.45f : 0.8f;
+                break;
+            }
+            for (int i = 0; i < chV.length; i++) {
+                if (chV[i] <= 0) continue;
+                chV[i] -= dt; chVy[i] += 120 * dt; chX[i] += chVx[i] * dt; chY[i] += chVy[i] * dt;
+                if (chV[i] <= 0) continue;
+                float a = Math.min(1, chV[i] * 3);
+                if (chRayo[i]) {                                          // una chispita: un zigzag corto que titila
+                    float l = (float) Math.hypot(chVx[i], chVy[i]) + 1e-3f, ux = chVx[i] / l, uy = chVy[i] / l, k = 7, s = (ahora / 40 + i) % 2 == 0 ? 1 : -1;
+                    chP.rewind(); chP.moveTo(chX[i], chY[i]);
+                    chP.lineTo(chX[i] - ux * k * 0.4f - uy * 2.6f * s, chY[i] - uy * k * 0.4f + ux * 2.6f * s);
+                    chP.lineTo(chX[i] - ux * k * 0.6f + uy * 2.6f * s, chY[i] - uy * k * 0.6f - ux * 2.6f * s);
+                    chP.lineTo(chX[i] - ux * k, chY[i] - uy * k);
+                    pq.setShader(null); pq.setStyle(Paint.Style.STROKE); pq.setStrokeCap(Paint.Cap.ROUND);
+                    pq.setColor(cBorde); pq.setAlpha((int) (110 * a)); pq.setStrokeWidth(5.5f); c.drawPath(chP, pq);
+                    pq.setColor(0xfffff7c2); pq.setAlpha((int) (255 * a)); pq.setStrokeWidth(2.4f); c.drawPath(chP, pq);
+                    pq.setStyle(Paint.Style.FILL); pq.setStrokeCap(Paint.Cap.BUTT);
+                } else {                                                 // una gotita del líquido, con su brillo
+                    pq.setShader(null); pq.setStyle(Paint.Style.FILL);
+                    pq.setColor(cLiq); pq.setAlpha((int) (235 * a)); c.drawCircle(chX[i], chY[i], 2.6f, pq);
+                    pq.setColor(0xffffffff); pq.setAlpha((int) (200 * a)); c.drawCircle(chX[i] - 0.8f, chY[i] - 0.8f, 0.9f, pq);
+                }
+            }
+            pq.setAlpha(255);
         }
         // Una cápsula de vidrio: translúcida (deja ver el fondo), más clara arriba, con borde de luz y su sombra.
         // ponytail: no desenfoca lo que tiene detrás (el vidrio de verdad lo hace); en este lienzo eso cuesta un cuadro aparte.
