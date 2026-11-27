@@ -48,6 +48,13 @@ jobs:
           arduino-cli compile --fqbn "esp32:esp32:waveshare_esp32_s3_touch_amoled_18:PSRAM=enabled,CDCOnBoot=cdc" --build-property upload.maximum_size=5242880 --output-dir out firmware/cubi 2>&1 | tee compilar.log || { grep -m8 "error" compilar.log | sed "s/^/::error::/"; exit 1; }
           cp out/cubi.ino.bin cubi.ino.bin
 
+      # Mapi: la pantalla redonda del mapa (Waveshare AMOLED 1.75, 466x466). Usa la letra de Cubi.
+      - name: Firmware de Mapi
+        run: |
+          cp firmware/cubi/fuente.h firmware/mapi/fuente.h
+          arduino-cli compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,CDCOnBoot=cdc" --output-dir out_mapi firmware/mapi 2>&1 | tee mapi.log || { grep -m8 "error" mapi.log | sed "s/^/::error::/"; exit 1; }
+          cp out_mapi/mapi.ino.bin mapi.ino.bin
+
       # para grabar por USB (tabla de memoria nueva): programa, arranque y tabla
       - uses: actions/upload-artifact@v4
         with:
@@ -57,6 +64,8 @@ jobs:
             out/cubi.ino.bootloader.bin
             out/cubi.ino.partitions.bin
             out/boot_app0.bin
+            out_mapi/mapi.ino.merged.bin
+            out_mapi/mapi.ino.bin
             FermataAA.apk
             Cubi.apk
           retention-days: 7
@@ -73,4 +82,5 @@ jobs:
           files: |
             Cubi.apk
             cubi.ino.bin
+            mapi.ino.bin
             FermataAA.apk
