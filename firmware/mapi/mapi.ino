@@ -294,7 +294,7 @@ int pilaB = -1, pilaReal = -1, pilaWltp = -1; bool pilaCarga = false; float pila
 int climaG = -1000; char climaE[12] = "", climaLugar[28] = ""; bool climaNoche = false;
 int horaMin = -1; float horaT = 0;
 char calleAhora[40] = ""; int limV = -1; bool limX = false;
-float zoomMapa = 1, tamFlecha = 1, giroPantalla = 0; bool estiloAbajo = false;   // estilo: los datos a los lados (de fábrica) o abajo
+float zoomMapa = 1, tamFlecha = 1, giroPantalla = 0; bool estiloAbajo = false; int aroColor = 0;   // aro del giro: 0 verde, 1 naranja, 2 azul, 3 cian, 4 sin aro   // estilo: los datos a los lados (de fábrica) o abajo
 int altura = -10000, faltaT = -1;
 bool rutaVisible = false;   // la ruta (y su tráfico) solo se pinta mientras se navega: al quitar la navegación se borra   // la altura sobre el mar (m) y los minutos que faltan para llegar   // los pone la app (pestaña Mapi): acercar o alejar el mapa y el tamaño de la flecha   // la calle por donde va y el límite de la vía (de Google)
 
@@ -335,7 +335,7 @@ static void orden(const String &linea) {
   } else if (ruta == "/clima") { climaG = valor(q, "t").toInt(); strlcpy(climaE, valor(q, "e").c_str(), sizeof climaE); strlcpy(climaLugar, valor(q, "l").c_str(), sizeof climaLugar); climaNoche = valor(q, "n") == "1"; }
   else if (ruta == "/hora") { horaMin = valor(q, "m").toInt(); horaT = tAhora; }
   else if (ruta == "/ajuste") { zoomMapa = lim(valor(q, "z").toFloat(), 0.5f, 2.5f); tamFlecha = lim(valor(q, "f").toFloat(), 0.6f, 2.5f);
-    giroPantalla = lim(valor(q, "g").toFloat(), -180, 180); estiloAbajo = valor(q, "e") == "1"; }
+    giroPantalla = lim(valor(q, "g").toFloat(), -180, 180); estiloAbajo = valor(q, "e") == "1"; if (tiene(q, "a")) aroColor = valor(q, "a").toInt(); }
   else if (ruta == "/alt") altura = tiene(q, "m") ? valor(q, "m").toInt() : -10000;
   else if (ruta == "/calle") strlcpy(calleAhora, valor(q, "c").c_str(), sizeof calleAhora);
   else if (ruta == "/limite") { limV = valor(q, "v").toInt(); limX = valor(q, "x") == "1"; }
@@ -556,6 +556,33 @@ static void metros(int m, char *b, size_t n) {
   if (m < 15) snprintf(b, n, "ya"); else if (m < 1000) snprintf(b, n, "%d m", (m + 5) / 10 * 10); else snprintf(b, n, "%d,%d km", m / 1000, m % 1000 / 100);
 }
 
+// El aro del giro, por el borde (como un "cargando"): lleno a 300 m del giro y se va vaciando con el reloj hasta el
+// giro. Sólido, con las puntas redondas y un brillo suave; el resto del carril queda apagado.
+static void aroGiro(float frac) {
+  static const Col COLS[4] = {{70, 220, 130}, {255, 140, 40}, {76, 139, 245}, {60, 210, 240}};
+  if (aroColor < 0 || aroColor > 3) return;
+  const Col c = COLS[aroColor];
+  const float R = C - 7, w = 4, g = 8, lleno = 2 * PI * lim(frac, 0, 1);
+  for (int y = 0; y < D; y++) {
+    const float dy = y + .5f - C, ro = R + g, ri = R - g;
+    if (fabsf(dy) >= ro) continue;
+    const float xo = sqrtf(ro * ro - dy * dy), xi = fabsf(dy) < ri ? sqrtf(ri * ri - dy * dy) : 0;
+    for (int lado = 0; lado < 2; lado++) {                     // la fila cruza el aro por la izquierda y por la derecha
+      const int xa = (int)(lado ? C + xi : C - xo), xb = (int)(lado ? C + xo : C - xi) + 1;
+      for (int x = max(0, xa); x < min(D, xb); x++) {
+        const float dx = x + .5f - C, dd = fabsf(sqrtf(dx * dx + dy * dy) - R);
+        float desde = atan2f(dy, dx) + PI / 2; if (desde < 0) desde += 2 * PI;   // 0 arriba, crece con el reloj
+        const float aro = lim(w + .5f - dd, 0, 1);
+        const float a = desde <= lleno ? fmaxf(aro, lim(1 - (dd - w) / (g - w), 0, 1) * 0.28f) : aro * 0.18f;
+        if (a > 0.01f) mezclar(x, y, c, a);
+      }
+    }
+  }
+  if (lleno <= 0) return;
+  const float a0 = -PI / 2, a1 = -PI / 2 + lleno;                 // las puntas redondas y la que avanza, más clara
+  disco(C + R * cosf(a0), C + R * sinf(a0), w, c, 1); disco(C + R * cosf(a1), C + R * sinf(a1), w, c, 1);
+  disco(C + R * cosf(a1), C + R * sinf(a1), 2.6f, BLANCO, 0.85f);
+}
 static void altTexto(char *b, size_t n) { if (altura >= 1000) snprintf(b, n, "%d.%03d m", altura / 1000, altura % 1000); else snprintf(b, n, "%d m", altura); }
 // abajo, en las dos pantallas: lo que alcanza la pila con el consumo de ahora (o la carga) y la altura por la curva
 static void datosAbajo(bool conKm) {
@@ -595,7 +622,9 @@ static void pintar() {
   char b[40];
   if (nav) {
     // arriba, por la curva: cuánto falta para el giro; debajo la flecha y la calle
-    if (!strcmp(giroDir, "fin")) snprintf(b, sizeof b, giroM >= 0 && giroM > 15 ? "Llegando" : "Llegaste"); else if (giroM >= 0) metros(max(0, giroM - (int)(sqrtf(velX * velX + velY * velY) * (tAhora - giroT))), b, sizeof b); else b[0] = 0;   // entre aviso y aviso descuenta lo andado
+    const int gm = giroM >= 0 ? max(0, giroM - (int)(sqrtf(velX * velX + velY * velY) * (tAhora - giroT))) : -1;   // entre aviso y aviso descuenta lo andado
+    if (gm >= 0 && gm <= 300 && strcmp(giroDir, "fin")) aroGiro(gm / 300.f);   // el aro: desde 300 m del giro
+    if (!strcmp(giroDir, "fin")) snprintf(b, sizeof b, giroM >= 0 && giroM > 15 ? "Llegando" : "Llegaste"); else if (gm >= 0) metros(gm, b, sizeof b); else b[0] = 0;
     if (b[0]) textoArco(b, 195, -90, 46, BLANCO, false);
     flecha(C, b[0] ? 96 : 82, b[0] ? 54 : 62, giroDir);
     if (giroCalle[0]) texto(giroCalle, C, 136, b[0] ? 19 : 22, b[0] ? Col{205, 218, 255} : BLANCO, 1, false, 290);

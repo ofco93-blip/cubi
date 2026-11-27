@@ -753,8 +753,8 @@ public class MainActivity extends Activity {
                 js("mapasOpciones(" + JSONObject.quote(q) + "," + JSONObject.quote(r) + ")");
             }).start();
         }
-        @JavascriptInterface public float mapiAjuste(String k) { return getSharedPreferences("cubi", 0).getFloat(k, k.equals("mapiGiro") || k.equals("mapiEstilo") ? 0 : 1); }
-        @JavascriptInterface public void mapiAjustar(String k, float v) { if (k.matches("mapi(Zoom|Flecha|Giro|Estilo)")) getSharedPreferences("cubi", 0).edit().putFloat(k, v).apply(); }
+        @JavascriptInterface public float mapiAjuste(String k) { return getSharedPreferences("cubi", 0).getFloat(k, k.equals("mapiGiro") || k.equals("mapiEstilo") || k.equals("mapiAro") ? 0 : 1); }
+        @JavascriptInterface public void mapiAjustar(String k, float v) { if (k.matches("mapi(Zoom|Flecha|Giro|Estilo|Aro)")) getSharedPreferences("cubi", 0).edit().putFloat(k, v).apply(); }
         @JavascriptInterface public String mapasEstado() { return CubiMapas.resumen(MainActivity.this); }
         @JavascriptInterface
         public void mapasBajar() { CubiMapas.descargar(getApplicationContext(), mapasZonas()); }

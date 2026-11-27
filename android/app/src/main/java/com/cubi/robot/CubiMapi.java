@@ -299,8 +299,8 @@ final class CubiMapi {
                 limLa = la; limLo = lo;
             }
             android.content.SharedPreferences pr = sv.getSharedPreferences("cubi", 0);   // el zoom y la flecha (pestaña Mapi)
-            String aj = String.format(Locale.US, "/ajuste?z=%.2f&f=%.2f&g=%.0f&e=%d", pr.getFloat("mapiZoom", 1), pr.getFloat("mapiFlecha", 1),
-                    pr.getFloat("mapiGiro", 0), Math.round(pr.getFloat("mapiEstilo", 0)));
+            String aj = String.format(Locale.US, "/ajuste?z=%.2f&f=%.2f&g=%.0f&e=%d&a=%d", pr.getFloat("mapiZoom", 1), pr.getFloat("mapiFlecha", 1),
+                    pr.getFloat("mapiGiro", 0), Math.round(pr.getFloat("mapiEstilo", 0)), Math.round(pr.getFloat("mapiAro", 0)));
             if (!aj.equals(yaAjuste)) { yaAjuste = aj; mandar(aj); }
             int alt = sv.altura != Integer.MIN_VALUE ? sv.altura : sv.climaAltura;   // la altura del GPS (o la del clima)
             String al = "/alt" + (alt == Integer.MIN_VALUE ? "" : "?m=" + alt);
