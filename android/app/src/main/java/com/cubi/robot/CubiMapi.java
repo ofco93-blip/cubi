@@ -130,13 +130,17 @@ final class CubiMapi {
 
     private void empezar() {
         if (listo) return;
-        listo = true; estado = "Conectado.";
+        listo = true; version = ""; estado = "Conectado · firmware anterior a la 2.0.400 (toca Actualizar Mapi).";
         yaGiro = yaLlega = yaPila = yaClima = ""; yaHora = 0;            // recién conectado: se manda todo otra vez
+        mandar("/hola");                                               // ¿qué versión tiene? (la de antes no contesta)
         ui.post(this::mandarMapa);
     }
+    private volatile String version = "";
+    static String version() { CubiMapi m = yo; return m == null ? "" : m.version; }
 
     private void llega(byte[] v) {
         String s = new String(v, StandardCharsets.UTF_8).trim();
+        if (s.startsWith("ver|")) { version = s.substring(4); if (!actualizando) estado = "Conectado · firmware de la versión " + version + "."; return; }
         if (!s.startsWith("ota|") || !actualizando) return;
         if (s.startsWith("ota|!")) { fallo("Mapi no aceptó la actualización: " + s.substring(5)); return; }
         if (terminando) { estado = "Mapi verificó la versión nueva y se está reiniciando…"; return; }

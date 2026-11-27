@@ -13,7 +13,11 @@
 #include <Update.h>
 #include "fuente.h"
 
-#define VERSION_MAPI "1"
+#if __has_include("version.h")
+#include "version.h"                       // lo escribe el taller de GitHub: el número de la versión publicada
+#else
+#define VERSION_MAPI "sin número"
+#endif
 static const int P_CS = 12, P_SCK = 38, P_D0 = 4, P_D1 = 5, P_D2 = 6, P_D3 = 7, P_RST = 39, P_SDA = 15, P_SCL = 14;
 #define BLE_SRV "6e400101-b5a3-f393-e0a9-e50e24dcca9e"   // distinto al de Cubi: así la app sabe cuál es cuál
 #define BLE_RX  "6e400102-b5a3-f393-e0a9-e50e24dcca9e"
@@ -301,6 +305,7 @@ class Rx : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *c) override {
     String v = c->getValue();
     if (v.startsWith("/ota/")) { ota(v); return; }           // la actualización se atiende de una (no espera al dibujo)
+    if (v == "/hola") { avisar("ver|" VERSION_MAPI); return; }   // la app pregunta qué versión tiene
     Orden o; strlcpy(o.t, v.c_str(), sizeof o.t);
     if (xQueueSend(colaBle, &o, 0) != pdTRUE) { Orden basura; xQueueReceive(colaBle, &basura, 0); xQueueSend(colaBle, &o, 0); }
   }

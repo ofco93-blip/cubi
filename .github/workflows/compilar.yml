@@ -52,6 +52,7 @@ jobs:
       - name: Firmware de Mapi
         run: |
           cp firmware/cubi/fuente.h firmware/mapi/fuente.h
+          echo "#define VERSION_MAPI \"2.0.${{ github.run_number }}\"" > firmware/mapi/version.h
           arduino-cli compile --fqbn "esp32:esp32:esp32s3:PSRAM=opi,FlashSize=16M,PartitionScheme=app3M_fat9M_16MB,CDCOnBoot=cdc" --output-dir out_mapi firmware/mapi 2>&1 | tee mapi.log || { grep -m8 "error" mapi.log | sed "s/^/::error::/"; exit 1; }
           cp out_mapi/mapi.ino.bin mapi.ino.bin
 
