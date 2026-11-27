@@ -295,7 +295,8 @@ int climaG = -1000; char climaE[12] = "", climaLugar[28] = ""; bool climaNoche =
 int horaMin = -1; float horaT = 0;
 char calleAhora[40] = ""; int limV = -1; bool limX = false;
 float zoomMapa = 1, tamFlecha = 1, giroPantalla = 0; bool estiloAbajo = false;   // estilo: los datos a los lados (de fábrica) o abajo
-int altura = -10000, faltaT = -1;   // la altura sobre el mar (m) y los minutos que faltan para llegar   // los pone la app (pestaña Mapi): acercar o alejar el mapa y el tamaño de la flecha   // la calle por donde va y el límite de la vía (de Google)
+int altura = -10000, faltaT = -1;
+bool rutaVisible = false;   // la ruta (y su tráfico) solo se pinta mientras se navega: al quitar la navegación se borra   // la altura sobre el mar (m) y los minutos que faltan para llegar   // los pone la app (pestaña Mapi): acercar o alejar el mapa y el tamaño de la flecha   // la calle por donde va y el límite de la vía (de Google)
 
 static String decodificar(const String &s) {   // %XX y + -> espacio
   String o; o.reserve(s.length());
@@ -460,6 +461,7 @@ static void mapa(float cyCarro) {
   const Pasada PAS[] = {{5, RIO, 6}, {0, CALLE, 8}, {1, AVENIDA, 13}, {2, RUTA_B, 19}, {2, RUTA, 12}, {6, Col{242, 153, 0}, 12}, {7, Col{232, 69, 60}, 12}};
   for (const auto &ps : PAS) for (int v = 0; v < c.nv; v++) {
     if (c.clase[v] != ps.clase) continue;
+    if (!rutaVisible && (ps.clase == 2 || ps.clase >= 6)) continue;
     if (ps.clase == 2 && v < vCerca) continue;
     const int i0 = ps.clase == 2 && v == vCerca ? iCerca : c.ini[v];
     const float cerca = CERCA;
@@ -556,12 +558,12 @@ static void metros(int m, char *b, size_t n) {
 
 static void altTexto(char *b, size_t n) { if (altura >= 1000) snprintf(b, n, "%d.%03d m", altura / 1000, altura % 1000); else snprintf(b, n, "%d m", altura); }
 // abajo, en las dos pantallas: lo que alcanza la pila con el consumo de ahora (o la carga) y la altura por la curva
-static void datosAbajo() {
+static void datosAbajo(bool conKm) {
   char b[40];
   if (pilaCarga) {
     snprintf(b, sizeof b, pilaKw > 0.3f ? "Cargando %.1f kW" : "Cargando", pilaKw); for (char *p = b; *p; p++) if (*p == '.') *p = ',';
     const float w = anchoTexto(b, 21), x0 = C - (w + 24) / 2; icoRayo(x0 + 8, 392, 11); texto(b, x0 + 24, 392, 21, BLANCO, 1, true);
-  } else if (pilaReal >= 0) {
+  } else if (conKm && pilaReal >= 0) {
     char p[16] = ""; if (pilaProm > 0) { snprintf(p, sizeof p, "%.1f kWh", pilaProm); for (char *q = p; *q; q++) if (*q == '.') *q = ','; }
     snprintf(b, sizeof b, "%d km", pilaReal);
     const float w1 = anchoTexto(b, 22), w2 = p[0] ? anchoTexto(p, 15) + 8 : 0, x0 = C - (w1 + w2 + 24) / 2;
@@ -583,6 +585,7 @@ static void pintar() {
     return;
   }
   const float cyCarro = 292;
+  rutaVisible = nav;
   mapa(cyCarro);
   vineta();
   carrito(C, cyCarro);
@@ -599,7 +602,7 @@ static void pintar() {
       // a los lados, por la orilla: a la izquierda lo que falta (de abajo hacia arriba), a la derecha la hora de llegada
       if (t[0]) { textoArco(t, 205, 184, 27, BLANCO, false); enAng(184 - angTexto(t, 27, 205) / 2 - 8, 203, x, y); icoArena(x, y, 12); }
       if (llegaTxt[0]) { textoArco(llegaTxt, 205, 6, 30, BLANCO, false); enAng(6 - angTexto(llegaTxt, 30, 205) / 2 - 9, 203, x, y); icoLlegada(x, y, 14); }
-      datosAbajo();
+      datosAbajo(true);
     } else {
       // la otra opción: abajo, lo que falta y la altura en una fila y la hora de llegada por la curva
       char a[16] = ""; if (altura > -1000) altTexto(a, sizeof a);
@@ -617,7 +620,15 @@ static void pintar() {
       nube(x0 + 14, 152, 15); texto(g, x0 + 36, 152, 22, BLANCO, 1, true, 200);
     }
     if (calleAhora[0]) texto(calleAhora, C, 186, 18, Col{205, 218, 255}, 1, false, 290);   // la calle por donde va
-    datosAbajo();
+    if (pilaReal >= 0 && !pilaCarga) {                       // a los lados: a la izquierda lo que alcanza la pila, a la derecha el consumo
+      float x, y; snprintf(b, sizeof b, "%d km", pilaReal);
+      textoArco(b, 205, 184, 27, BLANCO, false); enAng(184 - angTexto(b, 27, 205) / 2 - 8, 203, x, y); icoRayo(x, y, 12);
+      if (pilaProm > 0) {
+        snprintf(b, sizeof b, "%.1f kWh/100", pilaProm); for (char *q = b; *q; q++) if (*q == '.') *q = ',';
+        textoArco(b, 205, 6, 21, Col{205, 218, 255}, false);
+      }
+    }
+    datosAbajo(false);                                       // abajo: la carga (si está cargando) y la altura
   }
   // el límite de velocidad de la vía, como la señal de tránsito; si va pasado, el aro rojo late
   if (limV > 0) {
