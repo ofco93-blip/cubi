@@ -66,6 +66,7 @@ final class CubiGoogle {
                     nav = n; pidiendo = false; estado = "Google: listo.";
                     aplicarVoz(c);
                     try { n.registerServiceForNavUpdates(c.getPackageName(), CubiGiros.class.getName(), 1); } catch (Throwable t) { }   // los giros llegan a CubiGiros
+                    try { n.addRouteChangedListener(CubiGoogle::rutaDeGoogle); } catch (Throwable t) { }   // si Google recalcula, Mapi pinta la nueva
                     if (!Double.isNaN(irLat)) ir(irLat, irLon);
                 }
                 @Override public void onError(int cod) {
@@ -148,11 +149,29 @@ final class CubiGoogle {
         try {
             estado = "Google: calculando la ruta…";
             n.setDestination(Waypoint.builder().setLatLng(lat, lon).build()).setOnResultListener(st -> {
-                if (st == Navigator.RouteStatus.OK) { n.startGuidance(); estado = "Google: navegando."; }
+                if (st == Navigator.RouteStatus.OK) { n.startGuidance(); estado = "Google: navegando."; rutaDeGoogle(); }
                 else estado = "Google: no hay ruta (" + st + ").";
             });
         } catch (Throwable t) { estado = "Google: " + t; }
     }
+    // la línea de la ruta que va guiando Google, para que Mapi pinte exactamente la misma (antes Cubi calculaba la suya
+    // aparte y al recalcular a veces salían distintas)
+    static void rutaDeGoogle() {
+        Navigator n = nav; CubiService s = CubiService.yo;
+        if (n == null || s == null || Double.isNaN(irLat)) return;
+        try {
+            java.util.ArrayList<double[]> pts = new java.util.ArrayList<>();
+            for (com.google.android.libraries.navigation.RouteSegment g : n.getRouteSegments())
+                for (com.google.android.gms.maps.model.LatLng p : g.getLatLngs()) pts.add(new double[]{p.latitude, p.longitude});
+            if (pts.size() < 2) return;
+            double[] la = new double[pts.size()], lo = new double[pts.size()];
+            for (int i = 0; i < la.length; i++) { la[i] = pts.get(i)[0]; lo[i] = pts.get(i)[1]; }
+            s.rutaDeGoogle(la, lo);
+        } catch (Throwable ignored) { }
+    }
+    // el rumbo del mapa de Google en la pantalla del carro (hacia dónde mira la cámara que sigue al carro): Mapi gira igual
+    static volatile float rumboG = Float.NaN; static volatile long rumboGT;
+    static float rumbo() { return System.currentTimeMillis() - rumboGT < 3000 ? rumboG : Float.NaN; }
     static void parar() {
         irLat = Double.NaN; sinGiro();
         Navigator n = nav;
@@ -219,6 +238,7 @@ final class CubiGoogle {
         if (lienzo == null || vista == null) return;
         lienzo.invalidate();
         lat = la; lon = lo;
+        if (mapa != null && tocado == 0) try { rumboG = mapa.getCameraPosition().bearing; rumboGT = System.currentTimeMillis(); } catch (Throwable ignored) { }
         if (mapa != null && !Double.isNaN(la) && (CubiRadares.version != radVer || Double.isNaN(radLa) || CubiRadares.metros(radLa, radLo, la, lo) > 8000)) ponerRadares(la, lo);
         if (!m.equals(mar)) { mar.set(m); if (mapa != null) try { mapa.setPadding(Math.round(m.left), Math.round(m.top), Math.round(m.right), Math.round(m.bottom)); } catch (Throwable t) { } }
         // al abrir (apenas hay GPS) y a los 10 s de haberlo movido con el dedo, el mapa vuelve al carro

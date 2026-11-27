@@ -259,6 +259,7 @@ pre.reg { margin: 0; max-height: 320px; overflow: auto; font: 11px/1.35 ui-monos
     <div class="fila"><span>Consumo promedio del carro<small>kWh/100 km, el que muestra el carro desde que lo restableciste. De ahí sale la autonomía.</small></span><input type="number" id="consumoCarro" min="8" max="35" step="0.1" inputmode="decimal" style="width:5.5em"></div>
     <div class="fila"><span>Aro del giro<small>Se va llenando desde 300 m y queda completo en el giro</small></span></div>
     <div class="aros" id="mapiAros"></div>
+    <div class="fila"><span>Girar con el giroscopio de Mapi<small>Apagado: gira igual que el mapa de la pantalla del carro</small></span><label class="sw"><input type="checkbox" id="mapiImu"><i></i></label></div>
     <div class="fila"><span>Datos del viaje</span><select id="mapiEstilo" aria-label="Datos del viaje"><option value="0">A los lados</option><option value="1">Abajo</option></select></div>
   </div>
   <h2>Mapas sin internet</h2>
@@ -558,6 +559,8 @@ $('mapasBusca').oninput = () => {
 };
 mapasPintar();
 if (A() && A().mapiAjuste) $('mapiEstilo').value = Math.round(A().mapiAjuste('mapiEstilo'));
+if (A() && A().mapiAjuste) $('mapiImu').checked = A().mapiAjuste('mapiImu') > 0.5;
+$('mapiImu').onchange = e => { if (A() && A().mapiAjustar) A().mapiAjustar('mapiImu', e.target.checked ? 1 : 0); };
 if (A() && A().consumoCarro) $('consumoCarro').value = (+A().consumoCarro()).toFixed(1);
 $('consumoCarro').onchange = e => {
   const v = parseFloat(String(e.target.value).replace(',', '.'));

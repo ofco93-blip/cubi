@@ -534,35 +534,35 @@ public class CubiCarro extends CarAppService {
                 if (!rec.isEmpty()) {
                     // sin destino: "Buscar" y debajo los dos últimos destinos con lo que se tarda (tocar uno arranca el viaje)
                     tiempos(s, rec);
-                    float bw = 88 * u, ph = 12 * u, rh = 15 * u, bh = 2 * u + ph + 1.5f * u + rec.size() * rh + u, bx1 = x1 - 31 * u, bx0 = bx1 - bw, by0 = y0 + 3 * u, rr = 7 * u;
+                    float bw = 70 * u, ph = 9 * u, rh = 11.5f * u, bh = 1.6f * u + ph + u + rec.size() * rh + 0.6f * u, bx1 = x1 - 3 * u, bx0 = bx1 - bw, by0 = y0 + 2 * u, rr = 5.5f * u;
                     gr.set(bx0, by0, bx1, by0 + bh); destIzq = bx0; pieDest = by0 + bh;
                     p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(bx0, by0 + 0.8f * u, bx1, by0 + bh + 0.8f * u, rr, rr, p);
                     p.setColor(0x8c0a1430); c.drawRoundRect(gr, rr, rr, p);
                     p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, 0.35f * u)); p.setColor(0x80ffffff); c.drawRoundRect(gr, rr, rr, p);
-                    destR.set(bx0 + 2 * u, by0 + 2 * u, bx1 - 2 * u, by0 + 2 * u + ph);   // la pastilla "Buscar": abre el buscador
+                    destR.set(bx0 + 1.6f * u, by0 + 1.6f * u, bx1 - 1.6f * u, by0 + 1.6f * u + ph);   // la pastilla "Buscar": abre el buscador
                     p.setStyle(Paint.Style.FILL); p.setColor(0x33ffffff); c.drawRoundRect(destR, ph / 2, ph / 2, p);
-                    float lr = 2.3f * u, lx = destR.left + 7 * u, ly = destR.centerY() - 0.6f * u;
+                    float lr = 1.8f * u, lx = destR.left + 5.5f * u, ly = destR.centerY() - 0.5f * u;
                     p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeWidth(0.9f * u); p.setColor(0xffffffff);
                     c.drawCircle(lx, ly, lr, p); c.drawLine(lx + lr * 0.75f, ly + lr * 0.75f, lx + lr * 1.7f, ly + lr * 1.7f, p);
                     p.setStyle(Paint.Style.FILL);
-                    texto(c, "Buscar", destR.centerX(), destR.centerY() + 2 * u, 5.5f * u, 0xffffffff, true, Paint.Align.CENTER, bw - 20 * u);
+                    texto(c, "Buscar", destR.centerX(), destR.centerY() + 1.5f * u, 4.3f * u, 0xffffffff, true, Paint.Align.CENTER, bw - 16 * u);
                     for (int i = 0; i < rec.size(); i++) {
-                        String[] o = rec.get(i); float ry = destR.bottom + 1.5f * u + i * rh;
+                        String[] o = rec.get(i); float ry = destR.bottom + u + i * rh;
                         recR[i].set(bx0, ry, bx1, ry + rh); recO[i] = o;
                         if (i > 0) { p.setColor(0x33ffffff); c.drawRect(bx0 + 6 * u, ry, bx1 - 6 * u, ry + Math.max(1, 0.25f * u), p); }
-                        float kx = bx0 + 9 * u, ky = ry + rh / 2, kr = 3.6f * u;   // el relojito de "reciente"
+                        float kx = bx0 + 7 * u, ky = ry + rh / 2, kr = 2.8f * u;   // el relojito de "reciente"
                         p.setColor(0x33ffffff); c.drawCircle(kx, ky, kr, p);
                         p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(0.6f * u); p.setColor(0xffffffff); c.drawCircle(kx, ky, kr * 0.58f, p);
                         c.drawLine(kx, ky, kx, ky - kr * 0.36f, p); c.drawLine(kx, ky, kx + kr * 0.3f, ky + kr * 0.12f, p); p.setStyle(Paint.Style.FILL);
-                        float tx = bx0 + 16 * u, cabeR = bx1 - 3 * u - tx;
-                        texto(c, o[0], tx, ry + 6.6f * u, 4.8f * u, 0xffffffff, true, Paint.Align.LEFT, cabeR);
+                        float tx = bx0 + 12.5f * u, cabeR = bx1 - 2.5f * u - tx;
+                        texto(c, o[0], tx, ry + 5.1f * u, 3.8f * u, 0xffffffff, true, Paint.Align.LEFT, cabeR);
                         double[] t = recT.get(o[2]); String mn = "", km = "";
                         if (t != null) { int mm = (int) Math.max(1, Math.round(t[0] / 60)); mn = mm < 60 ? mm + " min" : mm / 60 + " h " + mm % 60 + " min"; km = CubiGoogleApis.km(t[1]); }
                         else if (!Double.isNaN(s.posLat)) { String[] pt = o[2].split(","); km = "≈ " + CubiGoogleApis.km(CubiRadares.metros(s.posLat, s.posLon, Double.parseDouble(pt[0].trim()), Double.parseDouble(pt[1].trim()))); }
                         boolean lento = t != null && t[0] > t[2] * 1.25 + 60;   // va más lento de lo normal: los minutos en amarillo, como Google
-                        tp.setTypeface(Typeface.DEFAULT); tp.setTextSize(4 * u); float wm = mn.isEmpty() ? 0 : tp.measureText(mn);
-                        if (!mn.isEmpty()) texto(c, mn, tx, ry + 12.2f * u, 4 * u, lento ? 0xffffd24d : 0xe6ffffff, false, Paint.Align.LEFT, cabeR);
-                        if (!km.isEmpty()) texto(c, (mn.isEmpty() ? "" : " · ") + km, tx + wm, ry + 12.2f * u, 4 * u, 0xe6ffffff, false, Paint.Align.LEFT, cabeR - wm);
+                        tp.setTypeface(Typeface.DEFAULT); tp.setTextSize(3.2f * u); float wm = mn.isEmpty() ? 0 : tp.measureText(mn);
+                        if (!mn.isEmpty()) texto(c, mn, tx, ry + 9.4f * u, 3.2f * u, lento ? 0xffffd24d : 0xe6ffffff, false, Paint.Align.LEFT, cabeR);
+                        if (!km.isEmpty()) texto(c, (mn.isEmpty() ? "" : " · ") + km, tx + wm, ry + 9.4f * u, 3.2f * u, 0xe6ffffff, false, Paint.Align.LEFT, cabeR - wm);
                     }
                 }
                 else if (botones || dos || !dn.isEmpty()) {
@@ -896,9 +896,12 @@ public class CubiCarro extends CarAppService {
                     float th = tp.measureText(hora), cabe = (x1 - libre) * 1.1f;
                     if (th > cabe) { tam *= cabe / th; tp.setTextSize(tam); th = cabe; }
                     tp.setTextAlign(Paint.Align.LEFT); c.drawText(hora, libre - th * 0.2f, y0 + vh * 0.5f + tam * 0.36f, tp);
+                    pilaReloj(c, libre - th * 0.2f, y0 + vh * 0.5f, tam, sv);
                 } else {
                     tp.setTextSize(100); tp.setTextSize(Math.min(vh * 0.24f * ze, 100 * (anchoZ ? libre - x0 : w) * 0.92f / tp.measureText(hora)));
-                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, anchoZ ? x0 + 1280 * scz * 0.36f + zDx : (x0 + x1) / 2, y0 + vh * 0.225f * (ze < 1 ? 0.9f : 1), tp);
+                    float hx = anchoZ ? x0 + 1280 * scz * 0.36f + zDx : (x0 + x1) / 2, hb = y0 + vh * 0.225f * (ze < 1 ? 0.9f : 1), ht = tp.getTextSize();
+                    tp.setTextAlign(Paint.Align.CENTER); c.drawText(hora, hx, hb, tp);
+                    pilaReloj(c, hx - tp.measureText(hora) / 2, hb - ht * 0.36f, ht, sv);
                 }
             }
             // ella: su cuadro (recortado del clip desde el punto rx,40; el de señalar es más ancho), dejando solo donde su
@@ -1281,6 +1284,18 @@ public class CubiCarro extends CarAppService {
                 pq.setStyle(Paint.Style.FILL); pq.setColor(0xfffff7c2); c.drawPath(pilaR, pq);
             }
             c.restore();
+        }
+        // La pila junto al reloj, siempre que el carro dé la batería: el gatito a la izquierda de la hora y debajo los km
+        // que quedan (WLTP). x: donde empieza la hora; cy: su centro; tam: su tamaño.
+        private void pilaReloj(Canvas c, float x, float cy, float tam, CubiService sv) {
+            final CubiEnergia en = CubiCarroDatos.cuentas;
+            if (pila >= 3 || Double.isNaN(en.energia)) return;
+            int pc = (int) Math.max(0, Math.min(100, Math.round(en.bateria)));
+            float ih = tam * 0.62f, iw = ih * (pila == 2 ? 160 / 96f : 100 / 96f), ix = x - tam * 0.12f - iw;
+            if (ix < 0) return;
+            pilaIcono(c, ix, cy - ih * 0.62f, ih, pc, en.cargando, sv);
+            String km = en.cargando ? "" : !Double.isNaN(en.rangoCarro) ? "WLTP " + Math.round(en.rangoCarro * WLTP_DE_NEDC) + " km" : Math.round(en.autonomiaKm()) + " km";
+            if (!km.isEmpty()) texto(c, km, ix + iw / 2, cy + ih * 0.38f + tam * 0.16f, tam * 0.13f, 0xf0ffffff, true, Paint.Align.CENTER, iw * 2.2f);
         }
         // Cuando el carro sacude el líquido (curva, frenada, acelerón) rebosa un poquito: saltan gotitas del lado que sube y
         // chispitas de electricidad que se apagan solas. Sutil: pocas a la vez y solo con sacudidas de verdad (o cargando).

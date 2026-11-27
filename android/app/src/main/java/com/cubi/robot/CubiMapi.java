@@ -54,7 +54,7 @@ final class CubiMapi {
     // la actualización
     private byte[] fw; private int enviados; private volatile boolean actualizando, terminando;
 
-    CubiMapi(CubiService s) { sv = s; ui.post(this::buscar); ui.postDelayed(tic, 1000); }
+    CubiMapi(CubiService s) { sv = s; ui.post(this::buscar); ui.postDelayed(tic, 1000); ui.postDelayed(rumboTic, 1500); }
 
     void parar() {
         parado = true; ui.removeCallbacksAndMessages(null);
@@ -214,6 +214,17 @@ final class CubiMapi {
     }
     private static String cod(String s) { try { return URLEncoder.encode(s, "UTF-8"); } catch (Exception e) { return ""; } }
 
+    // hacia dónde gira el mapa de Mapi: el mismo rumbo del mapa de Google de la pantalla del carro; sin él, el del GPS
+    private float rumboAhora() { float g = CubiGoogle.rumbo(); return Float.isNaN(g) ? sv.mapaRumbo : g; }
+    // el rumbo solo, 4 veces por segundo (la posición va cada segundo): así Mapi gira casi a la par del carro
+    private String yaRumbo = "";
+    private final Runnable rumboTic = new Runnable() { @Override public void run() {
+        if (parado) return;
+        ui.postDelayed(this, 250);
+        if (!listo || actualizando || !sv.mapaListo) return;
+        String r = "/mapa?r=" + Math.round(rumboAhora());
+        if (!r.equals(yaRumbo)) { yaRumbo = r; mandar(r); }
+    } };
     // cada segundo: la posición y lo que haya cambiado
     private final Runnable tic = new Runnable() { @Override public void run() {
         if (parado) return;
@@ -224,7 +235,7 @@ final class CubiMapi {
             // sin posición del GPS (adentro de la casa, o el GPS apagado): el mapa sale con la última ubicación conocida
             if ((!sv.mapaListo || ahora - sv.mapaCuando > 10000) && ahora - yaSinGps > 10000) { yaSinGps = ahora; sv.mapaSinGps(); }
             if (sv.mapaListo && ahora - sv.mapaCuando < 15000)
-                mandar(String.format(Locale.US, "/mapa?x=%d&y=%d&r=%d", Math.round(sv.mapaDx), Math.round(sv.mapaDy), Math.round(sv.mapaRumbo)));
+                mandar(String.format(Locale.US, "/mapa?x=%d&y=%d&r=%d", Math.round(sv.mapaDx), Math.round(sv.mapaDy), Math.round(rumboAhora())));
             if (ahora - yaHora > 30000) {
                 yaHora = ahora; java.util.Calendar c = java.util.Calendar.getInstance();
                 mandar("/hora?m=" + (c.get(java.util.Calendar.HOUR_OF_DAY) * 60 + c.get(java.util.Calendar.MINUTE)));
@@ -299,8 +310,8 @@ final class CubiMapi {
                 limLa = la; limLo = lo;
             }
             android.content.SharedPreferences pr = sv.getSharedPreferences("cubi", 0);   // el zoom y la flecha (pestaña Mapi)
-            String aj = String.format(Locale.US, "/ajuste?z=%.2f&f=%.2f&g=%.0f&e=%d&a=%d", pr.getFloat("mapiZoom", 1), pr.getFloat("mapiFlecha", 1),
-                    pr.getFloat("mapiGiro", 0), Math.round(pr.getFloat("mapiEstilo", 0)), Math.round(pr.getFloat("mapiAro", 0)));
+            String aj = String.format(Locale.US, "/ajuste?z=%.2f&f=%.2f&g=%.0f&e=%d&a=%d&i=%d", pr.getFloat("mapiZoom", 1), pr.getFloat("mapiFlecha", 1),
+                    pr.getFloat("mapiGiro", 0), Math.round(pr.getFloat("mapiEstilo", 0)), Math.round(pr.getFloat("mapiAro", 0)), Math.round(pr.getFloat("mapiImu", 0)));
             if (!aj.equals(yaAjuste)) { yaAjuste = aj; mandar(aj); }
             int alt = sv.altura != Integer.MIN_VALUE ? sv.altura : sv.climaAltura;   // la altura del GPS (o la del clima)
             String al = "/alt" + (alt == Integer.MIN_VALUE ? "" : "?m=" + alt);

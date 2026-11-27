@@ -948,6 +948,15 @@ public class CubiService extends Service {
         }
     }
 
+    // la ruta que guía el Google de Mascota Auto (la misma de la pantalla del carro): manda sobre la propia mientras guía
+    void rutaDeGoogle(double[] la, double[] lo) {
+        float[] ac = new float[la.length];
+        for (int i = 1; i < la.length; i++) ac[i] = ac[i - 1] + (float) Math.hypot((lo[i] - lo[i - 1]) * 111320 * Math.cos(Math.toRadians(la[i])), (la[i] - la[i - 1]) * 111320);
+        rutaAcum = ac; rutaDura = CubiGoogle.faltaSeg > 0 ? CubiGoogle.faltaSeg : 0; rutaTrafico = null;
+        rutaLat = la; rutaLon = lo; mapaForzar = true; rutaPedida = System.currentTimeMillis();
+        rutaEstado = String.format(Locale.US, "Ruta del Google de Mascota Auto: %.1f km hasta “%s”.", ac[ac.length - 1] / 1000, destNombre);
+    }
+
     private void calcularRuta(double lat, double lon) {
         try {
             // con la llave de Google: la ruta de Google, con el tráfico por tramos (para pintarlo en rojo en Mapi)
@@ -1044,7 +1053,7 @@ public class CubiService extends Service {
             }
         }
         // la ruta: la primera vez, y otra vez si el carro se sale más de 70 m de la línea (máximo cada 20 s)
-        if (hayDestino && !rutaCalculando && ahora - rutaPedida > 20000 && (rutaLat == null || fueraDeRuta(lat, lon) > 70 || (rutaTrafico != null && ahora - rutaPedida > 300000))) {   // con tráfico, se refresca cada 5 min
+        if (hayDestino && !rutaCalculando && !CubiGoogle.guiando() && ahora - rutaPedida > 20000 && (rutaLat == null || fueraDeRuta(lat, lon) > 70 || (rutaTrafico != null && ahora - rutaPedida > 300000))) {   // con tráfico, se refresca cada 5 min
             rutaPedida = ahora; rutaCalculando = true;
             new Thread(() -> calcularRuta(lat, lon)).start();
         }

@@ -294,7 +294,7 @@ int pilaB = -1, pilaReal = -1, pilaWltp = -1; bool pilaCarga = false; float pila
 int climaG = -1000; char climaE[12] = "", climaLugar[28] = ""; bool climaNoche = false;
 int horaMin = -1; float horaT = 0;
 char calleAhora[40] = ""; int limV = -1; bool limX = false;
-float zoomMapa = 1, tamFlecha = 1, giroPantalla = 0; bool estiloAbajo = false; int aroColor = 0;   // aro del giro: 0 verde, 1 naranja, 2 azul, 3 cian, 4 sin aro   // estilo: los datos a los lados (de fábrica) o abajo
+float zoomMapa = 1, tamFlecha = 1, giroPantalla = 0; bool estiloAbajo = false; int aroColor = 0; bool usarGiro = false;   // usarGiro: girar con su giroscopio (si no, con el rumbo que manda el celular). aro del giro: 0 verde, 1 naranja, 2 azul, 3 cian, 4 sin aro   // estilo: los datos a los lados (de fábrica) o abajo
 int altura = -10000, faltaT = -1;
 bool rutaVisible = false;   // la ruta (y su tráfico) solo se pinta mientras se navega: al quitar la navegación se borra   // la altura sobre el mar (m) y los minutos que faltan para llegar   // los pone la app (pestaña Mapi): acercar o alejar el mapa y el tamaño de la flecha   // la calle por donde va y el límite de la vía (de Google)
 
@@ -325,6 +325,7 @@ static void orden(const String &linea) {
     if (tiene(q, "w")) mapaVias(valor(q, "w").c_str(), valor(q, "n") == "1", valor(q, "f") == "1");
     if (tiene(q, "g")) mapaVias(valor(q, "g").c_str(), false, false);
     if (tiene(q, "x")) mapaPos(valor(q, "x").toFloat(), valor(q, "y").toFloat(), valor(q, "r").toFloat());
+    else if (tiene(q, "r")) { fijoR = valor(q, "r").toFloat(); velR = 0; }   // solo el rumbo (4 por segundo), el mismo del mapa del carro
   } else if (ruta == "/giro") {   // d: izq, der, recto, fin o vacío (sin ruta); m: metros; c: la calle
     strlcpy(giroDir, valor(q, "d").c_str(), sizeof giroDir); giroM = tiene(q, "m") ? valor(q, "m").toInt() : -1;
     strlcpy(giroCalle, valor(q, "c").c_str(), sizeof giroCalle); giroT = tAhora;
@@ -335,7 +336,7 @@ static void orden(const String &linea) {
   } else if (ruta == "/clima") { climaG = valor(q, "t").toInt(); strlcpy(climaE, valor(q, "e").c_str(), sizeof climaE); strlcpy(climaLugar, valor(q, "l").c_str(), sizeof climaLugar); climaNoche = valor(q, "n") == "1"; }
   else if (ruta == "/hora") { horaMin = valor(q, "m").toInt(); horaT = tAhora; }
   else if (ruta == "/ajuste") { zoomMapa = lim(valor(q, "z").toFloat(), 0.5f, 2.5f); tamFlecha = lim(valor(q, "f").toFloat(), 0.6f, 2.5f);
-    giroPantalla = lim(valor(q, "g").toFloat(), -180, 180); estiloAbajo = valor(q, "e") == "1"; if (tiene(q, "a")) aroColor = valor(q, "a").toInt(); }
+    giroPantalla = lim(valor(q, "g").toFloat(), -180, 180); estiloAbajo = valor(q, "e") == "1"; if (tiene(q, "a")) aroColor = valor(q, "a").toInt(); usarGiro = valor(q, "i") == "1"; }
   else if (ruta == "/alt") altura = tiene(q, "m") ? valor(q, "m").toInt() : -10000;
   else if (ruta == "/calle") strlcpy(calleAhora, valor(q, "c").c_str(), sizeof calleAhora);
   else if (ruta == "/limite") { limV = valor(q, "v").toInt(); limX = valor(q, "x") == "1"; }
@@ -413,7 +414,7 @@ static void fondo() {   // el azul de la pantalla grande, más oscuro abajo: se 
 static void mapa(float cyCarro) {
   const float dtp = lim(tAhora - fijoT, 0, 1.6f), k = 0.25f;   // sigue andando con la velocidad que traía; se corrige suave
   mpx += (fijoX + velX * dtp - mpx) * k; mpy += (fijoY + velY * dtp - mpy) * k;
-  if (imuAddr) {   // el giro lo pone su giroscopio (al instante y suave); el rumbo del GPS solo corrige de a poco
+  if (imuAddr && usarGiro) {   // el giro lo pone su giroscopio (al instante y suave); el rumbo del GPS solo corrige de a poco
     mrumbo += rumboVel * dtCuadro;
     // quieto, el rumbo del GPS se queda en el último y peleaba con el giroscopio: solo corrige andando (> ~11 km/h)
     const bool anda = tAhora - fijoT < 3 && velX * velX + velY * velY > 9;
