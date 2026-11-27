@@ -358,6 +358,9 @@ section[hidden] { display: none; }
     </select>
     <div class="row"><span>Tamaño de Zelda junto al mapa</span></div>
     <select id="carroZeldaTam" aria-label="Tamaño de Zelda junto al mapa"><option value="0">Grande</option><option value="1">Mediana</option><option value="2">Pequeña (mapa más amplio)</option></select>
+    <div class="row"><span>Pila del carro</span></div>
+    <select id="carroPila" aria-label="Pila del carro en la pantalla"><option value="0">Cabeza de gato de vidrio</option><option value="1">Cabeza oscura con aro de luz</option><option value="2">Pastilla de vidrio con orejas</option><option value="3">No mostrar</option></select>
+    <p class="note">La batería y la autonomía que el carro le pasa a Android Auto (hay que aceptar “Información del vehículo” en el celular). Sin destino sale arriba con los kilómetros reales y el consumo; con destino queda solo el gatito con el número, junto a los botones.</p>
     <p class="note">Es lo que sale al abrir Cubi en la pantalla del carro. Son las mismas opciones del botón “Opciones” de esa pantalla: lo que cambies aquí se ve allá al instante. El robot sigue con su propia cara.</p>
   </div>
 </section>
@@ -624,7 +627,7 @@ if (window.Android && Android.paisEstado) {
 $('quitarRuta').onclick = () => { $('destino').value = ''; if (window.Android) { Android.destinoCubi(''); navAhora(); } };
 if (window.Android && Android.navCompleto) setTimeout(() => { $('navCompleto').checked = Android.navCompleto(); $('destino').value = Android.destinoTexto(); }, 500);
 // la mascota de la pantalla del carro: las mismas opciones que se cambian desde Android Auto
-['carroZelda', 'carroFondo', 'carroVista', 'carroZeldaTam'].forEach(k => {
+['carroZelda', 'carroFondo', 'carroVista', 'carroZeldaTam', 'carroPila'].forEach(k => {
   $(k).onchange = e => { if (window.Android && Android.carroPon) Android.carroPon(k, +e.target.value); };
   if (window.Android && Android.carroOpcion) setTimeout(() => { $(k).value = Android.carroOpcion(k); }, 500);
 });

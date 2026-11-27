@@ -155,6 +155,9 @@ public class CubiCarroDatos extends CubiCarro {
 
     // el aviso solo deja dos renglones: va lo que importa; lo demás queda en el registro
     static void avisar(CarContext cc) {
+        // La batería ya se dibuja en la pantalla (la pila con forma de gato de CubiCarro): el aviso emergente sobra.
+        // Solo sale si el usuario escogió no mostrar la pila.
+        if (cc.getSharedPreferences("cubi", 0).getInt("carroPila", 0) < 3) return;
         try { CarToast.makeText(cc, cuentas.linea(), CarToast.LENGTH_LONG).show(); } catch (Throwable e) { Log.w(TAG, "aviso", e); }
     }
 }

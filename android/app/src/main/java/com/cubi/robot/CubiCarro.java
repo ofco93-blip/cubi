@@ -298,6 +298,7 @@ public class CubiCarro extends CarAppService {
         private void dibujarEn(Canvas c) {
             try {
                 Rect a = zona.isEmpty() ? new Rect(0, 0, ancho, alto) : zona;
+                lienzo.pila = prefs.getInt("carroPila", 0);
                 lienzo.zEsc = new float[]{1f, 0.8f, 0.62f}[prefs.getInt("carroZeldaTam", 0) % 3];
                 lienzo.dibujar(c, a, firme, CubiService.yo, prefs.getInt("carroVista", prefs.getBoolean("carroSola", false) ? 1 : 0), prefs.getInt("ojos", 0xffffff), prefs.getBoolean("carroZelda", true), prefs.getInt("carroFondo", -1));
             } catch (Throwable t) {
@@ -483,7 +484,7 @@ public class CubiCarro extends CarAppService {
             }
             // El botón Destino, siempre a la vista arriba a la derecha del mapa (si el carro avisa los toques): abre el
             // buscador, donde se escribe o se dicta con el micrófono del teclado del carro.
-            destR.setEmpty(); cancR.setEmpty();
+            destR.setEmpty(); cancR.setEmpty(); destIzq = x1 - 31 * u;
             float pieDest = y0 + 14 * u;                                 // hasta dónde llega lo del destino: debajo van la brújula y el de centrar
             if (sinCaja && conMapa && s != null) {
                 String dn = s.destinoNombre(), f = falta(s, nav), av = s.rutaAviso(), sub;
@@ -497,7 +498,7 @@ public class CubiCarro extends CarAppService {
                 boolean dos = !sub.isEmpty(), hayDest = !s.destinoTexto().isEmpty();
                 if (botones || dos || !dn.isEmpty()) {
                     float bh = (dos ? 18 : 11) * u, bw = (dos || !dn.isEmpty() ? 73 : 42) * u, by0 = y0 + 3 * u, bx1 = x1 - 31 * u, bx0 = bx1 - bw, rr = Math.min(6 * u, bh / 2);   // a la derecha queda libre la esquina donde aparece por ratos "Opciones"
-                    gr.set(bx0, by0, bx1, by0 + bh);
+                    gr.set(bx0, by0, bx1, by0 + bh); destIzq = bx0;
                     p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(bx0, by0 + 0.8f * u, bx1, by0 + bh + 0.8f * u, rr, rr, p);
                     p.setColor(0x3cffffff); c.drawRoundRect(gr, rr, rr, p);
                     p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, 0.35f * u)); p.setColor(0xb3ffffff); c.drawRoundRect(gr, rr, rr, p);
@@ -572,6 +573,35 @@ public class CubiCarro extends CarAppService {
                     else if (googleVoz == 1) { p.setColor(0xffffc94d); c.drawLine(px + br * 0.36f, vy - br * 0.36f, px + br * 0.36f, vy + br * 0.08f, p); p.setStyle(Paint.Style.FILL); c.drawCircle(px + br * 0.36f, vy + br * 0.34f, 0.5f * u, p); }
                     else { p.setColor(0xffff5a4d); c.drawLine(bx - br * 0.5f, vy - br * 0.5f, bx + br * 0.5f, vy + br * 0.5f, p); }
                     p.setStyle(Paint.Style.FILL);
+                }
+            }
+            // La pila del carro: la batería y la autonomía que entrega Android Auto (las cuentas van en CubiEnergia).
+            // Sin destino: una pastilla arriba, a la izquierda de la tarjeta Destino, con la autonomía real y el consumo.
+            // Con destino, o si no cabe: solo el gatito con el número, en la columna de botones de la derecha.
+            final CubiEnergia en = CubiCarroDatos.cuentas;
+            if ((sinCaja || google) && conMapa && pila < 3 && !Double.isNaN(en.energia)) {
+                int pc = (int) Math.max(0, Math.min(100, Math.round(en.bateria)));
+                float br = 6 * u, by = pieDest + 3 * u + br, prop = pila == 2 ? 160 / 96f : 100 / 96f;
+                float ih = 12 * u, iw = ih * prop, pr = destIzq - 3 * u, pl = pr - iw - 36 * u, pt = y0 + 3 * u, pb = pt + 16 * u;
+                boolean conDest = s != null && !s.destinoTexto().isEmpty();
+                if (!conDest && sinCaja && pl > x0 + 6 * u) {
+                    float rr = 6 * u;
+                    gr.set(pl, pt, pr, pb);
+                    p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(pl, pt + 0.8f * u, pr, pb + 0.8f * u, rr, rr, p);
+                    p.setColor(0x3cffffff); c.drawRoundRect(gr, rr, rr, p);
+                    p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, 0.35f * u)); p.setColor(0xb3ffffff); c.drawRoundRect(gr, rr, rr, p);
+                    p.setStyle(Paint.Style.FILL);
+                    pilaIcono(c, pl + 2.5f * u, (pt + pb) / 2 - ih / 2, ih, pc, en.cargando);
+                    double hh = en.horasParaLleno();
+                    String l1 = en.cargando ? (Double.isNaN(en.kw) ? "Cargando" : String.format(Locale.US, "%.1f kW", en.kw).replace('.', ',')) : Math.round(en.autonomiaKm()) + " km";
+                    String l2 = en.cargando ? (Double.isNaN(hh) ? "midiendo la carga…" : "lleno en " + (int) hh + " h " + String.format(Locale.US, "%02d", (int) (hh * 60) % 60))
+                            : String.format(Locale.US, "%.1f kWh/100 km", en.promedio()).replace('.', ',');
+                    float tx = pl + 5 * u + iw;
+                    texto(c, l1, tx, pt + 7.6f * u, 5.6f * u, 0xffffffff, true, Paint.Align.LEFT, pr - tx - 2 * u);
+                    texto(c, l2, tx, pt + 12.8f * u, 3.4f * u, 0xe0ffffff, false, Paint.Align.LEFT, pr - tx - 2 * u);
+                } else {
+                    float my = by + (br * 2 + 3 * u) * (google && botones ? 2 : 1), mh = br * 2.1f, mw = mh * prop;
+                    pilaIcono(c, pila == 2 ? x1 - 3 * u - mw : x1 - 3 * u - br - mw / 2, my - mh / 2, mh, pc, en.cargando);
                 }
             }
             if (franja) {
@@ -1038,6 +1068,73 @@ public class CubiCarro extends CarAppService {
             }
         }
         private float discoAng; private long discoCuando; private final android.graphics.Rect carR = new android.graphics.Rect();
+        // ---------- la pila con forma de gato ----------
+        // Tres estilos (se escogen en la app): 0 cabeza de vidrio con la carga como líquido, 1 oscura con el borde que se
+        // enciende hasta el nivel, 2 pastilla de vidrio con orejas que se llena de lado; 3 = no mostrar.
+        // El dibujo se hace una vez en una imagen y solo se rehace cuando cambia el porcentaje, el estilo o el tamaño.
+        // ponytail: el líquido está quieto (sin ola en movimiento); animarlo pide rehacer la imagen en cada cuadro.
+        int pila; private float destIzq;
+        private android.graphics.Bitmap pilaBm; private int pilaDe = -1;
+        static final String CABEZA = "M16.5 6.2Q12.6 3.6 12 8.4L8.2 43C4.6 70 24 92.5 50 92.5S95.4 70 91.8 43L88 8.4Q87.4 3.6 83.5 6.2L64.5 20.6Q50 15.4 35.5 20.6Z";
+        static final String PASTI = "M31 92A27 27 0 0 1 25.4 38.6L28.2 12.4Q29 6.6 33.6 10.4L56 34.6L60 34.6L78.4 10.4Q83 6.6 83.8 12.4L86.6 38H129A27 27 0 0 1 129 92Z";
+        // x, y: la esquina del gato; h: su alto (el ancho sale de la forma). El dibujo trae un margen para la sombra y el brillo.
+        private void pilaIcono(Canvas c, float x, float y, float h, int pc, boolean carg) {
+            int alto = Math.max(12, Math.round(h * 108 / 96f)), W = pila == 2 ? 160 : 100, ancho = Math.round(alto * (W + 12) / 108f);
+            int llave = ((pila * 128 + pc) * 2 + (carg ? 1 : 0)) * 4096 + alto;
+            if (pilaBm == null || llave != pilaDe) { pilaDe = llave; pilaBm = pilaDibujo(ancho, alto, W, pc, carg); }
+            c.drawBitmap(pilaBm, x - 6 * alto / 108f, y - 4 * alto / 108f, null);
+        }
+        private android.graphics.Bitmap pilaDibujo(int w, int h, int W, int pc, boolean carg) {
+            final android.graphics.Shader.TileMode CL = android.graphics.Shader.TileMode.CLAMP;
+            android.graphics.Bitmap bm = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888);
+            Canvas k = new Canvas(bm); float e = h / 108f; k.scale(e, e); k.translate(6, 4);
+            boolean pas = pila == 2, osc = pila == 1, bajo = pc < 15;
+            Path f = androidx.core.graphics.PathParser.createPathFromPathData(pas ? PASTI : CABEZA);
+            int c0 = bajo ? 0xffff9a8a : pc < 35 ? 0xffffe08a : 0xffa8ffcb, c1 = bajo ? 0xfff0443a : pc < 35 ? 0xfff5a524 : 0xff2fc47a;
+            int c2 = bajo ? 0xffff6b5e : pc < 35 ? 0xffffc94d : 0xff63e39b, borde = bajo ? 0xffff8072 : 0xffffffff;
+            Paint q = new Paint(Paint.ANTI_ALIAS_FLAG);
+            if (carg) {                                               // cargando: un resplandor alrededor
+                q.setStyle(Paint.Style.STROKE); q.setStrokeWidth(7); q.setColor(c2); q.setAlpha(140);
+                q.setMaskFilter(new android.graphics.BlurMaskFilter(3, android.graphics.BlurMaskFilter.Blur.NORMAL)); k.drawPath(f, q); q.setMaskFilter(null);
+            }
+            q.setStyle(Paint.Style.FILL); q.setColor(0x80030a2c);     // la sombra
+            q.setMaskFilter(new android.graphics.BlurMaskFilter(3.2f, android.graphics.BlurMaskFilter.Blur.NORMAL)); k.save(); k.translate(0, 3); k.drawPath(f, q); k.restore(); q.setMaskFilter(null);
+            if (!osc) { q.setColor(0x8c143099); k.drawPath(f, q); }   // el vidrio: un azul de base y encima el brillo, más claro arriba
+            q.setColor(0xffffffff); q.setShader(new android.graphics.LinearGradient(0, 0, 0, 96, osc ? 0xc70a1230 : 0x57ffffff, osc ? 0xe0050a1e : 0x1affffff, CL)); k.drawPath(f, q); q.setShader(null);
+            k.save(); k.clipPath(f);
+            float y = 92.5f - (92.5f - 9) * pc / 100f, x = 4 + 152 * pc / 100f;
+            android.graphics.Shader liq = new android.graphics.LinearGradient(0, pas || osc ? 20 : y, 0, 96, c0, c1, CL);
+            if (osc) {                                                // el borde ancho: apagado entero y encendido hasta el nivel
+                q.setStyle(Paint.Style.STROKE); q.setStrokeWidth(15); q.setColor(0x29ffffff); k.drawPath(f, q);
+                k.save(); k.clipRect(-10, y, 200, 120); q.setColor(0xffffffff); q.setShader(liq); k.drawPath(f, q); q.setShader(null); k.restore();
+            } else if (pas) {                                         // el líquido avanza de lado
+                q.setShader(liq); k.drawRect(0, 30, x, 96, q); q.setShader(null); q.setColor(0x73ffffff); k.drawRect(x - 3, 30, x, 96, q);
+            } else {                                                  // el líquido sube, con una ola arriba
+                Path o = new Path(); o.moveTo(-10, y);
+                for (int i = 0; i < 2; i++) { o.rQuadTo(15, -5, 30, 0); o.rQuadTo(15, 5, 30, 0); }
+                Path ol = new Path(o); o.lineTo(110, 100); o.lineTo(-10, 100); o.close();
+                q.setShader(liq); k.drawPath(o, q); q.setShader(null);
+                q.setStyle(Paint.Style.STROKE); q.setStrokeWidth(1.6f); q.setColor(0x99ffffff); k.drawPath(ol, q);
+            }
+            float ey = pas ? 44 : 22, ry = pas ? 9 : 16;                // el brillo de arriba
+            q.setStyle(Paint.Style.FILL); q.setColor(0xffffffff); q.setShader(new android.graphics.LinearGradient(0, ey - ry, 0, ey + ry, osc ? 0x24ffffff : 0x46ffffff, 0x00ffffff, CL));
+            k.drawOval(W * 0.04f, ey - ry, W * 0.96f, ey + ry, q); q.setShader(null);
+            k.restore();
+            q.setStyle(Paint.Style.STROKE); q.setStrokeJoin(Paint.Join.ROUND); q.setStrokeWidth(osc ? 2 : 3.4f); q.setColor(0xffffffff);   // el borde de luz
+            q.setShader(new android.graphics.LinearGradient(0, 0, 0, 96, new int[]{borde, borde & 0x8cffffff, borde & 0xe6ffffff}, new float[]{0, 0.55f, 1}, CL)); k.drawPath(f, q); q.setShader(null);
+            String t = String.valueOf(pc);                             // el número, adentro
+            float tam = pas ? 34 : pc == 100 ? 27 : 32, cx = (pas ? 82 : 50) - (carg ? 7 : 0), cy = pas ? 76 : 71;
+            TextPaint tq = new TextPaint(Paint.ANTI_ALIAS_FLAG); tq.setTypeface(Typeface.DEFAULT_BOLD); tq.setTextSize(tam); tq.setTextAlign(Paint.Align.CENTER); tq.setLetterSpacing(-0.03f);
+            tq.setStyle(Paint.Style.STROKE); tq.setStrokeWidth(3.2f); tq.setStrokeJoin(Paint.Join.ROUND); tq.setColor(0x8007123d); k.drawText(t, cx, cy, tq);
+            tq.setStyle(Paint.Style.FILL); tq.setColor(0xffffffff); k.drawText(t, cx, cy, tq);
+            if (carg) {                                               // el rayito
+                float z = tam / 32f, rx = cx + tq.measureText(t) / 2 + 8 * z, ry2 = cy - tam * 0.34f;
+                Path r = new Path(); r.moveTo(rx + 2.5f * z, ry2 - 11 * z); r.lineTo(rx - 6.5f * z, ry2 + 2 * z); r.lineTo(rx - z, ry2 + 2 * z); r.lineTo(rx - 3.5f * z, ry2 + 11 * z); r.lineTo(rx + 6.5f * z, ry2 - 3 * z); r.lineTo(rx + z, ry2 - 3 * z); r.close();
+                q.setStyle(Paint.Style.STROKE); q.setStrokeWidth(1.6f); q.setColor(0x8007123d); k.drawPath(r, q);
+                q.setStyle(Paint.Style.FILL); q.setColor(0xfffff7c2); k.drawPath(r, q);
+            }
+            return bm;
+        }
         // Una cápsula de vidrio: translúcida (deja ver el fondo), más clara arriba, con borde de luz y su sombra.
         // ponytail: no desenfoca lo que tiene detrás (el vidrio de verdad lo hace); en este lienzo eso cuesta un cuadro aparte.
         private android.graphics.Shader vidSh; private float vidT = -1, vidB = -1;
