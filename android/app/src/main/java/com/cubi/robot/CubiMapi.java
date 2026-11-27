@@ -266,10 +266,15 @@ final class CubiMapi {
                     int ahoraM = c.get(java.util.Calendar.HOUR_OF_DAY) * 60 + c.get(java.util.Calendar.MINUTE), llM = Integer.parseInt(hl.group(1)) * 60 + Integer.parseInt(hl.group(2));
                     faltan = ((llM - ahoraM) % 720 + 720) % 720;
                 }
-            } else if (nav && sv.rutaFaltaMin >= 0) { faltan = sv.rutaFaltaMin; faltaM = sv.rutaFaltaM; llega = sv.rutaLlega; }
+            }
+            // ponytail: la ruta propia de Cubi ya no se usa aquí: puede ser otro destino (el guardado) y daba 15 min donde Maps decía 5
             String ll = "/llega?h=" + cod(llega) + (faltaM >= 0 ? "&d=" + faltaM : "") + (faltan >= 0 ? "&t=" + faltan : "");
+            final String fuente = !nav ? "sin ruta" : CubiGoogle.guiando() ? "google_mascota" : !sv.navLlega.isEmpty() ? "aviso_maps" : "sin datos";
+            CubiCarroDatos.cada(sv, "MAPI_LLEGA", 0, () -> fuente + " | " + ll);   // caja negra: de dónde salió lo que muestra Mapi
             if (!ll.equals(yaLlega)) { yaLlega = ll; mandar(ll); }
             CubiEnergia en = CubiCarroDatos.cuentas;
+            final boolean hayPila = !Double.isNaN(en.energia);
+            CubiCarroDatos.cada(sv, "MAPI_PILA", 0, () -> hayPila ? "con datos del carro" : "sin datos del carro (Mascota Auto no abierta en Android Auto)");
             if (!Double.isNaN(en.energia)) {
                 double h = en.horasParaLleno();
                 String p = String.format(Locale.US, "/pila?b=%d&r=%d&c=%d&k=%.1f&p=%.1f", Math.round(en.bateria), Math.round(en.autonomiaKm()), en.cargando ? 1 : 0,

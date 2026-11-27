@@ -596,7 +596,8 @@ static void pintar() {
     if (b[0]) textoArco(b, 195, -90, 46, BLANCO, false);
     flecha(C, b[0] ? 96 : 82, b[0] ? 54 : 62, giroDir);
     if (giroCalle[0]) texto(giroCalle, C, 136, b[0] ? 19 : 22, b[0] ? Col{205, 218, 255} : BLANCO, 1, false, 290);
-    char t[16] = ""; if (faltaT >= 0) { if (faltaT < 60) snprintf(t, sizeof t, "%d min", faltaT); else snprintf(t, sizeof t, "%d h %02d", faltaT / 60, faltaT % 60); }
+    char t[32] = ""; if (faltaT >= 0) { if (faltaT < 60) snprintf(t, sizeof t, "%d min", faltaT); else snprintf(t, sizeof t, "%d h %02d", faltaT / 60, faltaT % 60); }
+    if (faltaM >= 0) { char km[16]; metros(faltaM, km, sizeof km); const size_t n = strlen(t); snprintf(t + n, sizeof t - n, "%s%s", n ? " · " : "", km); }   // y a cuánto está el destino
     float x, y;
     if (!estiloAbajo) {
       // a los lados, por la orilla: a la izquierda lo que falta (de abajo hacia arriba), a la derecha la hora de llegada
