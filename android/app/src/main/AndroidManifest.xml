@@ -90,6 +90,8 @@
         <!-- Android Auto. Va como app de navegación porque solo esas pueden dibujar libremente; no navega -->
         <meta-data android:name="com.google.android.gms.car.application" android:resource="@xml/automotive_app_desc" />
         <meta-data android:name="androidx.car.app.minCarApiLevel" android:value="1" />
+        <!-- recibe los giros de la navegación de Google (solo dentro de la app) -->
+        <service android:name=".CubiGiros" android:exported="false" />
         <service android:name=".CubiCarroDatos" android:label="Cubi" android:icon="@drawable/ic_launcher" android:exported="true">
             <intent-filter>
                 <action android:name="androidx.car.app.CarAppService" />

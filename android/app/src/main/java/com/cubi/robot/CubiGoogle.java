@@ -65,6 +65,7 @@ final class CubiGoogle {
                 @Override public void onNavigatorReady(Navigator n) {
                     nav = n; pidiendo = false; estado = "Google: listo.";
                     aplicarVoz(c);
+                    try { n.registerServiceForNavUpdates(c.getPackageName(), CubiGiros.class.getName(), 1); } catch (Throwable t) { }   // los giros llegan a CubiGiros
                     if (!Double.isNaN(irLat)) ir(irLat, irLon);
                 }
                 @Override public void onError(int cod) {
@@ -115,6 +116,28 @@ final class CubiGoogle {
         } catch (Throwable e) { return faltaTxt = ""; }
     }
 
+    // El giro que viene, según Google (llega a CubiGiros cada vez que cambia): se deja donde Cubi ya guarda el giro de
+    // Maps, así la pantalla del carro lo pinta igual: flecha, metros y calle, en el cuadrito que ocupa el puesto de la hora.
+    private static java.util.HashMap<Integer, String> maniobras; private static boolean conGiro;
+    static void giro(com.google.android.libraries.mapsplatform.turnbyturn.model.NavInfo i) {
+        CubiService s = CubiService.yo;
+        if (s == null || i == null) return;
+        com.google.android.libraries.mapsplatform.turnbyturn.model.StepInfo p = i.getCurrentStep();
+        if (p == null || i.getNavState() != com.google.android.libraries.mapsplatform.turnbyturn.model.NavState.ENROUTE) { sinGiro(); return; }
+        if (maniobras == null) {                                      // los nombres de las maniobras (TURN_LEFT, ROUNDABOUT_…), leídos de Google
+            maniobras = new java.util.HashMap<>();
+            try { for (java.lang.reflect.Field f : com.google.android.libraries.mapsplatform.turnbyturn.model.Maneuver.class.getFields()) if (f.getType() == int.class) maniobras.put(f.getInt(null), f.getName()); } catch (Throwable t) { }
+        }
+        String n = maniobras.get(p.getManeuver()); if (n == null) n = "";
+        Integer d = i.getDistanceToCurrentStepMeters();
+        boolean fin = n.startsWith("DESTINATION");
+        String dir = fin && d != null && d < 30 ? "llegamos" : n.contains("LEFT") || (n.contains("U_TURN") && n.endsWith("COUNTERCLOCKWISE")) ? "maps_izq" : n.contains("RIGHT") || n.contains("U_TURN") ? "maps_der" : "maps_recto";
+        String calle = p.getFullRoadName(); if (calle == null) calle = ""; if (calle.length() > 26) calle = calle.substring(0, 26).trim();
+        s.navForma = n.contains("U_TURN") ? 3 : n.contains("ROUNDABOUT") ? 4 : n.contains("SLIGHT") ? 1 : n.contains("SHARP") ? 2 : n.contains("RAMP") || n.contains("FORK") || n.contains("KEEP") ? 5 : 0;
+        s.navMetros = d == null ? -1 : d; s.navCalle = fin ? "tu destino" : calle; s.navDir = dir; s.navCuando = System.currentTimeMillis(); conGiro = true;
+    }
+    private static void sinGiro() { CubiService s = CubiService.yo; if (conGiro && s != null) s.navDir = ""; conGiro = false; }
+
     static void ir(double lat, double lon) {
         irLat = lat; irLon = lon;
         final Navigator n = nav;
@@ -128,7 +151,7 @@ final class CubiGoogle {
         } catch (Throwable t) { estado = "Google: " + t; }
     }
     static void parar() {
-        irLat = Double.NaN;
+        irLat = Double.NaN; sinGiro();
         Navigator n = nav;
         if (n != null) try { n.stopGuidance(); n.clearDestinations(); estado = "Google: listo."; } catch (Throwable t) { }
     }

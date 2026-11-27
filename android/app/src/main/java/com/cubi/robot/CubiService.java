@@ -1991,6 +1991,19 @@ public class CubiService extends Service {
         }
     }
 
+    // la barrita de avance de la pantalla del carro: lleva la canción a esa parte (0 = el principio, 1 = el final)
+    void musicaIr(float parte) {
+        if (!puedeTocarMusica() || musicaDura <= 0) return;
+        try {
+            MediaController c = reproductor != null ? reproductor : buscarReproductor();
+            if (c == null) return;
+            long a = (long) (musicaDura * Math.max(0, Math.min(1, parte)));
+            c.getTransportControls().seekTo(a);
+            musicaPos = a; musicaPosEn = SystemClock.elapsedRealtime();   // la barrita salta de una, sin esperar a que la app avise
+        } catch (SecurityException ignored) {
+        }
+    }
+
     private MediaController buscarReproductor() {
         if (!puedeTocarMusica()) return null;
         try {
