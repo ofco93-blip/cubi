@@ -1021,7 +1021,8 @@ public class CubiService extends Service {
         // caja negra del camino destino → ruta → calles → Mapi: una línea cada vez que algo cambia (sin coordenadas)
         CubiCarroDatos.cada(this, "RUTA", 0, () -> rutaEstado.isEmpty() ? "(sin destino)" : rutaEstado);
         CubiCarroDatos.cada(this, "MAPA", 0, () -> mapaEstado + " | ruta_puntos=" + (rutaLat == null ? 0 : rutaLat.length) + " trafico=" + (rutaTrafico != null));
-        CubiCarroDatos.cada(this, "MAPI", 0, () -> CubiMapi.estado() + " | listo=" + CubiMapi.listo() + " nav=" + navActiva() + " carro=" + carroMapa());
+        CubiCarroDatos.cada(this, "MAPI", 0, () -> CubiMapi.estado() + " | listo=" + CubiMapi.listo() + " nav=" + navActiva() + " carro=" + carroMapa()
+                + " | giro=" + navDir + " google_guia=" + CubiGoogle.guiando() + " aviso_maps=" + com.cubi.robot.Oyente.rutaViva());
         if (!(navMapa() || carroMapa() || CubiMapi.listo()) || (!navActiva() && !CubiMapi.listo())) return;
         // el destino guardado se vuelve a buscar al arrancar (una vez por minuto si falla)
         if (Double.isNaN(destLat) && !destinoTexto().isEmpty() && !destBuscando && ahora - destIntento > 60000) destino(destinoTexto());

@@ -231,7 +231,9 @@ final class CubiMapi {
                 yaGiro = "";                                               // y el giro otra vez, por si Mapi se reinició
             }
             // hay ruta mientras siga el aviso de navegación de Maps (o haya destino puesto en Cubi): al quitarla, Mapi vuelve al mapa normal
-            boolean nav = !sv.navDir.isEmpty() && ahora - sv.navCuando < 120000 && (Oyente.rutaViva() || sv.destinoPunto() != null);
+            // la flecha solo mientras alguien navega de verdad: el Google de Mascota Auto con destino puesto, o el aviso de
+            // Maps/Waze en el celular. Antes bastaba un destino guardado y la flecha se quedaba al quitar la navegación.
+            boolean nav = !sv.navDir.isEmpty() && ((CubiGoogle.guiando() && sv.destinoPunto() != null) || (Oyente.rutaViva() && ahora - sv.navCuando < 120000));
             String d = !nav ? "" : sv.navDir.equals("maps_izq") ? "izq" : sv.navDir.equals("maps_der") ? "der" : sv.navDir.equals("llegamos") ? "fin" : "recto";
             // "Dirígete al nordeste hacia la Calle 5" (el primer aviso de Maps, sin metros): en Mapi va como "Sigue por Calle 5"
             String calle = sv.navCalle;
