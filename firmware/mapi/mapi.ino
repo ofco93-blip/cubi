@@ -800,8 +800,12 @@ static void tocar(float x, float y) {
 }
 static void tactilCuadro() {
   if (!hayTactil) return;
-  int16_t xs[2], ys[2];
-  if (tactil.getPoint(xs, ys, 1)) {
+  int16_t xs[2] = {0, 0}, ys[2] = {0, 0};
+  const uint8_t np = tactil.getPoint(xs, ys, 1);
+  static uint32_t ultimoLog = 0;
+  if (np && millis() - ultimoLog > 150) { ultimoLog = millis(); Serial.printf("toque %d: x=%d y=%d (pagina %d)
+", np, xs[0], ys[0], pagina); }   // por el cable, para calibrar
+  if (np) {
     float px = TACTIL_ESPEJO ? D - xs[0] : xs[0], py = TACTIL_ESPEJO ? D - ys[0] : ys[0];
     if (fabsf(giroPantalla) >= 0.5f) { const float a = -giroPantalla * PI / 180, dx = px - C, dy = py - C; px = C + dx * cosf(a) - dy * sinf(a); py = C + dx * sinf(a) + dy * cosf(a); }
     if (!tocando) { tocando = true; tx0 = px; ty0 = py; tocaT = tAhora; bisel = pagina == 2 && musDur > 0 && hypotf(px - C, py - C) > C - 48; }
@@ -809,6 +813,8 @@ static void tactilCuadro() {
     if (bisel) biselF = fraccionDe(px, py);
   } else if (tocando) {
     tocando = false;
+    Serial.printf("solto: de %.0f,%.0f a %.0f,%.0f
+", tx0, ty0, txN, tyN);
     if (bisel) {                                     // soltó el bisel: la canción va a ese punto
       bisel = false; char b[24]; snprintf(b, sizeof b, "ir|%.3f", biselF); avisar(b);
       musPos = biselF * musDur; musT = tAhora; biselF = -1; return;
@@ -854,4 +860,6 @@ void loop() {
   if (Serial.available() && Serial.read() == 't')
     Serial.printf("cuadro %lu ms (dibujo %lu: fondo %lu, calles %lu, velo %lu, letreros %lu; pantalla %lu, giro %d)\n", (unsigned long)(millis() - ahora), (unsigned long)(pintado - ahora),
                   (unsigned long)tFondo, (unsigned long)tMapa, (unsigned long)tVela, (unsigned long)(pintado - ahora - tFondo - tMapa - tVela), (unsigned long)(millis() - pintado), (int)giroPantalla);
+  if (Serial.available() && Serial.peek() == 'k') { Serial.read(); Serial.printf("tactil=%d int=%d
+", hayTactil, digitalRead(11)); }
 }
