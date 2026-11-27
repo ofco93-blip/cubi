@@ -568,7 +568,7 @@ function parqueoVer() {
   if (hay) {
     const d = new Date(+p[2]), hoy = new Date().toDateString() === d.toDateString();
     $('parqueoNota').textContent = 'Guardado ' + (hoy ? 'hoy' : d.toLocaleDateString('es-CO', {weekday: 'long', day: 'numeric', month: 'short'}))
-      + ' a las ' + d.toLocaleTimeString('es-CO', {hour: 'numeric', minute: '2-digit'}) + '.';
+      + ' a las ' + d.toLocaleTimeString('es-CO', {hour: 'numeric', minute: '2-digit'}) + '.' + (A().parqueoDir && A().parqueoDir() ? ' ' + A().parqueoDir() : '');
   }
 }
 $('parqueoIr').onclick = () => A().abrirParqueo();

@@ -138,6 +138,7 @@ public class CubiCarro extends CarAppService {
         private java.util.List<String[]> ops;                         // {nombre, dónde queda, "lat,lon", "12 km"}
         private boolean buscando; private String aviso = "";
         private String inicial = "";                                  // lo que se pidió por voz: se busca apenas abre
+        private String sesion = java.util.UUID.randomUUID().toString(); private long tecleo;   // sugerencias de Google: una sesión por búsqueda
         Buscar(CarContext c) { super(c); ops = favoritos(c); ops.addAll(recientes(c)); }
         Buscar(CarContext c, String q) { this(c); inicial = q; buscar(q, true); }
         // solo: viene de la voz; si no hay de dónde escoger (uno solo o ninguno) se va derecho, como antes
@@ -168,6 +169,19 @@ public class CubiCarro extends CarAppService {
             return l;
         }
         private void escoger(String[] o) {
+            if (o[2].startsWith("pid:")) {                            // una sugerencia de Google: primero se pide su punto
+                final String id = o[2].substring(4), ses = sesion; sesion = java.util.UUID.randomUUID().toString();
+                buscando = true; invalidate();
+                new Thread(() -> {
+                    String p = CubiGoogleApis.punto(getCarContext(), id, ses);
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        buscando = false;
+                        if (p == null) { irA(getCarContext(), o[0] + (o[1].isEmpty() ? "" : ", " + o[1])); getScreenManager().popToRoot(); }
+                        else escoger(new String[]{o[0], o[1], p, o[3]});
+                    });
+                }).start();
+                return;
+            }
             if (o[2].isEmpty()) { irA(getCarContext(), o[1]); getScreenManager().popToRoot(); return; }   // un favorito: se busca por su texto, el más cercano
             SharedPreferences p = getCarContext().getSharedPreferences("cubi", 0);
             StringBuilder sb = new StringBuilder(o[0] + "\t" + o[1] + "\t" + o[2]); int n = 1;
@@ -178,6 +192,19 @@ public class CubiCarro extends CarAppService {
         }
         @NonNull @Override public Template onGetTemplate() {
             androidx.car.app.model.SearchTemplate.Builder b = new androidx.car.app.model.SearchTemplate.Builder(new androidx.car.app.model.SearchTemplate.SearchCallback() {
+                // mientras se escribe: las sugerencias de Google (como en Google Maps), a los 0,35 s de dejar de escribir
+                @Override public void onSearchTextChanged(@NonNull String t) {
+                    final String q = t.trim(); final long yo = ++tecleo;
+                    if (q.length() < 3 || !CubiGoogleApis.hay(getCarContext())) return;
+                    new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                        if (yo != tecleo) return;
+                        new Thread(() -> {
+                            CubiService sv = CubiService.yo;
+                            java.util.List<String[]> r = CubiGoogleApis.sugerencias(getCarContext(), q, sv == null ? Double.NaN : sv.posLat, sv == null ? 0 : sv.posLon, sesion);
+                            new Handler(Looper.getMainLooper()).post(() -> { if (yo == tecleo && r != null && !r.isEmpty()) { ops = r; aviso = ""; invalidate(); } });
+                        }).start();
+                    }, 350);
+                }
                 @Override public void onSearchSubmitted(@NonNull String t) {
                     final String q = t.trim();
                     if (!q.isEmpty() && !buscando) buscar(q, false);

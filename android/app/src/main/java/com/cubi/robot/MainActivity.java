@@ -433,6 +433,8 @@ public class MainActivity extends Activity {
 
         // "¿Dónde parqueé?": la última ubicación guardada ("lat,lon,hora" o vacío) y abrirla en Maps
         @JavascriptInterface
+        public String parqueoDir() { return getSharedPreferences("cubi", 0).getString("parqueoDir", ""); }
+        @JavascriptInterface
         public String parqueo() { return CubiService.yo == null ? getSharedPreferences("cubi", 0).getString("parqueo", "") : CubiService.yo.parqueo(); }
 
         @JavascriptInterface

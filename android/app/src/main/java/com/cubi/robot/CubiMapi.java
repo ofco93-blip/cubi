@@ -49,7 +49,8 @@ final class CubiMapi {
     private final ArrayDeque<Paq> cola = new ArrayDeque<>();
     private volatile String estado = "Buscando a Mapi…";
     private static volatile List<String> ultMapa; private static volatile int ultVias; private static volatile String ultCierre;
-    private String yaGiro = "", yaLlega = "", yaPila = "", yaClima = ""; private long yaHora, yaSinGps;
+    private String yaGiro = "", yaLlega = "", yaPila = "", yaClima = "", yaLimite = ""; private long yaHora, yaSinGps, yaCalle, yaLim;
+    private volatile int limiteAhora = -1; private double limLa = Double.NaN, limLo;
     // la actualización
     private byte[] fw; private int enviados; private volatile boolean actualizando, terminando;
 
@@ -131,7 +132,7 @@ final class CubiMapi {
     private void empezar() {
         if (listo) return;
         listo = true; version = ""; estado = "Conectado · firmware anterior a la 2.0.400 (toca Actualizar Mapi).";
-        yaGiro = yaLlega = yaPila = yaClima = ""; yaHora = 0;            // recién conectado: se manda todo otra vez
+        yaGiro = yaLlega = yaPila = yaClima = yaLimite = ""; yaHora = 0; yaCalle = 0;            // recién conectado: se manda todo otra vez
         mandar("/hola");                                               // ¿qué versión tiene? (la de antes no contesta)
         ui.post(this::mandarMapa);
     }
@@ -239,6 +240,18 @@ final class CubiMapi {
                         + (Double.isNaN(h) ? "" : String.format(Locale.US, "&h=%.2f", h));
                 if (!p.equals(yaPila)) { yaPila = p; mandar(p); }
             }
+            // con Google, andando: la calle por donde va (cada minuto) y el límite de velocidad de la vía (cada 20 s)
+            if (CubiGoogleApis.hay(sv) && sv.kmh > 5 && !Double.isNaN(sv.posLat)) {
+                final double la = sv.posLat, lo = sv.posLon;
+                if (ahora - yaCalle > 60000) { yaCalle = ahora; new Thread(() -> { String[] d = CubiGoogleApis.direccion(sv, la, lo); if (d != null && !d[1].isEmpty()) ui.post(() -> mandar("/calle?c=" + cod(d[1]))); }).start(); }
+                if (ahora - yaLim > 20000 && !CubiGoogleApis.sinLimites && !Double.isNaN(limLa)) {
+                    yaLim = ahora; final double a0 = limLa, o0 = limLo;
+                    new Thread(() -> limiteAhora = CubiGoogleApis.limite(sv, a0, o0, la, lo)).start();
+                }
+                limLa = la; limLo = lo;
+            }
+            String lm = "/limite?v=" + limiteAhora + "&x=" + (limiteAhora > 0 && sv.kmh > limiteAhora + 5 ? 1 : 0);   // x: va pasado del límite
+            if (!lm.equals(yaLimite)) { yaLimite = lm; mandar(lm); }
             if (sv.climaGrados != Integer.MIN_VALUE) {
                 String c = "/clima?t=" + sv.climaGrados + "&e=" + sv.climaEstado + "&l=" + cod(sv.climaLugar) + "&n=" + (sv.climaNoche ? 1 : 0);
                 if (!c.equals(yaClima)) { yaClima = c; mandar(c); }

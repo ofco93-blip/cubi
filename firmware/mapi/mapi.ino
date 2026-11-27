@@ -174,7 +174,7 @@ static void vidrio(float x0, float y0, float x1, float y1, float r, bool oscuro 
 
 // ---------------------------------------------------------------- lo que manda el celular
 // Las calles: el mismo formato que el mini mapa de Cubi (de a 3 m, un byte por coordenada; 128 = el origen).
-// Clases: 0 calle, 1 avenida, 2 la ruta, 3 agua, 4 parque, 5 río. Hay dos juegos: uno se dibuja mientras el otro se carga.
+// Clases: 0 calle, 1 avenida, 2 la ruta, 3 agua, 4 parque, 5 río, 6 la ruta con tráfico lento, 7 la ruta trancada. Hay dos juegos: uno se dibuja mientras el otro se carga.
 constexpr int MAX_VIAS = 260, MAX_PUNTOS = 2000; constexpr float MAPA_M = 3;
 struct Calles { uint8_t x[MAX_PUNTOS], y[MAX_PUNTOS]; uint16_t ini[MAX_VIAS + 1]; uint8_t clase[MAX_VIAS]; int nv = 0, np = 0; };
 Calles *callesHay, *callesCarga;
@@ -183,7 +183,7 @@ static void mapaVias(const char *w, bool primero, bool fin) {
   Calles &c = *callesCarga;
   if (primero) { c.nv = 0; c.np = 0; }
   while (*w && c.nv < MAX_VIAS) {
-    c.clase[c.nv] = (uint8_t)lim(*w++ - '0', 0, 5); c.ini[c.nv] = c.np;
+    c.clase[c.nv] = (uint8_t)lim(*w++ - '0', 0, 7); c.ini[c.nv] = c.np;
     while (*w && *w != '.') {
       if (!w[1] || !w[2] || !w[3]) { w += strlen(w); break; }
       if (c.np < MAX_PUNTOS) { c.x[c.np] = hexv(w[0]) * 16 + hexv(w[1]); c.y[c.np] = hexv(w[2]) * 16 + hexv(w[3]); c.np++; }
@@ -243,6 +243,7 @@ char giroDir[8] = "", giroCalle[40] = "", llegaTxt[8] = ""; int giroM = -1, falt
 int pilaB = -1, pilaReal = -1, pilaWltp = -1; bool pilaCarga = false; float pilaKw = 0, pilaHoras = -1, pilaProm = 0;
 int climaG = -1000; char climaE[12] = "", climaLugar[28] = ""; bool climaNoche = false;
 int horaMin = -1; float horaT = 0;
+char calleAhora[40] = ""; int limV = -1; bool limX = false;   // la calle por donde va y el límite de la vía (de Google)
 
 static String decodificar(const String &s) {   // %XX y + -> espacio
   String o; o.reserve(s.length());
@@ -280,6 +281,8 @@ static void orden(const String &linea) {
     pilaCarga = valor(q, "c") == "1"; pilaKw = valor(q, "k").toFloat(); pilaHoras = tiene(q, "h") ? valor(q, "h").toFloat() : -1; pilaProm = valor(q, "p").toFloat();
   } else if (ruta == "/clima") { climaG = valor(q, "t").toInt(); strlcpy(climaE, valor(q, "e").c_str(), sizeof climaE); strlcpy(climaLugar, valor(q, "l").c_str(), sizeof climaLugar); climaNoche = valor(q, "n") == "1"; }
   else if (ruta == "/hora") { horaMin = valor(q, "m").toInt(); horaT = tAhora; }
+  else if (ruta == "/calle") strlcpy(calleAhora, valor(q, "c").c_str(), sizeof calleAhora);
+  else if (ruta == "/limite") { limV = valor(q, "v").toInt(); limX = valor(q, "x") == "1"; }
 }
 
 // ---------------------------------------------------------------- Bluetooth
@@ -388,7 +391,8 @@ static void mapa(float cyCarro) {
     if (n >= 3) rellenar(qx, qy, n, c.clase[v] == 3 ? AGUA : PARQUE, 0.9f);
   }
   struct Pasada { uint8_t clase; Col col; float ancho; };   // ancho en metros
-  const Pasada PAS[] = {{5, RIO, 6}, {0, CALLE, 8}, {1, AVENIDA, 13}, {2, RUTA_B, 19}, {2, RUTA, 12}};
+  // el tráfico va encima de la ruta, como en Google Maps: naranja lo lento, rojo lo trancado
+  const Pasada PAS[] = {{5, RIO, 6}, {0, CALLE, 8}, {1, AVENIDA, 13}, {2, RUTA_B, 19}, {2, RUTA, 12}, {6, Col{242, 153, 0}, 12}, {7, Col{232, 69, 60}, 12}};
   for (const auto &ps : PAS) for (int v = 0; v < c.nv; v++) {
     if (c.clase[v] != ps.clase) continue;
     float ax, ay; aCarro(c.ini[v], ax, ay);
@@ -533,6 +537,7 @@ static void pintar() {
       const float w = fminf(170, anchoTexto(g, 24)), x0 = C - (w + 54) / 2;
       vidrio(x0, 160, x0 + w + 54, 206, 23); nube(x0 + 26, 182, 16); texto(g, x0 + 46, 182, 24, BLANCO, 1, true, 170);
     }
+    if (calleAhora[0]) textoFilo(calleAhora, C, climaG > -1000 ? 228 : 182, 19, Col{220, 228, 255}, false, 300);   // la calle por donde va
     if (pilaB >= 0) {
       vidrio(96, 330, 370, 418, 40);
       pila(146, 373, 66);
@@ -547,6 +552,13 @@ static void pintar() {
         snprintf(b, sizeof b, "%s%s%s", w, w[0] && p[0] ? " · " : "", p); texto(b, 190, 390, 18, Col{225, 232, 255}, 1, true, 168);
       }
     }
+  }
+  // el límite de velocidad de la vía, como la señal de tránsito; si va pasado, el aro rojo late
+  if (limV > 0) {
+    const float sx = 404, sy = 236, r = 27, late = limX ? 0.5f + 0.5f * sinf(tAhora * 9) : 0;
+    if (limX) disco(sx, sy, r + 8, Col{232, 69, 60}, 0.25f + 0.35f * late);
+    disco(sx, sy, r, Col{232, 40, 40}, 1); disco(sx, sy, r - 5.5f, BLANCO, 1);
+    char v[6]; snprintf(v, sizeof v, "%d", limV); texto(v, sx, sy, limV >= 100 ? 20 : 24, Col{20, 20, 24});
   }
   if (!conectado) texto("buscando el celular…", C, 440, 15, Col{170, 184, 214}, 0.9f);
 }

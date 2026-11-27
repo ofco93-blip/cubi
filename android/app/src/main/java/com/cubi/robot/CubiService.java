@@ -432,8 +432,12 @@ public class CubiService extends Service {
                 if (l != null && (mejor == null || l.getTime() > mejor.getTime())) mejor = l;
             }
         } catch (Exception e) { return; }
-        if (mejor != null) getSharedPreferences("cubi", 0).edit().putString("parqueo",
+        if (mejor != null) getSharedPreferences("cubi", 0).edit().putString("parqueoDir", "").putString("parqueo",
                 String.format(Locale.US, "%.6f,%.6f,%d", mejor.getLatitude(), mejor.getLongitude(), mejor.getTime())).apply();
+        if (mejor != null && CubiGoogleApis.hay(this)) {             // con Google: la dirección de donde quedó
+            final double pa = mejor.getLatitude(), po = mejor.getLongitude();
+            new Thread(() -> { String[] d = CubiGoogleApis.direccion(this, pa, po); if (d != null) getSharedPreferences("cubi", 0).edit().putString("parqueoDir", d[0]).apply(); }).start();
+        }
     }
 
     // "lat,lon,hora" de donde quedó el carro, o vacío
@@ -472,6 +476,9 @@ public class CubiService extends Service {
                 // El código es un pronóstico y en el trópico dice "llovizna" a cada rato sin que caiga nada: solo cuenta
                 // como lluvia si además marca agua cayendo ahora (0,2 mm o más). Si no, nubes.
                 if (e.equals("lluvia") && cur.optDouble("precipitation", 1) < 0.2) e = "nubes";
+                // con la llave de Google, el clima de Google (más fino por barrio); si no responde, queda el de Open-Meteo
+                int[] gd = new int[2]; String ge = CubiGoogleApis.clima(this, Double.parseDouble(ll[0]), Double.parseDouble(ll[1]), gd);
+                if (ge != null) { e = ge; t = gd[0]; dia = gd[1]; }
                 climaOrden = "/clima?t=" + t + "&e=" + e + "&d=" + dia;
                 climaGrados = t; climaEstado = e; climaNoche = dia == 0;
                 if (todo.has("elevation")) climaAltura = (int) Math.round(todo.optDouble("elevation"));   // la del terreno, por si el GPS no da la suya
@@ -549,6 +556,7 @@ public class CubiService extends Service {
     private volatile double destLat = Double.NaN, destLon;
     private volatile String destNombre = "", rutaEstado = "";
     volatile double[] rutaLat, rutaLon;
+    volatile int[][] rutaTrafico;                  // con la ruta de Google: {desde, hasta, 0 normal 1 lento 2 trancado} por puntos de la línea
     // Lo que falta del viaje según la ruta propia (la de OSRM): sirve cuando Maps no lo dice. rutaAcum: metros desde la
     // salida hasta cada punto; rutaDura: segundos de toda la ruta, sin tráfico.
     private volatile float[] rutaAcum; private volatile double rutaDura;
@@ -941,6 +949,16 @@ public class CubiService extends Service {
 
     private void calcularRuta(double lat, double lon) {
         try {
+            // con la llave de Google: la ruta de Google, con el tráfico por tramos (para pintarlo en rojo en Mapi)
+            CubiGoogleApis.Ruta gr = CubiGoogleApis.ruta(this, lat, lon, destLat, destLon);
+            if (gr != null) {
+                float[] ac = new float[gr.la.length];
+                for (int i = 1; i < gr.la.length; i++) ac[i] = ac[i - 1] + (float) Math.hypot((gr.lo[i] - gr.lo[i - 1]) * 111320 * Math.cos(Math.toRadians(gr.la[i])), (gr.la[i] - gr.la[i - 1]) * 111320);
+                rutaAcum = ac; rutaDura = gr.seg; rutaTrafico = gr.trafico;
+                rutaLat = gr.la; rutaLon = gr.lo; mapaForzar = true;
+                rutaEstado = String.format(Locale.US, "Ruta de Google: %.1f km hasta “%s”, con tráfico.", gr.metros / 1000, destNombre);
+                return;
+            }
             // Se lee también la respuesta de error: el servicio dice por qué no hay ruta (NoRoute, NoSegment, muy seguido…)
             HttpURLConnection h = (HttpURLConnection) new URL(String.format(Locale.US,
                     "https://router.project-osrm.org/route/v1/driving/%.5f,%.5f;%.5f,%.5f?overview=full&geometries=geojson", lon, lat, destLon, destLat)).openConnection();
@@ -965,7 +983,7 @@ public class CubiService extends Service {
             float[] ac = new float[la.length];
             for (int i = 1; i < la.length; i++) ac[i] = ac[i - 1] + (float) Math.hypot((lo[i] - lo[i - 1]) * 111320 * Math.cos(Math.toRadians(la[i])), (la[i] - la[i - 1]) * 111320);
             rutaAcum = ac; rutaDura = ruta.optDouble("duration", 0);
-            rutaLat = la; rutaLon = lo; mapaForzar = true;
+            rutaLat = la; rutaLon = lo; mapaForzar = true; rutaTrafico = null;
             rutaEstado = String.format(Locale.US, "Ruta: %.1f km hasta “%s”.", ruta.optDouble("distance", 0) / 1000, destNombre);
         } catch (Exception e) {
             rutaEstado = "Ruta a “" + destNombre + "”: sin respuesta del servicio de rutas (" + e.getClass().getSimpleName() + "); reintento.";
@@ -1019,7 +1037,7 @@ public class CubiService extends Service {
             }
         }
         // la ruta: la primera vez, y otra vez si el carro se sale más de 70 m de la línea (máximo cada 20 s)
-        if (hayDestino && !rutaCalculando && ahora - rutaPedida > 20000 && (rutaLat == null || fueraDeRuta(lat, lon) > 70)) {
+        if (hayDestino && !rutaCalculando && ahora - rutaPedida > 20000 && (rutaLat == null || fueraDeRuta(lat, lon) > 70 || (rutaTrafico != null && ahora - rutaPedida > 300000))) {   // con tráfico, se refresca cada 5 min
             rutaPedida = ahora; rutaCalculando = true;
             new Thread(() -> calcularRuta(lat, lon)).start();
         }
@@ -1151,6 +1169,11 @@ public class CubiService extends Service {
             java.util.ArrayList<String> ruta = new java.util.ArrayList<>(), avenidas = new java.util.ArrayList<>(), calles = new java.util.ArrayList<>(), zonas = new java.util.ArrayList<>();
             double[] rla = rutaLat, rlo = rutaLon;
             if (rla != null && rlo != null) tramos(rla, rlo, lat, lon, "2", ruta);
+            int[][] trf = rutaTrafico;                       // encima de la ruta: lo lento (clase 6) y lo trancado (clase 7)
+            if (rla != null && rlo != null && trf != null) for (int[] tr : trf) {
+                int a = Math.max(0, tr[0]), z = Math.min(tr[1], rla.length - 1);
+                if (tr[2] > 0 && z > a) tramos(java.util.Arrays.copyOfRange(rla, a, z + 1), java.util.Arrays.copyOfRange(rlo, a, z + 1), lat, lon, tr[2] == 1 ? "6" : "7", ruta);
+            }
             for (double[][] a : aguaGrande) poligono(a[0], a[1], lat, lon, "3", zonas);
             for (int e = 0; e < els.length(); e++) {
                 JSONObject w = els.getJSONObject(e);
