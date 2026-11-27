@@ -255,6 +255,7 @@ static void mapaVias(const char *w, bool primero, bool fin) {
 #define GIRO_SIGNO 1
 uint8_t imuAddr = 0; V gravedad{0, 0, 1}; float sesgo = 0, rumboVel = 0, dtCuadro = 0;
 static void i2cW(uint8_t a, uint8_t r, uint8_t v) { Wire.beginTransmission(a); Wire.write(r); Wire.write(v); Wire.endTransmission(); }
+SemaphoreHandle_t i2cLlave;                  // el bus I2C lo comparten el giroscopio (dibujo) y el táctil (su propia tarea)
 static bool i2cR(uint8_t a, uint8_t r, uint8_t *b, uint8_t n) {
   Wire.beginTransmission(a); Wire.write(r);
   if (Wire.endTransmission(false) != 0 || Wire.requestFrom(a, n) != n) return false;
@@ -262,7 +263,11 @@ static bool i2cR(uint8_t a, uint8_t r, uint8_t *b, uint8_t n) {
   return true;
 }
 static bool imuLeer(V &acc, V &gir) {
-  uint8_t b[12]; if (!imuAddr || !i2cR(imuAddr, 0x35, b, 12)) return false;
+  uint8_t b[12]; if (!imuAddr) return false;
+  if (i2cLlave && !xSemaphoreTake(i2cLlave, pdMS_TO_TICKS(20))) return false;
+  const bool ok = i2cR(imuAddr, 0x35, b, 12);
+  if (i2cLlave) xSemaphoreGive(i2cLlave);
+  if (!ok) return false;
   int16_t v[6]; for (int i = 0; i < 6; i++) v[i] = int16_t(b[2 * i] | (b[2 * i + 1] << 8));
   acc = {v[0] / 8192.f, v[1] / 8192.f, v[2] / 8192.f}; gir = {v[3] / 64.f, v[4] / 64.f, v[5] / 64.f};   // g y grados por segundo
   return true;
@@ -798,28 +803,29 @@ static void tocar(float x, float y) {
   else if (cerca(C, 362, 44)) { avisar("tecla|0"); if (musSuena) musPos += tAhora - musT; musT = tAhora; musSuena = !musSuena; }
   else if (cerca(C + 78, 362, 38)) avisar("tecla|1");
 }
-static void tactilCuadro() {
-  if (!hayTactil) return;
-  int16_t xs[2] = {0, 0}, ys[2] = {0, 0};
-  const uint8_t np = tactil.getPoint(xs, ys, 1);
-  static uint32_t ultimoLog = 0;
-  if (np && millis() - ultimoLog > 150) { ultimoLog = millis(); Serial.printf("toque %d: x=%d y=%d (pagina %d)\n", np, xs[0], ys[0], pagina); }   // por el cable, para calibrar
-  if (np) {
-    float px = TACTIL_ESPEJO ? D - xs[0] : xs[0], py = TACTIL_ESPEJO ? D - ys[0] : ys[0];
-    if (fabsf(giroPantalla) >= 0.5f) { const float a = -giroPantalla * PI / 180, dx = px - C, dy = py - C; px = C + dx * cosf(a) - dy * sinf(a); py = C + dx * sinf(a) + dy * cosf(a); }
-    if (!tocando) { tocando = true; tx0 = px; ty0 = py; tocaT = tAhora; bisel = pagina == 2 && musDur > 0 && hypotf(px - C, py - C) > C - 48; }
-    txN = px; tyN = py;
-    if (bisel) biselF = fraccionDe(px, py);
-  } else if (tocando) {
-    tocando = false;
-    Serial.printf("solto: de %.0f,%.0f a %.0f,%.0f\n", tx0, ty0, txN, tyN);
-    if (bisel) {                                     // soltó el bisel: la canción va a ese punto
-      bisel = false; char b[24]; snprintf(b, sizeof b, "ir|%.3f", biselF); avisar(b);
-      musPos = biselF * musDur; musT = tAhora; biselF = -1; return;
+static void tactilTarea(void *) {
+  uint32_t inicio = 0, ultimoLog = 0;
+  for (;;) {
+    vTaskDelay(pdMS_TO_TICKS(10));
+    int16_t xs[2] = {0, 0}, ys[2] = {0, 0}; uint8_t np = 0;
+    if (xSemaphoreTake(i2cLlave, pdMS_TO_TICKS(30))) { np = tactil.getPoint(xs, ys, 1); xSemaphoreGive(i2cLlave); }
+    if (np) {
+      float px = TACTIL_ESPEJO ? D - xs[0] : xs[0], py = TACTIL_ESPEJO ? D - ys[0] : ys[0];
+      if (fabsf(giroPantalla) >= 0.5f) { const float a = -giroPantalla * PI / 180, dx = px - C, dy = py - C; px = C + dx * cosf(a) - dy * sinf(a); py = C + dx * sinf(a) + dy * cosf(a); }
+      if (!tocando) { tocando = true; tx0 = px; ty0 = py; inicio = millis(); bisel = pagina == 2 && musDur > 0 && hypotf(px - C, py - C) > C - 48; }
+      txN = px; tyN = py;
+      if (bisel) biselF = fraccionDe(px, py);
+    } else if (tocando) {
+      tocando = false;
+      if (millis() - ultimoLog > 100) { ultimoLog = millis(); Serial.printf("solto: de %.0f,%.0f a %.0f,%.0f (pagina %d)\n", tx0, ty0, txN, tyN, pagina); }
+      if (bisel) {                                     // soltó el bisel: la canción va a ese punto
+        bisel = false; char b[24]; snprintf(b, sizeof b, "ir|%.3f", biselF); avisar(b);
+        musPos = biselF * musDur; musT = tAhora; biselF = -1; continue;
+      }
+      const float dx = txN - tx0, dy = tyN - ty0;
+      if (fabsf(dx) > 60 && fabsf(dx) > fabsf(dy) * 1.4f) pagina = constrain(pagina + (dx < 0 ? 1 : -1), 0, 2);   // el dedo a la izquierda: la de la derecha
+      else if (fabsf(dx) < 28 && fabsf(dy) < 28 && millis() - inicio < 900) tocar(tx0, ty0);
     }
-    const float dx = txN - tx0, dy = tyN - ty0;
-    if (fabsf(dx) > 60 && fabsf(dx) > fabsf(dy) * 1.4f) pagina = constrain(pagina + (dx < 0 ? 1 : -1), 0, 2);   // el dedo a la izquierda: la de la derecha
-    else if (fabsf(dx) < 28 && fabsf(dy) < 28 && tAhora - tocaT < 0.9f) tocar(tx0, ty0);
   }
 }
 
@@ -837,6 +843,8 @@ void setup() {
   portada = (uint16_t *)ps_malloc(POR * POR * 2);
   tactil.setPins(40, 11);
   hayTactil = tactil.begin(Wire, 0x5A);
+  i2cLlave = xSemaphoreCreateMutex();
+  if (hayTactil) xTaskCreatePinnedToCore(tactilTarea, "tactil", 4096, nullptr, 1, nullptr, 0);
   Serial.println(hayTactil ? "Mapi: táctil listo" : "Mapi: sin táctil");
   bleInit();
   Serial.println("Mapi v" VERSION_MAPI " lista");
@@ -846,7 +854,6 @@ void loop() {
   static uint32_t antes = millis();
   const uint32_t ahora = millis(); dtCuadro = (ahora - antes) / 1000.f; tAhora += dtCuadro; antes = ahora;
   imuCuadro(dtCuadro);
-  tactilCuadro();
   if (reinicioEn && (int32_t)(ahora - reinicioEn) > 0) ESP.restart();   // actualizado: arranca con la versión nueva
   Orden o; int n = 0;
   while (n++ < 12 && xQueueReceive(colaBle, &o, 0) == pdTRUE) orden(String(o.t));
