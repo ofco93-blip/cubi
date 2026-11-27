@@ -96,7 +96,7 @@ public class CubiCarroDatos extends CubiCarro {
     interface Txt { String t(); }
     static final java.util.HashMap<String, Long> cuando = new java.util.HashMap<>();
     static final java.util.HashMap<String, String> dicho = new java.util.HashMap<>();
-    static void cada(CarContext cc, String clave, long ms, Txt x) {
+    static synchronized void cada(Context cc, String clave, long ms, Txt x) {
         long t = System.currentTimeMillis(); Long a = cuando.get(clave);
         if (a != null && t - a < ms) return;
         String linea = x.t();
@@ -109,7 +109,7 @@ public class CubiCarroDatos extends CubiCarro {
     // Android Auto no entrega códigos de falla (eso es del puerto OBD, que en este carro está cerrado).
     // La ubicación del carro se anota sin coordenadas (solo si llega y con qué precisión).
     static void oirTodo(CarContext cc) {
-        cuando.clear(); dicho.clear();
+        synchronized (CubiCarroDatos.class) { cuando.clear(); dicho.clear(); }
         Executor ex = ContextCompat.getMainExecutor(cc);
         CarHardwareManager hw = cc.getCarService(CarHardwareManager.class);
         CarInfo info = hw.getCarInfo();
@@ -122,7 +122,11 @@ public class CubiCarroDatos extends CubiCarro {
         try {
             androidx.car.app.hardware.info.CarSensors sn = hw.getCarSensors(); int r = androidx.car.app.hardware.info.CarSensors.UPDATE_RATE_NORMAL;
             try { sn.addCompassListener(r, ex, b -> cada(cc, "BRUJULA", 30000, () -> v(b.getOrientations()))); } catch (Throwable e) { falla(cc, "Brújula", e); }
-            try { sn.addAccelerometerListener(r, ex, a -> { mover(a.getForces()); cada(cc, "ACELEROMETRO", 60000, () -> v(a.getForces())); }); } catch (Throwable e) { falla(cc, "Acelerómetro", e); }
+            try { sn.addAccelerometerListener(r, ex, a -> {
+                mover(a.getForces()); cada(cc, "ACELEROMETRO", 60000, () -> v(a.getForces()));
+                // el modo noche lo decide el carro (luces o sensor de luz): se anota cada vez que cambia
+                cada(cc, "MODO_NOCHE", 0, () -> String.valueOf(cc.isDarkMode()));
+            }); } catch (Throwable e) { falla(cc, "Acelerómetro", e); }
             try { sn.addGyroscopeListener(r, ex, g -> cada(cc, "GIROSCOPIO", 60000, () -> v(g.getRotations()))); } catch (Throwable e) { falla(cc, "Giroscopio", e); }
             if (dado(cc, Manifest.permission.ACCESS_FINE_LOCATION))
                 try { sn.addCarHardwareLocationListener(r, ex, l -> cada(cc, "UBICACION_CARRO", 60000, () -> {
@@ -214,7 +218,7 @@ public class CubiCarroDatos extends CubiCarro {
     // Registro en el celular: Android/data/com.cubi.robot/files/datos_carro.txt (se lee después por cable).
     // Solo escribe cuando la línea cambia. Al llegar a 2 MB guarda ese como datos_carro_anterior.txt y sigue en uno nuevo.
     static String ultima = "";
-    static synchronized void registrar(CarContext cc, String linea) {
+    static synchronized void registrar(Context cc, String linea) {
         Log.i(TAG, linea);
         if (linea.equals(ultima)) return;
         ultima = linea;
