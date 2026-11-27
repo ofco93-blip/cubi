@@ -243,7 +243,7 @@ final class CubiMapi {
             // con Google, andando: la calle por donde va (cada minuto) y el límite de velocidad de la vía (cada 20 s)
             if (CubiGoogleApis.hay(sv) && sv.kmh > 5 && !Double.isNaN(sv.posLat)) {
                 final double la = sv.posLat, lo = sv.posLon;
-                if (ahora - yaCalle > 60000) { yaCalle = ahora; new Thread(() -> { String[] d = CubiGoogleApis.direccion(sv, la, lo); if (d != null && !d[1].isEmpty()) ui.post(() -> mandar("/calle?c=" + cod(d[1]))); }).start(); }
+                if (ahora - yaCalle > 60000) { yaCalle = ahora; new Thread(() -> { String[] dir = CubiGoogleApis.direccion(sv, la, lo); if (dir != null && !dir[1].isEmpty()) ui.post(() -> mandar("/calle?c=" + cod(dir[1]))); }).start(); }
                 if (ahora - yaLim > 20000 && !CubiGoogleApis.sinLimites && !Double.isNaN(limLa)) {
                     yaLim = ahora; final double a0 = limLa, o0 = limLo;
                     new Thread(() -> limiteAhora = CubiGoogleApis.limite(sv, a0, o0, la, lo)).start();

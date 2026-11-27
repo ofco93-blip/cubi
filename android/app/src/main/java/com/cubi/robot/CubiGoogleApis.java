@@ -102,8 +102,8 @@ final class CubiGoogleApis {
     static String clima(Context c, double lat, double lon, int[] salida) {
         JSONObject r = pedir(c, String.format(Locale.US, "https://weather.googleapis.com/v1/currentConditions:lookup?location.latitude=%.4f&location.longitude=%.4f&languageCode=es", lat, lon), null, null);
         if (r == null || r.optJSONObject("temperature") == null || r.optJSONObject("weatherCondition") == null) return null;
-        String t = r.getJSONObject("weatherCondition").optString("type");
-        salida[0] = (int) Math.round(r.getJSONObject("temperature").optDouble("degrees")); salida[1] = r.optBoolean("isDaytime", true) ? 1 : 0;
+        String t = r.optJSONObject("weatherCondition").optString("type");
+        salida[0] = (int) Math.round(r.optJSONObject("temperature").optDouble("degrees")); salida[1] = r.optBoolean("isDaytime", true) ? 1 : 0;
         return t.contains("THUNDER") ? "tormenta" : t.contains("SNOW") || t.contains("HAIL") ? "nieve" : t.contains("RAIN") || t.contains("SHOWER") || t.contains("DRIZZLE") ? "lluvia"
                 : t.contains("FOG") || t.contains("HAZE") || t.contains("MIST") ? "niebla" : t.contains("CLOUD") || t.contains("OVERCAST") ? "nubes" : "despejado";
     }
