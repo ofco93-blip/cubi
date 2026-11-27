@@ -271,6 +271,7 @@ public class CubiCarro extends CarAppService {
         private CubiGoogle goo;                                       // el mapa de Google, si el usuario puso su llave; null = el mapa propio
         private double gLat = Double.NaN, gLon;                       // el destino que ya se le pasó a Google
         @Override public void onSurfaceAvailable(@NonNull SurfaceContainer s) {
+            CubiCarroDatos.registrar(getCarContext(), "PANTALLA_CARRO superficie lista " + s.getWidth() + "x" + s.getHeight());
             sup = s.getSurface(); ancho = s.getWidth(); alto = s.getHeight();
             if (goo != null) { goo.cerrar(); goo = null; }
             lienzo.google = false; gLat = Double.NaN;
@@ -289,7 +290,12 @@ public class CubiCarro extends CarAppService {
             if (lienzo.tocaListas(x, y)) { getScreenManager().push(new Listas(getCarContext())); return; }   // la pastilla de la canción: tus listas de Spotify
             if (lienzo.tocaVoz(x, y)) { CubiGoogle.vozSiguiente(getCarContext()); return; }   // el parlante: voz completa, solo alertas o callada
             if (lienzo.tocaCentrar(x, y)) { if (goo != null) goo.centrar(); return; }                    // el botón de centrar: el mapa vuelve al carro
-            if (lienzo.tocaCancelar(x, y)) { CubiCarroDatos.registrar(getCarContext(), "DESTINO_QUITADO la X de la pantalla del carro"); if (CubiService.yo != null) CubiService.yo.destino(""); return; }   // la X: quita el destino y su ruta
+            if (lienzo.tocaCancelar(x, y)) {                      // la X pregunta primero: dos veces se quitó la ruta con un toque sin querer
+                long ya = System.currentTimeMillis();
+                if (ya - lienzo.quitarPide > 4000) { lienzo.quitarPide = ya; return; }
+                lienzo.quitarPide = 0;
+                CubiCarroDatos.registrar(getCarContext(), "DESTINO_QUITADO la X de la pantalla del carro (confirmada)"); if (CubiService.yo != null) CubiService.yo.destino(""); return;
+            }   // la X: quita el destino y su ruta
             if (lienzo.tocaDestino(x, y)) { getScreenManager().push(new Buscar(getCarContext())); return; }   // el botón Destino del mapa
             String[] rec = lienzo.tocaReciente(x, y);                // un reciente de la tarjeta: se va de una
             if (rec != null) { irA(getCarContext(), rec[0] + (rec[1].isEmpty() ? "" : ", " + rec[1]), rec[2]); return; }
@@ -301,6 +307,7 @@ public class CubiCarro extends CarAppService {
         @Override public void onScroll(float dx, float dy) { if (goo != null) goo.mover(dx, dy); else lienzo.mover(-dx, -dy); }
         @Override public void onScale(float fx, float fy, float factor) { if (goo != null) goo.acercar(factor, fx, fy); else lienzo.acercar(factor); }
         @Override public void onSurfaceDestroyed(@NonNull SurfaceContainer s) {
+            CubiCarroDatos.registrar(getCarContext(), "PANTALLA_CARRO se cerró la superficie (el carro dejó de mostrar Mascota Auto)");
             sup = null; h.removeCallbacks(cuadro);
             if (goo != null) { goo.cerrar(); goo = null; lienzo.google = false; }
         }
@@ -328,6 +335,9 @@ public class CubiCarro extends CarAppService {
         }
         private void dibujarEn(Canvas c) {
             try {
+                CubiService sv0 = CubiService.yo;
+                CubiCarroDatos.cada(getCarContext(), "PANTALLA_CARRO", 30000, () -> "dibujando | google=" + (goo != null) + " | suena=" + (sv0 != null && sv0.musicaPlay)
+                        + " | " + (sv0 == null ? "" : sv0.cancionTitulo) + " " + (sv0 == null ? "" : String.valueOf(sv0.musicaPos / 1000)) + " s");
                 Rect a = zona.isEmpty() ? new Rect(0, 0, ancho, alto) : zona;
                 lienzo.pila = prefs.getInt("carroPila", 0);
                 lienzo.zEsc = new float[]{1f, 0.8f, 0.62f}[prefs.getInt("carroZeldaTam", 0) % 3];
@@ -586,7 +596,9 @@ public class CubiCarro extends CarAppService {
                         c.drawCircle(lx, ly, lr, p); c.drawLine(lx + lr * 0.75f, ly + lr * 0.75f, lx + lr * 1.7f, ly + lr * 1.7f, p);
                     }
                     p.setStyle(Paint.Style.FILL);
-                    texto(c, dn.isEmpty() ? "Destino" : dn, bx0 + 14 * u, dos ? by0 + 7.6f * u : iy + 2 * u, (dos ? 4.5f : 5.5f) * u, 0xffffffff, true, Paint.Align.LEFT, bw - 17 * u);
+                    boolean pregunta = hayDest && ahora - quitarPide < 4000;
+                    texto(c, pregunta ? "¿Quitar la ruta?" : dn.isEmpty() ? "Destino" : dn, bx0 + 14 * u, dos ? by0 + 7.6f * u : iy + 2 * u, (dos ? 4.5f : 5.5f) * u, pregunta ? 0xffffd24d : 0xffffffff, true, Paint.Align.LEFT, bw - 17 * u);
+                    if (pregunta && dos) { texto(c, "Toca la X otra vez", bx0 + 14 * u, by0 + 14.2f * u, 3.7f * u, 0xffffd24d, false, Paint.Align.LEFT, bw - 17 * u); dos = false; }
                     if (dos) texto(c, sub, bx0 + 14 * u, by0 + 14.2f * u, 3.7f * u, 0xe0ffffff, false, Paint.Align.LEFT, bw - 17 * u);
                 }
             }
@@ -967,6 +979,7 @@ public class CubiCarro extends CarAppService {
         private String avisoVia = "";                                 // "Peaje en 400 m", "Cámara en 300 m"
         private android.graphics.Bitmap colDe; private int colCar; private float colR = -1, colG, colB;   // el color de la carátula, para el fondo
         private final RectF radR = new RectF();                      // la pastilla del radar que viene
+        long quitarPide;                                              // cuándo se tocó la X la primera vez (pide un segundo toque)
         // la tarjeta "Buscar" con los últimos destinos (como la de Google Maps): dónde quedó cada uno y lo que se tarda
         private final RectF[] recR = {new RectF(), new RectF()}; private final String[][] recO = new String[2][];
         private final java.util.Map<String, double[]> recT = new java.util.concurrent.ConcurrentHashMap<>();   // "lat,lon" -> {seg, metros, seg sin tráfico}
