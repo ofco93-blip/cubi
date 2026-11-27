@@ -1874,7 +1874,7 @@ public class CubiService extends Service {
     void navMapaOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("navMapa", si).apply(); mapaListo = false; gps(); }
     boolean navActiva() { return getSharedPreferences("cubi", 0).getBoolean("nav", true); }
     void navOn(boolean si) { getSharedPreferences("cubi", 0).edit().putBoolean("nav", si).apply(); if (!si) navUltima = ""; }
-    private volatile String navUltima = "", navDecision = "";
+    volatile String navUltima = ""; private volatile String navDecision = "";   // navUltima: también la mira Mapi
     volatile long navCuando;
     private long navMirada;
     // Maps y Waze solo avisan cuando cambia la indicación: parado, o en un tramo largo, pasan minutos sin aviso. Mientras
