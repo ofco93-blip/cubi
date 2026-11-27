@@ -219,6 +219,7 @@ final class CubiGoogle {
         if (lienzo == null || vista == null) return;
         lienzo.invalidate();
         lat = la; lon = lo;
+        if (mapa != null && !Double.isNaN(la) && (CubiRadares.version != radVer || Double.isNaN(radLa) || CubiRadares.metros(radLa, radLo, la, lo) > 8000)) ponerRadares(la, lo);
         if (!m.equals(mar)) { mar.set(m); if (mapa != null) try { mapa.setPadding(Math.round(m.left), Math.round(m.top), Math.round(m.right), Math.round(m.bottom)); } catch (Throwable t) { } }
         // al abrir (apenas hay GPS) y a los 10 s de haberlo movido con el dedo, el mapa vuelve al carro
         if (mapa != null && ((!ubicado && !Double.isNaN(la)) || (tocado != 0 && System.currentTimeMillis() - tocado > 10000))) centrar();
@@ -230,6 +231,38 @@ final class CubiGoogle {
             vista.setLayoutParams(lp);
         }
         if (vista.getVisibility() != View.VISIBLE) vista.setVisibility(View.VISIBLE);
+    }
+    // los radares (OpenStreetMap) como íconos rojos en el mapa de Google: los de 15 km a la redonda, otra vez al alejarse 8 km
+    private final java.util.List<com.google.android.gms.maps.model.Marker> marcas = new java.util.ArrayList<>();
+    private int radVer = -1; private double radLa = Double.NaN, radLo;
+    private static com.google.android.gms.maps.model.BitmapDescriptor iconoRadar;
+    private void ponerRadares(double la, double lo) {
+        radVer = CubiRadares.version; radLa = la; radLo = lo;
+        try {
+            for (com.google.android.gms.maps.model.Marker k : marcas) k.remove();
+            marcas.clear();
+            if (iconoRadar == null) iconoRadar = com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(dibujoRadar(56));
+            for (CubiRadares.Radar r : CubiRadares.lista()) {
+                if (marcas.size() >= 80 || CubiRadares.metros(la, lo, r.la, r.lo) > 15000) continue;
+                com.google.android.gms.maps.model.Marker k = mapa.addMarker(new com.google.android.gms.maps.model.MarkerOptions()
+                        .position(new com.google.android.gms.maps.model.LatLng(r.la, r.lo)).icon(iconoRadar).anchor(0.5f, 0.5f).zIndex(5));
+                if (k != null) marcas.add(k);
+            }
+        } catch (Throwable ignored) { }
+    }
+    // el ícono: un círculo rojo con borde blanco y una camarita blanca adentro
+    static android.graphics.Bitmap dibujoRadar(int n) {
+        android.graphics.Bitmap b = android.graphics.Bitmap.createBitmap(n, n, android.graphics.Bitmap.Config.ARGB_8888);
+        Canvas c = new Canvas(b); android.graphics.Paint p = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        float r = n / 2f;
+        p.setColor(0x55000000); c.drawCircle(r, r + n * 0.03f, r * 0.92f, p);
+        p.setColor(0xffffffff); c.drawCircle(r, r, r * 0.9f, p);
+        p.setColor(0xffd93025); c.drawCircle(r, r, r * 0.74f, p);
+        p.setColor(0xffffffff);
+        c.drawRoundRect(r - r * 0.42f, r - r * 0.24f, r + r * 0.42f, r + r * 0.3f, r * 0.1f, r * 0.1f, p);   // el cuerpo
+        c.drawRect(r - r * 0.16f, r - r * 0.36f, r + r * 0.12f, r - r * 0.2f, p);                          // la tapita de arriba
+        p.setColor(0xffd93025); c.drawCircle(r, r + r * 0.03f, r * 0.17f, p);                             // el lente
+        return b;
     }
     void mover(float dx, float dy) { tocado = System.currentTimeMillis(); if (mapa != null) try { mapa.moveCamera(CameraUpdateFactory.scrollBy(dx, dy)); } catch (Throwable t) { } }
     // el botón de centrar: salta a donde está el carro (por si Google aún no tiene su propia ubicación) y lo sigue
@@ -246,6 +279,6 @@ final class CubiGoogle {
         try { if (vista != null) { vista.onPause(); vista.onStop(); vista.onDestroy(); } } catch (Throwable t) { }
         try { if (pr != null) pr.dismiss(); } catch (Throwable t) { }
         try { if (vd != null) vd.release(); } catch (Throwable t) { }
-        vista = null; pr = null; vd = null; mapa = null; lienzo = null;
+        vista = null; pr = null; vd = null; mapa = null; lienzo = null; marcas.clear(); radVer = -1; radLa = Double.NaN;
     }
 }

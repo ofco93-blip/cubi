@@ -1024,6 +1024,7 @@ public class CubiService extends Service {
         CubiCarroDatos.cada(this, "MAPA", 0, () -> mapaEstado + " | ruta_puntos=" + (rutaLat == null ? 0 : rutaLat.length) + " trafico=" + (rutaTrafico != null));
         CubiCarroDatos.cada(this, "MAPI", 0, () -> CubiMapi.estado() + " | listo=" + CubiMapi.listo() + " nav=" + navActiva() + " carro=" + carroMapa()
                 + " | giro=" + navDir + " google_guia=" + CubiGoogle.guiando() + " aviso_maps=" + com.cubi.robot.Oyente.rutaViva());
+        if (carroMapa() || CubiMapi.listo()) CubiRadares.cerca(this, l.getLatitude(), l.getLongitude());   // los radares de alrededor (Overpass)
         if (!(navMapa() || carroMapa() || CubiMapi.listo()) || (!navActiva() && !CubiMapi.listo())) return;
         // el destino guardado se vuelve a buscar al arrancar (una vez por minuto si falla)
         if (Double.isNaN(destLat) && !destinoTexto().isEmpty() && !destBuscando && ahora - destIntento > 60000) destino(destinoTexto());

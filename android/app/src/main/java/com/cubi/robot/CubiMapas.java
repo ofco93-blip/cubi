@@ -137,6 +137,11 @@ final class CubiMapas {
                         }
                     } catch (Exception e) { faltan.add("una carretera"); }
                 }
+                for (int i = 0; i < zs.length(); i++) {                // los radares de cada zona, para tenerlos sin señal
+                    JSONObject z = zs.getJSONObject(i); estado = "Bajando los radares… " + (i + 1) + " de " + zs.length();
+                    if (entera(z)) CubiRadares.zona(c, z.getDouble("s"), z.getDouble("w"), z.getDouble("no"), z.getDouble("e"));
+                    else { double la = z.getDouble("la"), lo = z.getDouble("lo"), dl = 12000 / 111320.0, dk = dl / Math.cos(Math.toRadians(la)); CubiRadares.zona(c, la - dl, lo - dk, la + dl, lo + dk); }
+                }
                 final String plantilla = new JSONObject(texto("https://tiles.openfreemap.org/planet")).getJSONArray("tiles").getString(0);
                 final File d = dir(c); final List<Long> pendientes = new ArrayList<>();
                 for (long t : cuadros) if (!cuadro(d, (int) (t >> 20), (int) (t & 0xFFFFF)).exists()) pendientes.add(t);

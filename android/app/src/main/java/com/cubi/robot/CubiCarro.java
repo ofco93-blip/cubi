@@ -291,6 +291,8 @@ public class CubiCarro extends CarAppService {
             if (lienzo.tocaCentrar(x, y)) { if (goo != null) goo.centrar(); return; }                    // el botón de centrar: el mapa vuelve al carro
             if (lienzo.tocaCancelar(x, y)) { CubiCarroDatos.registrar(getCarContext(), "DESTINO_QUITADO la X de la pantalla del carro"); if (CubiService.yo != null) CubiService.yo.destino(""); return; }   // la X: quita el destino y su ruta
             if (lienzo.tocaDestino(x, y)) { getScreenManager().push(new Buscar(getCarContext())); return; }   // el botón Destino del mapa
+            String[] rec = lienzo.tocaReciente(x, y);                // un reciente de la tarjeta: se va de una
+            if (rec != null) { irA(getCarContext(), rec[0] + (rec[1].isEmpty() ? "" : ", " + rec[1]), rec[2]); return; }
             int k = lienzo.boton(x, y);
             if (k != 2 && CubiService.yo != null) CubiService.yo.musicaTecla(k);
         }
@@ -514,7 +516,7 @@ public class CubiCarro extends CarAppService {
             }
             // El botón Destino, siempre a la vista arriba a la derecha del mapa (si el carro avisa los toques): abre el
             // buscador, donde se escribe o se dicta con el micrófono del teclado del carro.
-            destR.setEmpty(); cancR.setEmpty(); destIzq = x1 - 31 * u;
+            destR.setEmpty(); cancR.setEmpty(); destIzq = x1 - 31 * u; recR[0].setEmpty(); recR[1].setEmpty(); recO[0] = recO[1] = null;
             float pieDest = y0 + 14 * u;                                 // hasta dónde llega lo del destino: debajo van la brújula y el de centrar
             if (sinCaja && conMapa && s != null) {
                 String dn = s.destinoNombre(), f = falta(s, nav), av = s.rutaAviso(), sub;
@@ -526,7 +528,44 @@ public class CubiCarro extends CarAppService {
                 }
                 if (google) { String gf = CubiGoogle.falta(); if (!gf.isEmpty()) sub = gf; }   // con Google: lo que falta lo dice él
                 boolean dos = !sub.isEmpty(), hayDest = !s.destinoTexto().isEmpty();
-                if (botones || dos || !dn.isEmpty()) {
+                java.util.List<String[]> rec = new java.util.ArrayList<>();
+                if (botones && !hayDest && avisoVia.isEmpty() && (s.resumen.isEmpty() || ahora - s.resumenCuando >= 45000))
+                    for (String[] o : Buscar.recientes(s)) if (rec.size() < 2 && o[2].contains(",")) rec.add(o);
+                if (!rec.isEmpty()) {
+                    // sin destino: "Buscar" y debajo los dos últimos destinos con lo que se tarda (tocar uno arranca el viaje)
+                    tiempos(s, rec);
+                    float bw = 88 * u, ph = 12 * u, rh = 15 * u, bh = 2 * u + ph + 1.5f * u + rec.size() * rh + u, bx1 = x1 - 31 * u, bx0 = bx1 - bw, by0 = y0 + 3 * u, rr = 7 * u;
+                    gr.set(bx0, by0, bx1, by0 + bh); destIzq = bx0; pieDest = by0 + bh;
+                    p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(bx0, by0 + 0.8f * u, bx1, by0 + bh + 0.8f * u, rr, rr, p);
+                    p.setColor(0x8c0a1430); c.drawRoundRect(gr, rr, rr, p);
+                    p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, 0.35f * u)); p.setColor(0x80ffffff); c.drawRoundRect(gr, rr, rr, p);
+                    destR.set(bx0 + 2 * u, by0 + 2 * u, bx1 - 2 * u, by0 + 2 * u + ph);   // la pastilla "Buscar": abre el buscador
+                    p.setStyle(Paint.Style.FILL); p.setColor(0x33ffffff); c.drawRoundRect(destR, ph / 2, ph / 2, p);
+                    float lr = 2.3f * u, lx = destR.left + 7 * u, ly = destR.centerY() - 0.6f * u;
+                    p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeWidth(0.9f * u); p.setColor(0xffffffff);
+                    c.drawCircle(lx, ly, lr, p); c.drawLine(lx + lr * 0.75f, ly + lr * 0.75f, lx + lr * 1.7f, ly + lr * 1.7f, p);
+                    p.setStyle(Paint.Style.FILL);
+                    texto(c, "Buscar", destR.centerX(), destR.centerY() + 2 * u, 5.5f * u, 0xffffffff, true, Paint.Align.CENTER, bw - 20 * u);
+                    for (int i = 0; i < rec.size(); i++) {
+                        String[] o = rec.get(i); float ry = destR.bottom + 1.5f * u + i * rh;
+                        recR[i].set(bx0, ry, bx1, ry + rh); recO[i] = o;
+                        if (i > 0) { p.setColor(0x33ffffff); c.drawRect(bx0 + 6 * u, ry, bx1 - 6 * u, ry + Math.max(1, 0.25f * u), p); }
+                        float kx = bx0 + 9 * u, ky = ry + rh / 2, kr = 3.6f * u;   // el relojito de "reciente"
+                        p.setColor(0x33ffffff); c.drawCircle(kx, ky, kr, p);
+                        p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(0.6f * u); p.setColor(0xffffffff); c.drawCircle(kx, ky, kr * 0.58f, p);
+                        c.drawLine(kx, ky, kx, ky - kr * 0.36f, p); c.drawLine(kx, ky, kx + kr * 0.3f, ky + kr * 0.12f, p); p.setStyle(Paint.Style.FILL);
+                        float tx = bx0 + 16 * u, cabeR = bx1 - 3 * u - tx;
+                        texto(c, o[0], tx, ry + 6.6f * u, 4.8f * u, 0xffffffff, true, Paint.Align.LEFT, cabeR);
+                        double[] t = recT.get(o[2]); String mn = "", km = "";
+                        if (t != null) { int m = (int) Math.max(1, Math.round(t[0] / 60)); mn = m < 60 ? m + " min" : m / 60 + " h " + m % 60 + " min"; km = CubiGoogleApis.km(t[1]); }
+                        else if (!Double.isNaN(s.posLat)) { String[] pt = o[2].split(","); km = "≈ " + CubiGoogleApis.km(CubiRadares.metros(s.posLat, s.posLon, Double.parseDouble(pt[0].trim()), Double.parseDouble(pt[1].trim()))); }
+                        boolean lento = t != null && t[0] > t[2] * 1.25 + 60;   // va más lento de lo normal: los minutos en amarillo, como Google
+                        tp.setTypeface(Typeface.DEFAULT); tp.setTextSize(4 * u); float wm = mn.isEmpty() ? 0 : tp.measureText(mn);
+                        if (!mn.isEmpty()) texto(c, mn, tx, ry + 12.2f * u, 4 * u, lento ? 0xffffd24d : 0xe6ffffff, false, Paint.Align.LEFT, cabeR);
+                        if (!km.isEmpty()) texto(c, (mn.isEmpty() ? "" : " · ") + km, tx + wm, ry + 12.2f * u, 4 * u, 0xe6ffffff, false, Paint.Align.LEFT, cabeR - wm);
+                    }
+                }
+                else if (botones || dos || !dn.isEmpty()) {
                     float bh = (dos ? 18 : 11) * u, bw = (dos || !dn.isEmpty() ? 73 : 42) * u, by0 = y0 + 3 * u, bx1 = x1 - 31 * u, bx0 = bx1 - bw, rr = Math.min(6 * u, bh / 2);   // a la derecha queda libre la esquina donde aparece por ratos "Opciones"
                     gr.set(bx0, by0, bx1, by0 + bh); destIzq = bx0;
                     p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(bx0, by0 + 0.8f * u, bx1, by0 + bh + 0.8f * u, rr, rr, p);
@@ -569,6 +608,26 @@ public class CubiCarro extends CarAppService {
                 p.setStyle(Paint.Style.STROKE); p.setStrokeCap(Paint.Cap.ROUND); p.setStrokeWidth(1.1f * u); p.setColor(0xffffffff);
                 c.drawLine(ex - g, ey - g, ex + g, ey + g, p); c.drawLine(ex - g, ey + g, ex + g, ey - g, p);
                 p.setStyle(Paint.Style.FILL);
+            }
+            // el radar que viene (OpenStreetMap): una pastilla roja arriba al centro desde 500 m; a 150 m late
+            if (conMapa && s != null && !Double.isNaN(s.posLat)) {
+                double[] dr = new double[1];
+                CubiRadares.Radar rd = CubiRadares.adelante(s.posLat, s.posLon, s.kmh >= 8 ? s.mapaRumbo : Double.NaN, dr);
+                if (rd != null && dr[0] < 500) {
+                    String t = "Radar a " + Math.max(10, Math.round(dr[0] / 10) * 10) + " m" + (rd.max > 0 ? "  ·  " + rd.max + " km/h" : "");
+                    tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(5.5f * u);
+                    float th = 12 * u, tw = tp.measureText(t) + 22 * u, cxr = Math.min((x0 + x1) / 2, destIzq - 3 * u - tw / 2), ry0 = y0 + 3 * u;
+                    float late = dr[0] < 150 ? 0.5f + 0.5f * (float) Math.sin(ahora / 140.0) : 0;
+                    radR.set(cxr - tw / 2, ry0, cxr + tw / 2, ry0 + th);
+                    if (late > 0) { p.setStyle(Paint.Style.FILL); p.setColor(0xffd93025); p.setAlpha((int) (90 * late)); c.drawRoundRect(radR.left - 2 * u, radR.top - 2 * u, radR.right + 2 * u, radR.bottom + 2 * u, th, th, p); p.setAlpha(255); }
+                    p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(radR.left, radR.top + 0.8f * u, radR.right, radR.bottom + 0.8f * u, th / 2, th / 2, p);
+                    p.setColor(0xf0d93025); c.drawRoundRect(radR, th / 2, th / 2, p);
+                    p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, 0.35f * u)); p.setColor(0xccffffff); c.drawRoundRect(radR, th / 2, th / 2, p); p.setStyle(Paint.Style.FILL);
+                    float kx = radR.left + 8 * u, ky = radR.centerY(), k = 2.4f * u;   // la camarita
+                    p.setColor(0xffffffff); c.drawRoundRect(kx - k, ky - k * 0.55f, kx + k, ky + k * 0.75f, k * 0.25f, k * 0.25f, p); c.drawRect(kx - k * 0.4f, ky - k * 0.85f, kx + k * 0.3f, ky - k * 0.45f, p);
+                    p.setColor(0xffd93025); c.drawCircle(kx, ky + k * 0.08f, k * 0.38f, p);
+                    texto(c, t, radR.left + 13 * u, ky + 2 * u, 5.5f * u, 0xffffffff, true, Paint.Align.LEFT, tw - 15 * u);
+                }
             }
             centR.setEmpty(); vozR.setEmpty();
             if ((sinCaja || google) && conMapa) {                        // la brújula (el mapa gira con el carro: la punta roja es el norte)
@@ -904,6 +963,27 @@ public class CubiCarro extends CarAppService {
         boolean tocaListas(float x, float y) { return listaR.contains(x, y); }
         private String avisoVia = "";                                 // "Peaje en 400 m", "Cámara en 300 m"
         private android.graphics.Bitmap colDe; private int colCar; private float colR = -1, colG, colB;   // el color de la carátula, para el fondo
+        private final RectF radR = new RectF();                      // la pastilla del radar que viene
+        // la tarjeta "Buscar" con los últimos destinos (como la de Google Maps): dónde quedó cada uno y lo que se tarda
+        private final RectF[] recR = {new RectF(), new RectF()}; private final String[][] recO = new String[2][];
+        private final java.util.Map<String, double[]> recT = new java.util.concurrent.ConcurrentHashMap<>();   // "lat,lon" -> {seg, metros, seg sin tráfico}
+        private double recLa = Double.NaN, recLo; private long recCuando; private volatile boolean recPidiendo;
+        String[] tocaReciente(float x, float y) { for (int i = 0; i < 2; i++) if (recO[i] != null && recR[i].contains(x, y)) return recO[i]; return null; }
+        // lo que se tarda a cada reciente, con Google y el tráfico de ahora: otra vez al moverse 500 m o a los 10 min
+        private void tiempos(final CubiService s, final java.util.List<String[]> rec) {
+            if (recPidiendo || !CubiGoogleApis.hay(s) || Double.isNaN(s.posLat)) return;
+            long ahora = System.currentTimeMillis(); boolean faltan = false;
+            for (String[] o : rec) if (!recT.containsKey(o[2])) faltan = true;
+            if (!faltan && !Double.isNaN(recLa) && CubiRadares.metros(recLa, recLo, s.posLat, s.posLon) < 500 && ahora - recCuando < 600000) return;
+            if (faltan && ahora - recCuando < 30000) return;                 // si Google no contestó, no se insiste cada cuadro
+            recPidiendo = true; recLa = s.posLat; recLo = s.posLon; recCuando = ahora;
+            final double la0 = s.posLat, lo0 = s.posLon;
+            new Thread(() -> {
+                try { for (String[] o : rec) { String[] pt = o[2].split(","); double[] t = CubiGoogleApis.tiempo(s, la0, lo0, Double.parseDouble(pt[0].trim()), Double.parseDouble(pt[1].trim())); if (t != null) recT.put(o[2], t); } }
+                catch (Throwable ignored) { }
+                finally { recPidiendo = false; }
+            }).start();
+        }
         private final RectF cancR = new RectF();                      // dónde quedó la X de cancelar el destino
         boolean tocaCancelar(float x, float y) { return cancR.contains(x, y); }
         private final RectF letraR = new RectF(); private float corte;   // la tarjeta de la letra sobre el mapa, y dónde empieza

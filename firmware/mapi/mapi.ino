@@ -575,8 +575,11 @@ static void datosAbajo(bool conKm) {
     textoArco(b, 200, 85, 19, Col{205, 218, 255}, true); enAng(85 + angTexto(b, 19, 200) / 2 + 6, 200, x, y); icoMonte(x, y, 10);
   }
 }
+uint32_t tFondo, tMapa, tVela;   // cuánto tarda cada parte del cuadro (se ve mandando t por el cable)
 static void pintar() {
+  uint32_t t0 = millis();
   fondo();
+  tFondo = millis() - t0;
   // el giro se queda hasta que el celular diga que ya no hay ruta (parado, Maps no manda avisos nuevos); sin celular, 3 min
   const bool nav = giroDir[0] && tAhora - ultimoMsg < 180;
   if (otaTotal) {                                            // actualizándose por Bluetooth
@@ -586,8 +589,8 @@ static void pintar() {
   }
   const float cyCarro = 292;
   rutaVisible = nav;
-  mapa(cyCarro);
-  vineta();
+  t0 = millis(); mapa(cyCarro); tMapa = millis() - t0;
+  t0 = millis(); vineta(); tVela = millis() - t0;
   carrito(C, cyCarro);
   char b[40];
   if (nav) {
@@ -669,5 +672,6 @@ void loop() {
   // en rayas): se volvió a uno tras otro. Reintentarlo solo con Mapi en el cable para ver qué dice.
   panel->draw16bitRGBBitmap(0, 0, girar(), D, D);
   if (Serial.available() && Serial.read() == 't')
-    Serial.printf("cuadro %lu ms (dibujo %lu, pantalla %lu)\n", (unsigned long)(millis() - ahora), (unsigned long)(pintado - ahora), (unsigned long)(millis() - pintado));
+    Serial.printf("cuadro %lu ms (dibujo %lu: fondo %lu, calles %lu, velo %lu, letreros %lu; pantalla %lu, giro %d)\n", (unsigned long)(millis() - ahora), (unsigned long)(pintado - ahora),
+                  (unsigned long)tFondo, (unsigned long)tMapa, (unsigned long)tVela, (unsigned long)(pintado - ahora - tFondo - tMapa - tVela), (unsigned long)(millis() - pintado), (int)giroPantalla);
 }

@@ -66,7 +66,7 @@ final class CubiGoogleApis {
         } catch (Throwable t) { ultimoError = t.toString(); return null; }
     }
     static volatile String ultimoError = "";
-    private static String km(double m) { return m < 0 ? "" : m < 10000 ? String.format(Locale.US, "%.1f km", m / 1000).replace('.', ',') : Math.round(m / 1000) + " km"; }
+    static String km(double m) { return m < 0 ? "" : m < 10000 ? String.format(Locale.US, "%.1f km", m / 1000).replace('.', ',') : Math.round(m / 1000) + " km"; }
 
     // ---------- sugerencias mientras se escribe: {nombre, dónde queda, "pid:ID", "3,2 km"} ----------
     static List<String[]> sugerencias(Context c, String q, double lat, double lon, String sesion) {
@@ -163,6 +163,22 @@ final class CubiGoogleApis {
             }
             x.trafico = t.toArray(new int[0][]);
             return x;
+        } catch (Throwable t) { return null; }
+    }
+    // cuánto se tarda en carro a un sitio con el tráfico de ahora: {segundos, metros, segundos sin tráfico}. Para la
+    // tarjeta de recientes del carro (solo duración y distancia: es la consulta más barata de rutas).
+    static double[] tiempo(Context c, double la0, double lo0, double la1, double lo1) {
+        try {
+            JSONObject b = new JSONObject()
+                    .put("origin", new JSONObject().put("location", new JSONObject().put("latLng", new JSONObject().put("latitude", la0).put("longitude", lo0))))
+                    .put("destination", new JSONObject().put("location", new JSONObject().put("latLng", new JSONObject().put("latitude", la1).put("longitude", lo1))))
+                    .put("travelMode", "DRIVE").put("routingPreference", "TRAFFIC_AWARE");
+            JSONObject r = pedir(c, "https://routes.googleapis.com/directions/v2:computeRoutes", b.toString(), "routes.distanceMeters,routes.duration,routes.staticDuration");
+            JSONArray rs = r == null ? null : r.optJSONArray("routes");
+            if (rs == null || rs.length() == 0) return null;
+            JSONObject ro = rs.getJSONObject(0);
+            double seg = Double.parseDouble(ro.optString("duration", "0s").replace("s", "")), est = Double.parseDouble(ro.optString("staticDuration", ro.optString("duration", "0s")).replace("s", ""));
+            return new double[]{seg, ro.optDouble("distanceMeters", 0), est};
         } catch (Throwable t) { return null; }
     }
     // la línea comprimida de Google (formato "encoded polyline")
