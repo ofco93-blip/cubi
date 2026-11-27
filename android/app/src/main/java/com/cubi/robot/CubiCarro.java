@@ -557,7 +557,7 @@ public class CubiCarro extends CarAppService {
                         float tx = bx0 + 16 * u, cabeR = bx1 - 3 * u - tx;
                         texto(c, o[0], tx, ry + 6.6f * u, 4.8f * u, 0xffffffff, true, Paint.Align.LEFT, cabeR);
                         double[] t = recT.get(o[2]); String mn = "", km = "";
-                        if (t != null) { int m = (int) Math.max(1, Math.round(t[0] / 60)); mn = m < 60 ? m + " min" : m / 60 + " h " + m % 60 + " min"; km = CubiGoogleApis.km(t[1]); }
+                        if (t != null) { int mm = (int) Math.max(1, Math.round(t[0] / 60)); mn = mm < 60 ? mm + " min" : mm / 60 + " h " + mm % 60 + " min"; km = CubiGoogleApis.km(t[1]); }
                         else if (!Double.isNaN(s.posLat)) { String[] pt = o[2].split(","); km = "≈ " + CubiGoogleApis.km(CubiRadares.metros(s.posLat, s.posLon, Double.parseDouble(pt[0].trim()), Double.parseDouble(pt[1].trim()))); }
                         boolean lento = t != null && t[0] > t[2] * 1.25 + 60;   // va más lento de lo normal: los minutos en amarillo, como Google
                         tp.setTypeface(Typeface.DEFAULT); tp.setTextSize(4 * u); float wm = mn.isEmpty() ? 0 : tp.measureText(mn);
