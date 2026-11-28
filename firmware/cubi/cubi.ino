@@ -764,18 +764,21 @@ uint16_t *memorias[2];
 struct Envio { uint16_t *mem; dib::Rect r; };
 QueueHandle_t colaPantalla = nullptr;
 SemaphoreHandle_t pantallaLibre = nullptr;
+volatile uint32_t envioUs = 0, envioMax = 0, envioPx = 0;   // cuánto tarda mandar un cuadro al panel (sale en el "t" del cable)
 void tareaPantalla(void *) {
   Envio e;
   for (;;) {
     if (xQueueReceive(colaPantalla, &e, portMAX_DELAY) != pdTRUE) continue;
     if (placa175) { e.r.y0 &= ~1; e.r.y1 = min((e.r.y1 + 1) & ~1, dib::RH); }   // el CO5300 de la redonda pide filas pares
     int w = e.r.x1 - e.r.x0, h = e.r.y1 - e.r.y0;
+    const uint32_t t0 = micros();
     if (w > 0 && h > 0) {
       if (w == dib::RW) panel->draw16bitRGBBitmap(panX, panY + e.r.y0, e.mem + (uint32_t)e.r.y0 * dib::RW, dib::RW, h);
       else {
         for (int f = 0; f < h; f++) memcpy(tmpPanel + (uint32_t)f * w, e.mem + (uint32_t)(e.r.y0 + f) * dib::RW + e.r.x0, w * 2);
         panel->draw16bitRGBBitmap(panX + e.r.x0, panY + e.r.y0, tmpPanel, w, h);
       }
+      envioUs = micros() - t0; envioPx = w * h; if (envioUs > envioMax) envioMax = envioUs;
     }
     xSemaphoreGive(pantallaLibre);
   }
@@ -1434,7 +1437,8 @@ void serialDebug() {
     } else if (ch >= '0' && ch <= '8') { emoBase = NEUTRAL; demoHasta = 0; setEmo(Emo(ch - '0'), 8000); emoForzada = true; }
     else if (ch == 's' || ch == 'm') { emoHasta = 0; demo(ch == 's'); }
     else if (ch == 't') Serial.printf("cuadro %lu us (animar %lu, dibujar %lu, flush %lu)  ble=%d\n", (unsigned long)frameUs,
-      (unsigned long)tAnim, (unsigned long)tDib, (unsigned long)tFlush, (int)bleOn);
+      (unsigned long)tAnim, (unsigned long)tDib, (unsigned long)tFlush, (int)bleOn),
+      Serial.printf("  envio %lu us (%lu px, max %lu)\n", (unsigned long)envioUs, (unsigned long)envioPx, (unsigned long)envioMax), envioMax = 0;
   }
 }
 
