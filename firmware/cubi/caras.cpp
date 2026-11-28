@@ -1669,7 +1669,7 @@ static Rostro deReac(float u, const Entradas &e, float &vel) {
         float ancho = EW * (0.42f + 0.12f * tiembla), alto = EH * (1.32f - 0.14f * tiembla);
         float resbala = 26 * tramo(u, 1.1f, 2.4f);                  // se escurre un poquito
         Ojo &a = lado > 0 ? r.R : r.L, &b = lado > 0 ? r.L : r.R;   // a = la que choca primero
-        a.w = ancho; a.h = alto; a.x = lado > 0 ? W - ancho / 2 - 3 : ancho / 2 + 3; a.y = EY + resbala;
+        a.w = ancho; a.h = alto; a.x = lado > 0 ? X1 - ancho / 2 - 3 - (X1 - W) * 2.5f : X0 + ancho / 2 + 3 + (X1 - W) * 2.5f;   // en la redonda, un poco más adentro (la curva corta la punta) a.y = EY + resbala;
         float ancho2 = EW * (0.55f + 0.1f * tiembla);
         b.w = ancho2; b.h = EH * (1.2f - 0.1f * tiembla); b.x = a.x - lado * (ancho / 2 + ancho2 / 2 + 6); b.y = EY + resbala * 0.8f;
         r.bx = b.x - lado * 10; r.by = MY + resbala;
@@ -2986,32 +2986,34 @@ static void cuadroGato(float t, const Entradas &e, float u) {
   }
   const long clave = tm * 4000L + (musica ? 2000 + (suma & 1023) : hh < 0 ? 1999 : hh * 60 + mm);
   if (clave != gClave || !gFondo) {
+    // en la redonda la parte de arriba es angosta: lo de arriba baja un poco y se achica para caber en la curva
+    const bool red = dib::radioPantalla() > 0; const float AW = red ? W * 0.74f : W, DY = red ? 38 : 0;
     figura(X0, Y0, X1, Y1, solido(FONDO[tm]), [](float, float) { return -1.f; });
     if (musica) {
       if (letraTxt[0]) {                                           // con letra: el nombre arriba, chico, y el renglón que va, en grande (en dos pisos si es largo)
-        texto(tit, CX, 22, anchoTexto(tit, 30) > W * 0.9f ? 22 : 30, TENUE[tm]);
+        texto(tit, CX, 22 + DY, anchoTexto(tit, 30) > AW * 0.9f ? 22 : 30, TENUE[tm]);
         char l1[72], l2[72] = ""; int m = 0;
         for (const char *c = letraTxt; *c && m < 71; c++) l1[m++] = (*c >= 'a' && *c <= 'z') ? *c - 32 : *c;
         l1[m] = 0;
-        if (anchoTexto(l1, 44) > W * 0.94f) {                      // se parte en el espacio más cercano a la mitad
+        if (anchoTexto(l1, 44) > AW * 0.94f) {                      // se parte en el espacio más cercano a la mitad
           int corte = -1;
           for (int i = 0; i < m; i++) if (l1[i] == ' ' && (corte < 0 || abs(i - m / 2) < abs(corte - m / 2))) corte = i;
           if (corte > 0) { snprintf(l2, sizeof l2, "%s", l1 + corte + 1); l1[corte] = 0; }
         }
-        auto renglon = [&](const char *r, float y) { float tam = 56; while (tam > 22 && anchoTexto(r, tam) > W * 0.94f) tam -= 2; texto(r, CX, y, tam, LETRA[tm]); };
+        auto renglon = [&](const char *r, float y) { float tam = 56; while (tam > 22 && anchoTexto(r, tam) > AW * 0.94f) tam -= 2; texto(r, CX, y + DY, tam, LETRA[tm]); };
         if (l2[0]) { renglon(l1, 68); renglon(l2, 122); } else renglon(l1, 92);
       } else {
       float tam = 84;
-      while (tam > 30 && anchoTexto(tit, tam) > W * 0.92f) tam -= 4;
-      texto(tit, CX, 62, tam, LETRA[tm]); texto(cancionArt, CX, 62 + tam * 0.6f + 12, 30, TENUE[tm]);
+      while (tam > 30 && anchoTexto(tit, tam) > AW * 0.92f) tam -= 4;
+      texto(tit, CX, 62 + DY, tam, LETRA[tm]); texto(cancionArt, CX, 62 + DY + tam * 0.6f + 12, 30, TENUE[tm]);
       }
     } else {
-      texto("CUBI", 150, 296, 230, TENUE[tm]);
+      texto("GIGI", 150, 296, 230, TENUE[tm]);
       if (hh >= 0) {                                                 // la hora, a todo lo ancho; la gata va por delante
         char b[8]; snprintf(b, sizeof b, "%d:%02d", hh % 12 ? hh % 12 : 12, mm);
         float tam = 210;
-        while (anchoTexto(b, tam) > W * 0.96f) tam -= 4;
-        texto(b, CX, 108, tam, LETRA[tm]);
+        while (anchoTexto(b, tam) > AW * 0.96f) tam -= 4;
+        texto(b, CX, 108 + DY * 0.6f, tam, LETRA[tm]);
       }
     }
     if (gFondo) { memcpy(gFondo, dib::fb, dib::RW * dib::RH * 2); gClave = clave; }
@@ -3049,7 +3051,7 @@ void cuadro(float t, float dt, const Entradas &e0) {
   dib::blanco = elPaquete == TRAZO || elPaquete == BOLITA;   // Lino y Mochi: todo en un solo color, el de "Color de los ojos" (blanco de fábrica)
   // las caras nuevas van más contenidas: con el tamaño de fábrica nada se sale de la pantalla
   const bool nueva = elPaquete >= CARICATURA;
-  dib::zoom = nueva ? elTamano * 0.75f : elTamano; dib::zx = CX; dib::zy = nueva ? 176 : 250;   // de fábrica quedan un poco más chicas que la pantalla   // crece hacia arriba y a los lados; abajo casi no se corta
+  dib::zoom = (nueva ? elTamano * 0.75f : elTamano) * (dib::radioPantalla() > 0 ? 1.18f : 1);   // en la redonda, más grande: le sobra pantalla dib::zx = CX; dib::zy = nueva ? 176 : 250;   // de fábrica quedan un poco más chicas que la pantalla   // crece hacia arriba y a los lados; abajo casi no se corta
   // modo mapa (el celular va mandando la posición): la pantalla de navegación se queda fija; ni la música ni el
   // tiempo la quitan, solo otra reacción o que el celular deje de mandar
   if (esMaps(laReac) && t - mapaT < 8 && t - reacDesde - reacExtra > 2.5f) {
