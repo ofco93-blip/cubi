@@ -3051,7 +3051,7 @@ void cuadro(float t, float dt, const Entradas &e0) {
   dib::blanco = elPaquete == TRAZO || elPaquete == BOLITA;   // Lino y Mochi: todo en un solo color, el de "Color de los ojos" (blanco de fábrica)
   // las caras nuevas van más contenidas: con el tamaño de fábrica nada se sale de la pantalla
   const bool nueva = elPaquete >= CARICATURA;
-  dib::zoom = (nueva ? elTamano * 0.75f : elTamano) * (dib::radioPantalla() > 0 ? 1.18f : 1);   // en la redonda, más grande: le sobra pantalla dib::zx = CX; dib::zy = nueva ? 176 : 250;   // de fábrica quedan un poco más chicas que la pantalla   // crece hacia arriba y a los lados; abajo casi no se corta
+  dib::zoom = (nueva ? elTamano * 0.75f : elTamano) * (dib::radioPantalla() > 0 ? 1.0f : 1);   // PRUEBA de velocidad dib::zx = CX; dib::zy = nueva ? 176 : 250;   // de fábrica quedan un poco más chicas que la pantalla   // crece hacia arriba y a los lados; abajo casi no se corta
   // modo mapa (el celular va mandando la posición): la pantalla de navegación se queda fija; ni la música ni el
   // tiempo la quitan, solo otra reacción o que el celular deje de mandar
   if (esMaps(laReac) && t - mapaT < 8 && t - reacDesde - reacExtra > 2.5f) {
