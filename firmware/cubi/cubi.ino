@@ -528,7 +528,7 @@ void evento(const String &t) {
 
 float lx = 0, ly = 0, vlx = 0, vly = 0, tlx = 0, tly = 0, bounce = 0, escala = 1, pulso = 0, eyeCy = H / 2, sqx = 1, sqy = 1;
 C3 fondoC = { 0, 0, 0 };  // color detrás de los ojos (para suavizar sus bordes)
-uint32_t frameUs = 0, tAnim = 0, tDib = 0, tFlush = 0;
+uint32_t frameUs = 0, tAnim = 0, tDib = 0, tFlush = 0, tBorra = 0, tCara = 0;   // tFlush: lo que espera a que se mande el cuadro anterior
 float bocaV = 0, anchoV = 0.5f, hablaV = 0, fondo = 0, giro = 0, tono = 0, emocion = 0;
 uint32_t nextSacc = 0, nextBlink = 0, blinkT0 = 0, lastMotion = 0;
 uint32_t demoT0 = 0, demoHasta = 0, demoBeat = 0; bool demoCanto = false;
@@ -914,16 +914,21 @@ void pintar(uint32_t now) {
   if (modo == RING && libreR) caras::reaccion(caras::LLAMADA);
 
   dib::fb = memorias[dib::cual]; dib::giro = rotacion == 3;
+  uint32_t m0 = micros();
   dib::empezar();
+  tBorra = micros() - m0; m0 = micros();
   if (panelAbierto && now > panelHasta) panelAbierto = false;
   if (otaTotal || reinicioEn) caras::progreso(t, otaTotal ? float(otaHecho) / otaTotal : 1);
   else if (panelAbierto) dibujarPanel(now);
   else caras::cuadro(t, dt, en);
+  tCara = micros() - m0;
   static bool saludo = true;  // al prender saluda (después del primer cuadro: así arranca con el reloj de las caras al día)
   if (saludo) { saludo = false; reac(caras::SALUDO); }
   // solo se manda al panel lo que cambió (este cuadro y el anterior)
   Envio env{ memorias[dib::cual], dib::terminar() };   // (varios pedazos)
+  m0 = micros();
   xSemaphoreTake(pantallaLibre, portMAX_DELAY);   // espera a que termine de mandarse el cuadro anterior
+  tFlush = micros() - m0;
   xQueueSend(colaPantalla, &env, portMAX_DELAY);
   dib::cual ^= 1;
 }
@@ -1442,7 +1447,7 @@ void serialDebug() {
     else if (ch == 's' || ch == 'm') { emoHasta = 0; demo(ch == 's'); }
     else if (ch == 't') Serial.printf("cuadro %lu us (animar %lu, dibujar %lu, flush %lu)  ble=%d\n", (unsigned long)frameUs,
       (unsigned long)tAnim, (unsigned long)tDib, (unsigned long)tFlush, (int)bleOn),
-      Serial.printf("  envio %lu us (%lu px, max %lu)\n", (unsigned long)envioUs, (unsigned long)envioPx, (unsigned long)envioMax), envioMax = 0;
+      Serial.printf("  envio %lu us (%lu px, max %lu)\n", (unsigned long)envioUs, (unsigned long)envioPx, (unsigned long)envioMax), Serial.printf("  borra %lu  cara %lu\n", (unsigned long)tBorra, (unsigned long)tCara), envioMax = 0;
   }
 }
 
@@ -1557,7 +1562,6 @@ void loop() {
     while (now - tSim >= 33) { tSim += 33; animar(tSim); }
     tAnim = micros() - t0;
     pintar(now); tDib = micros() - t0 - tAnim;  // dibuja y manda solo lo que cambió
-    tFlush = 0;
     frameUs = micros() - t0;
   }
 }
