@@ -860,7 +860,7 @@ static void tactilTarea(void *) {
     if (np) {
       float px = TACTIL_ESPEJO ? D - xs[0] : xs[0], py = TACTIL_ESPEJO ? D - ys[0] : ys[0];
       if (fabsf(giroPantalla) >= 0.5f) { const float a = -giroPantalla * PI / 180, dx = px - C, dy = py - C; px = C + dx * cosf(a) - dy * sinf(a); py = C + dx * sinf(a) + dy * cosf(a); }
-      if (!tocando) { tocando = true; tx0 = px; ty0 = py; inicio = millis(); bisel = false;   // sin bisel: Mapi no controla la música }
+      if (!tocando) { tocando = true; tx0 = px; ty0 = py; inicio = millis(); bisel = false; }   // sin bisel: Mapi no controla la música
       txN = px; tyN = py;
       if (bisel) biselF = fraccionDe(px, py);
     } else if (tocando) {
