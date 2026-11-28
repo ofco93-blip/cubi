@@ -12,6 +12,7 @@ using namespace caras;
 // "vista medir": cuánto tarda cada baile por cuadro (con voz y sin voz). En el ESP32 es ~60 veces más lento.
 static int medir() {
   static uint16_t mem[dib::MAXD * dib::MAXD];
+  if (getenv("REDONDA")) dib::redonda();
   dib::fb = mem; dib::giro = 0;
   iniciar(7);
   for (int b : {REPOSO, HABLA}) {
