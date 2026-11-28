@@ -798,17 +798,17 @@ static void pintarCuadrada() {
   mapaCx = L + (FW - L) * 0.5f; const float cyCarro = FH * 0.72f;
   t0 = millis(); mapa(cyCarro); tMapa = millis() - t0;
   carrito(mapaCx, cyCarro);
-  for (int y = 0; y < FH; y++) { fila(y, 0, L, BARRA, 0.62f); fila(y, L, L + 2, BLANCO, 0.35f); }   // la franja deja ver el mapa por detrás
+  for (int y = 0; y < FH; y++) { fila(y, 0, L, BARRA, 0.7f); fila(y, L, L + 2, BLANCO, 0.35f); }   // la franja deja ver el mapa por detrás
   const float cx = L / 2.f; char b[40];
   // cada dato en dos renglones: el nombre chiquito y debajo el número grande (se lee de reojo)
-  auto dato = [&](float y, const char *e, const char *v) { textoFilo(e, 18, y, 14, TENUE, true); textoFilo(v, 18, y + 24, 30, BLANCO, true, L - 30); };
-  auto alto = [&](float y, const char *v) { icoMonte(30, y, 13); textoFilo(v, 50, y, 30, BLANCO, true, L - 60); };   // la altura: el montecito basta, sin la palabra
+  auto dato = [&](float y, const char *e, const char *v) { texto(e, 18, y, 14, TENUE, 1, true); texto(v, 18, y + 24, 30, BLANCO, 1, true, L - 30); };
+  auto alto = [&](float y, const char *v) { icoMonte(30, y, 13); texto(v, 50, y, 30, BLANCO, 1, true, L - 60); };   // la altura: el montecito basta, sin la palabra
   if (nav) {
     const int gm = giroM >= 0 ? max(0, giroM - (int)(sqrtf(velX * velX + velY * velY) * (tAhora - giroT))) : -1;
     if (!strcmp(giroDir, "fin")) snprintf(b, sizeof b, giroM >= 0 && giroM > 15 ? "Llegando" : "Llegaste"); else if (gm >= 0) metros(gm, b, sizeof b); else b[0] = 0;
     flecha(cx, 72, 92, giroDir);
-    if (b[0]) textoFilo(b, cx, 150, 44, BLANCO, false, L - 20);
-    if (giroCalle[0]) textoFilo(giroCalle, cx, 186, 18, Col{205, 218, 255}, false, L - 20);
+    if (b[0]) texto(b, cx, 150, 44, BLANCO, 1, false, L - 20);
+    if (giroCalle[0]) texto(giroCalle, cx, 186, 18, Col{205, 218, 255}, 1, false, L - 20);
     fila(214, 20, L - 20, Col{80, 96, 160}, 1); fila(215, 20, L - 20, Col{80, 96, 160}, 1);
     char t[24] = ""; if (faltaT >= 0) { if (faltaT < 60) snprintf(t, sizeof t, "%d min", faltaT); else snprintf(t, sizeof t, "%d h %02d", faltaT / 60, faltaT % 60); }
     char a[16] = ""; if (altura > -1000) altTexto(a, sizeof a);
@@ -819,12 +819,12 @@ static void pintarCuadrada() {
     if (faltaM >= 0 && y < FH - 40) { char km[16]; metros(faltaM, km, sizeof km); dato(y, "Destino", km); }
   } else {                                                   // sin ruta: la hora grande, el clima, la calle, la pila y la altura
     horaTexto(b, sizeof b);
-    if (b[0]) textoFilo(b, cx, 66, 58, BLANCO, false, L - 16);
-    if (climaG > -1000) { snprintf(b, sizeof b, "%d°", climaG); nube(cx - 36, 132, 24); textoFilo(b, cx + 22, 132, 38, BLANCO); }
-    if (climaLugar[0]) textoFilo(climaLugar, cx, 172, 21, Col{205, 218, 255}, false, L - 16);
+    if (b[0]) texto(b, cx, 66, 58, BLANCO, 1, false, L - 16);
+    if (climaG > -1000) { snprintf(b, sizeof b, "%d°", climaG); nube(cx - 36, 132, 24); texto(b, cx + 22, 132, 38, BLANCO); }
+    if (climaLugar[0]) texto(climaLugar, cx, 172, 21, Col{205, 218, 255}, 1, false, L - 16);
     fila(196, 20, L - 20, Col{80, 96, 160}, 1); fila(197, 20, L - 20, Col{80, 96, 160}, 1);
     float y = 224;
-    if (calleAhora[0]) { textoFilo(calleAhora, cx, y, 16, Col{205, 218, 255}, false, L - 20); y += 40; }
+    if (calleAhora[0]) { texto(calleAhora, cx, y, 16, Col{205, 218, 255}, 1, false, L - 20); y += 40; }
     if (pilaCarga) { snprintf(b, sizeof b, pilaKw > 0.3f ? "%.1f kW" : "Sí", pilaKw); for (char *q = b; *q; q++) if (*q == '.') *q = ','; dato(y, "Cargando", b); y += 50; }
     else if (pilaReal >= 0) { snprintf(b, sizeof b, "%d km", pilaReal); dato(y, "Alcanza", b); y += 50; }
     if (altura > -1000) { altTexto(b, sizeof b); alto(y + 12, b); }
