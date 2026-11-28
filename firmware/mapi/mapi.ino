@@ -798,7 +798,8 @@ static void pintarCuadrada() {
   carrito(mapaCx, cyCarro);
   for (int y = 0; y < FH; y++) { fila(y, 0, L, BARRA, 1); fila(y, L, L + 2, BLANCO, 0.9f); }
   const float cx = L / 2.f; char b[40];
-  auto dato = [&](float y, const char *e, const char *v) { texto(e, 18, y, 15, TENUE, 1, true); texto(v, L - 16 - anchoTexto(v, 20), y, 20, BLANCO, 1, true, L - 90); };
+  // cada dato en dos renglones: el nombre chiquito y debajo el número grande (se lee de reojo)
+  auto dato = [&](float y, const char *e, const char *v) { texto(e, 18, y, 14, TENUE, 1, true); texto(v, 18, y + 24, 30, BLANCO, 1, true, L - 30); };
   if (nav) {
     const int gm = giroM >= 0 ? max(0, giroM - (int)(sqrtf(velX * velX + velY * velY) * (tAhora - giroT))) : -1;
     if (!strcmp(giroDir, "fin")) snprintf(b, sizeof b, giroM >= 0 && giroM > 15 ? "Llegando" : "Llegaste"); else if (gm >= 0) metros(gm, b, sizeof b); else b[0] = 0;
@@ -808,11 +809,11 @@ static void pintarCuadrada() {
     fila(214, 20, L - 20, Col{80, 96, 160}, 1); fila(215, 20, L - 20, Col{80, 96, 160}, 1);
     char t[24] = ""; if (faltaT >= 0) { if (faltaT < 60) snprintf(t, sizeof t, "%d min", faltaT); else snprintf(t, sizeof t, "%d h %02d", faltaT / 60, faltaT % 60); }
     char a[16] = ""; if (altura > -1000) altTexto(a, sizeof a);
-    float y = 240;
-    if (t[0]) { dato(y, "Llegas en", t); y += 44; }
-    if (llegaTxt[0]) { dato(y, "Llegada", llegaTxt); y += 44; }
-    if (a[0]) { dato(y, "Altura", a); y += 44; }
-    if (faltaM >= 0 && y < FH - 20) { char km[16]; metros(faltaM, km, sizeof km); dato(y, "Destino", km); }
+    float y = 230;
+    if (t[0]) { dato(y, "Llegas en", t); y += 50; }
+    if (llegaTxt[0]) { dato(y, "Llegada", llegaTxt); y += 50; }
+    if (a[0]) { dato(y, "Altura", a); y += 50; }
+    if (faltaM >= 0 && y < FH - 40) { char km[16]; metros(faltaM, km, sizeof km); dato(y, "Destino", km); }
   } else {                                                   // sin ruta: la hora grande, el clima, la calle, la pila y la altura
     horaTexto(b, sizeof b);
     if (b[0]) texto(b, cx, 70, 58, BLANCO, 1, false, L - 16);
@@ -821,8 +822,8 @@ static void pintarCuadrada() {
     fila(196, 20, L - 20, Col{80, 96, 160}, 1); fila(197, 20, L - 20, Col{80, 96, 160}, 1);
     float y = 224;
     if (calleAhora[0]) { texto(calleAhora, cx, y, 16, Col{205, 218, 255}, 1, false, L - 20); y += 40; }
-    if (pilaCarga) { snprintf(b, sizeof b, pilaKw > 0.3f ? "%.1f kW" : "Sí", pilaKw); for (char *q = b; *q; q++) if (*q == '.') *q = ','; dato(y, "Cargando", b); y += 40; }
-    else if (pilaReal >= 0) { snprintf(b, sizeof b, "%d km", pilaReal); dato(y, "Alcanza", b); y += 40; }
+    if (pilaCarga) { snprintf(b, sizeof b, pilaKw > 0.3f ? "%.1f kW" : "Sí", pilaKw); for (char *q = b; *q; q++) if (*q == '.') *q = ','; dato(y, "Cargando", b); y += 50; }
+    else if (pilaReal >= 0) { snprintf(b, sizeof b, "%d km", pilaReal); dato(y, "Alcanza", b); y += 50; }
     if (altura > -1000) { altTexto(b, sizeof b); dato(y, "Altura", b); }
   }
   if (limV > 0) {   // el límite de velocidad, arriba a la derecha del mapa
