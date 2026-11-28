@@ -437,7 +437,7 @@ public class CubiCarro extends CarAppService {
                     final Canvas cZ = c; final CubiService sZ = s;
                     final boolean navG = google && nav && s != null;
                     sinHora = (navZ || navG) && zEsc < 1;                                                 // el aviso del giro ocupa el puesto de la hora
-                    detras = google ? () -> { googleR.set(0, 0, cZ.getWidth(), cZ.getHeight()); googleM.set(Math.max(zLibre + zDx, aL + aW * 0.3f * zEsc), aT, googleR.right - aR, googleR.bottom - abajo - mZ); cZ.drawRect(googleR, borra); if (navG) tarjetaGiro(cZ, sZ, zEsc < 1 ? aL : googleM.left, aT, 81 * uZ, uZ, 1); }   // toda la pantalla: Zelda y la barra flotan sobre el mapa
+                    detras = google ? () -> { googleR.set(0, 0, cZ.getWidth(), cZ.getHeight()); googleM.set(googleR.right - aR, aT, googleR.right - aR, googleR.bottom - abajo - mZ);   // igual a los dos lados: la flecha del carro va en la mitad cZ.drawRect(googleR, borra); if (navG) tarjetaGiro(cZ, sZ, zEsc < 1 ? aL : googleM.left, aT, 81 * uZ, uZ, 1); }   // toda la pantalla: Zelda y la barra flotan sobre el mapa
                             : !mapZ ? null : () -> {
                         float iz = Math.max(zLibre, aL + aW * 0.3f * zEsc);
                         sinCaja = true; this.corte = abajo + mZ; mapaExt = iz - aL;
@@ -685,28 +685,16 @@ public class CubiCarro extends CarAppService {
                 float br = 6 * u, by = pieDest + 3 * u + br, prop = pila == 2 ? 160 / 96f : 100 / 96f;
                 float ih = 12 * u, iw = ih * prop, pr = destIzq - 3 * u, pl = pr - iw - 45 * u, pt = y0 + 3 * u, pb = pt + 16 * u;
                 boolean conDest = s != null && !s.destinoTexto().isEmpty();
-                if (giroDer > 0 && giroDer + 3 * u + 17 * u * prop < destIzq) {      // hay giro en pantalla: el gatito va pegado a su cuadrito
-                    pilaIcono(c, giroDer + 3 * u, giroCy - 8.5f * u, 17 * u, pc, en.cargando, s);
-                } else if (!conDest && sinCaja && pl > x0 + 6 * u) {
-                    float rr = 6 * u;
-                    gr.set(pl, pt, pr, pb);
-                    p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(pl, pt + 0.8f * u, pr, pb + 0.8f * u, rr, rr, p);
-                    p.setColor(0x3cffffff); c.drawRoundRect(gr, rr, rr, p);
-                    p.setStyle(Paint.Style.STROKE); p.setStrokeWidth(Math.max(1.5f, 0.35f * u)); p.setColor(0xb3ffffff); c.drawRoundRect(gr, rr, rr, p);
-                    p.setStyle(Paint.Style.FILL);
-                    pilaIcono(c, pl + 2.5f * u, (pt + pb) / 2 - ih / 2, ih, pc, en.cargando, s);
-                    // Dos autonomías: la REAL (con el consumo promedio de como se maneja) y la WLTP (la cifra que da el carro,
-                    // que es NEDC, pasada a WLTP). Cargando: la potencia y cuánto falta.
-                    double hh = en.horasParaLleno();
-                    String l1 = en.cargando ? (Double.isNaN(en.kw) ? "Cargando" : "Cargando " + String.format(Locale.US, "%.1f kW", en.kw).replace('.', ',')) : "Real " + Math.round(en.autonomiaKm()) + " km";
-                    String l2 = en.cargando ? (Double.isNaN(hh) ? "midiendo la carga…" : "lleno en " + (int) hh + " h " + String.format(Locale.US, "%02d", (int) (hh * 60) % 60))
-                            : (Double.isNaN(en.rangoCarro) ? "" : "WLTP " + Math.round(en.rangoCarro * WLTP_DE_NEDC) + " km  ·  ") + String.format(Locale.US, "%.1f kWh/100", en.promedio()).replace('.', ',');
-                    float tx = pl + 5 * u + iw;
-                    texto(c, l1, tx, pt + 7.6f * u, 5.2f * u, 0xffffffff, true, Paint.Align.LEFT, pr - tx - 2 * u);
-                    texto(c, l2, tx, pt + 12.8f * u, 3.4f * u, 0xe0ffffff, false, Paint.Align.LEFT, pr - tx - 2 * u);
+                String kmW = kmWltp(en);
+                if (giroDer > 0 && giroDer + 3 * u + 17 * u * prop < destIzq) {      // hay giro en pantalla: el gatito va pegado a su cuadrito, con los km debajo
+                    pilaIcono(c, giroDer + 3 * u, giroCy - 10.5f * u, 17 * u, pc, en.cargando, s);
+                    if (!kmW.isEmpty()) texto(c, kmW, giroDer + 3 * u + 17 * u * prop / 2, giroCy + 11 * u, 3.8f * u, 0xffffffff, true, Paint.Align.CENTER, 30 * u);
+                } else if (!conDest) {
+                    // sin destino la pila va junto al reloj (pilaReloj): aquí no se repite
                 } else {
-                    float my = by + (br * 2 + 3 * u) * (google && botones ? 2 : 1), mh = br * 2.1f, mw = mh * prop;
-                    pilaIcono(c, pila == 2 ? x1 - 3 * u - mw : x1 - 3 * u - br - mw / 2, my - mh / 2, mh, pc, en.cargando, s);
+                    float my = by + (br * 2 + 3 * u) * (google && botones ? 2 : 1), mh = br * 2.1f, mw = mh * prop, mx = pila == 2 ? x1 - 3 * u - mw : x1 - 3 * u - br - mw / 2;
+                    pilaIcono(c, mx, my - mh / 2, mh, pc, en.cargando, s);
+                    if (!kmW.isEmpty()) texto(c, kmW, mx + mw / 2, my + mh / 2 + 4 * u, 3.4f * u, 0xffffffff, true, Paint.Align.CENTER, 26 * u);
                 }
             }
             if (franja) {
@@ -1300,6 +1288,8 @@ public class CubiCarro extends CarAppService {
         }
         // La pila junto al reloj, siempre que el carro dé la batería: el gatito a la izquierda de la hora y debajo los km
         // que quedan (WLTP). x: donde empieza la hora; cy: su centro; tam: su tamaño.
+        // los km que quedan, los WLTP (lo que da el carro, pasado de NEDC); sin escribir "WLTP"
+        static String kmWltp(CubiEnergia en) { return Double.isNaN(en.rangoCarro) ? "" : Math.round(en.rangoCarro * WLTP_DE_NEDC) + " km"; }
         private void pilaReloj(Canvas c, float x, float cy, float tam, CubiService sv) {
             final CubiEnergia en = CubiCarroDatos.cuentas;
             if (pila >= 3 || Double.isNaN(en.energia)) return;
@@ -1307,7 +1297,7 @@ public class CubiCarro extends CarAppService {
             float ih = tam * 0.62f, iw = ih * (pila == 2 ? 160 / 96f : 100 / 96f), ix = x - tam * 0.12f - iw;
             if (ix < 0) return;
             pilaIcono(c, ix, cy - ih * 0.62f, ih, pc, en.cargando, sv);
-            String km = en.cargando ? "" : !Double.isNaN(en.rangoCarro) ? "WLTP " + Math.round(en.rangoCarro * WLTP_DE_NEDC) + " km" : Math.round(en.autonomiaKm()) + " km";
+            String km = en.cargando ? "" : kmWltp(en);
             if (!km.isEmpty()) texto(c, km, ix + iw / 2, cy + ih * 0.38f + tam * 0.16f, tam * 0.13f, 0xf0ffffff, true, Paint.Align.CENTER, iw * 2.2f);
         }
         // Cuando el carro sacude el líquido (curva, frenada, acelerón) rebosa un poquito: saltan gotitas del lado que sube y

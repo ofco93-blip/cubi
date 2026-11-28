@@ -198,7 +198,7 @@ final class CubiMapi {
             Paq p = cola.poll();
             BluetoothGattCharacteristic c = p.canal == 1 ? otaC : p.canal == 2 ? imgC : rx;
             if (c == null) { siguienteLuego(); return; }
-            c.setValue(p.d); c.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);   // con confirmación: ninguno se pierde
+            c.setValue(p.d); c.setWriteType(p.canal == 2 ? BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE : BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);   // con confirmación (la carátula sin: va mucho más rápido)
             enVuelo = p;
             try { ocupado = gatt.writeCharacteristic(c); } catch (SecurityException e) { ocupado = false; }
             if (!ocupado) enVuelo = null;

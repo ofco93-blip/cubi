@@ -445,7 +445,7 @@ static void bleInit() {
   BLECharacteristic *rx = sv->createCharacteristic(BLE_RX, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR); rx->setCallbacks(new Rx());
   tx = sv->createCharacteristic(BLE_TX, BLECharacteristic::PROPERTY_NOTIFY); tx->addDescriptor(new BLE2902());
   sv->createCharacteristic(BLE_OTA, BLECharacteristic::PROPERTY_WRITE)->setCallbacks(new Ota());
-  sv->createCharacteristic(BLE_IMG, BLECharacteristic::PROPERTY_WRITE)->setCallbacks(new Img());
+  sv->createCharacteristic(BLE_IMG, BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR)->setCallbacks(new Img());   // sin respuesta: llega mucho más rápido
   sv->start();
   BLEAdvertising *a = BLEDevice::getAdvertising(); a->addServiceUUID(BLE_SRV); a->setScanResponse(true); BLEDevice::startAdvertising();
 }
@@ -664,21 +664,25 @@ static void paginaMusica() {
   fondoColor(Col{t.r * 0.42f + 6, t.g * 0.42f + 6, t.b * 0.42f + 10}, Col{t.r * 0.16f + 4, t.g * 0.16f + 4, t.b * 0.16f + 8});
 extern float biselF;
   const float pos = biselF >= 0 ? biselF * musDur : musSuena ? musPos + (tAhora - musT) : musPos, frac = musDur > 0 ? lim(pos / musDur, 0, 1) : 0;
-  static float vuelta = 0; if (musSuena) vuelta += dtCuadro * 0.35f;   // la carátula gira despacio solo mientras suena
-  const float cs = cosf(vuelta), sn = sinf(vuelta), RR = C - 2, k = POR / (2 * RR * 0.74f);   // la carátula completa (sus esquinas quedan fuera)
+  static float vuelta = 0; if (musSuena) vuelta += dtCuadro * 0.22f;   // gira despacio (y parejo) solo mientras suena
   if (porOk && portada) {
+    if (!vela) vineta();                          // (arma la tabla de la orilla)
+    const float RR = C - 1, k = (POR / 2 - 1) / RR;   // con zoom: el círculo de la pantalla cabe dentro de la carátula
+    const int32_t cs = (int32_t)(cosf(vuelta) * k * 65536), sn = (int32_t)(sinf(vuelta) * k * 65536), m = D / 2, mid = (POR / 2) << 16;
     for (int y = 0; y < D; y++) {
-      const float dy = y + .5f - C, hx = RR * RR - dy * dy; if (hx <= 0) continue;
-      const int xa = (int)(C - sqrtf(hx)), xb = (int)(C + sqrtf(hx));
-      uint16_t *f = fb + y * D;
-      for (int x = max(0, xa); x <= min(D - 1, xb); x++) {
-        const float dx = x + .5f - C;
-        const int sx = (int)(POR / 2 + (dx * cs + dy * sn) * k), sy = (int)(POR / 2 + (-dx * sn + dy * cs) * k);
-        f[x] = (sx >= 0 && sy >= 0 && sx < POR && sy < POR) ? portada[sy * POR + sx] : 0;
+      const int dy = y - m, hx = (int)(RR * RR) - dy * dy; if (hx <= 0) continue;
+      const int w = (int)sqrtf(hx), xa = max(0, m - w), xb = min(D - 1, m + w);
+      const int abajo = y > 300 ? (int)(36.f * (y - 300) / (D - 300)) : 0;   // abajo se oscurece para los botones
+      int32_t u = mid + (xa - m) * cs + dy * sn, v = mid - (xa - m) * sn + dy * cs;
+      uint16_t *f = fb + y * D; const uint8_t *vl = vela + y * D;
+      for (int x = xa; x <= xb; x++, u += cs, v -= sn) {
+        const int sx = u >> 16, sy = v >> 16;
+        uint16_t p = (sx >= 0 && sy >= 0 && sx < POR && sy < POR) ? portada[sy * POR + sx] : 0;
+        const int a = min(64, vl[x] + abajo);
+        if (a) { const int r = (p >> 11) * (64 - a) >> 6, g = ((p >> 5) & 63) * (64 - a) >> 6, b = (p & 31) * (64 - a) >> 6; p = (uint16_t)((r << 11) | (g << 5) | b); }
+        f[x] = p;
       }
     }
-    vineta();                                   // la orilla se oscurece: ahí van el nombre y el aro
-    for (int y = 300; y < D; y++) fila(y, 0, D, Col{0, 0, 0}, 0.55f * (y - 300) / (D - 300.f));   // abajo, para que se lean los botones
   } else {
     disco(C, C - 30, 100, Col{t.r * 0.6f, t.g * 0.6f, t.b * 0.6f}, 1);
     textoFilo(musTit[0] ? "Bajando la carátula" : "Pon música", C, C - 30, musTit[0] ? 18 : 24, BLANCO);
@@ -697,53 +701,56 @@ extern float biselF;
   else { float px[3] = {C - 8, C + 12, C - 8}, py[3] = {by - 13, by, by + 13}; rellenar(px, py, 3, os, 1); }
   if (musDur > 0) { char a[12], b[12], c[28]; tiempoTxt(pos, a, sizeof a); tiempoTxt(musDur, b, sizeof b); snprintf(c, sizeof c, "%s / %s", a, b); texto(c, C, 410, 16, Col{235, 222, 255}); }
 }
-// el carro: la pila en grande (el gato), lo que alcanza por los lados y el consumo
+// el carro: el gato de la pila, igual al de Mascota Auto (de vidrio, con el líquido vivo) y debajo los km que quedan (WLTP)
+static const float GATO[36][2] = {{16.5f, 6.2f}, {14.8f, 5.4f}, {13.4f, 5.5f}, {12.5f, 6.5f}, {12.0f, 8.4f}, {8.2f, 43.0f}, {7.8f, 50.9f}, {8.7f, 58.5f}, {10.7f, 65.6f}, {13.9f, 72.1f}, {18.0f, 77.9f}, {23.0f, 82.9f}, {28.8f, 86.9f}, {35.3f, 89.9f}, {42.4f, 91.8f}, {50.0f, 92.5f}, {57.6f, 91.8f}, {64.7f, 89.9f}, {71.2f, 86.9f}, {77.0f, 82.9f}, {82.0f, 77.9f}, {86.1f, 72.1f}, {89.3f, 65.6f}, {91.3f, 58.5f}, {92.2f, 50.9f}, {91.8f, 43.0f}, {88.0f, 8.4f}, {87.5f, 6.5f}, {86.6f, 5.5f}, {85.2f, 5.4f}, {83.5f, 6.2f}, {64.5f, 20.6f}, {57.2f, 18.7f}, {50.0f, 18.0f}, {42.8f, 18.6f}, {35.5f, 20.6f}};
 static void paginaCarro() {
   fondoColor(Col{14, 26, 62}, Col{8, 16, 42});
   if (pilaB < 0) { textoFilo("Abre Mascota Auto", C, 210, 24, BLANCO); texto("para ver la pila del carro", C, 246, 17, Col{200, 212, 240}); return; }
-  static const float G[14][2] = {{16.5f, 6.2f}, {12, 8.4f}, {8.2f, 43}, {12, 70}, {30, 88}, {50, 92.5f}, {70, 88}, {88, 70}, {91.8f, 43}, {88, 8.4f}, {83.5f, 6.2f}, {64.5f, 20.6f}, {50, 17}, {35.5f, 20.6f}};
-  const float sc = 1.9f, ox = C - 50 * sc, oy = 62; float px[14], py[14];
-  for (int i = 0; i < 14; i++) { px[i] = ox + G[i][0] * sc; py[i] = oy + G[i][1] * sc; }
-  const int pc = (int)lim(pilaB, 0, 100);
-  const Col liq = pc < 15 ? Col{240, 68, 58} : pc < 35 ? Col{245, 165, 36} : Col{90, 225, 150};
-  rellenar(px, py, 14, Col{40, 62, 160}, 1);
-  // el líquido vivo: ondea, se ladea con lo que siente Mapi (su acelerómetro) y cargando suben burbujas
-  const float nivel = oy + (92.5f - 83.5f * pc / 100.f) * sc;
+  const int pc = (int)lim(pilaB, 0, 100), N = 36;
+  const float sc = 2.6f, ox = C - 50 * sc, oy = 52; float px[N], py[N];
+  for (int i = 0; i < N; i++) { px[i] = ox + GATO[i][0] * sc; py[i] = oy + GATO[i][1] * sc; }
+  // los colores del líquido, los mismos del gato del carro (verde, amarillo bajo 35 %, rojo bajo 15 %)
+  const Col c0 = pc < 15 ? Col{255, 154, 138} : pc < 35 ? Col{255, 224, 138} : Col{168, 255, 203}, c1 = pc < 15 ? Col{240, 68, 58} : pc < 35 ? Col{245, 165, 36} : Col{47, 196, 122};
+  const float late = pilaCarga ? 0.5f + 0.5f * sinf(tAhora * 6) : 0;
+  if (pilaCarga) for (int k = 3; k >= 1; k--) { float qx[N], qy[N]; for (int i = 0; i < N; i++) { qx[i] = C + (px[i] - C) * (1 + 0.025f * k); qy[i] = oy + 48 * sc + (py[i] - oy - 48 * sc) * (1 + 0.025f * k); } rellenar(qx, qy, N, c1, 0.1f + 0.08f * late); }
+  { float qx[N], qy[N]; for (int i = 0; i < N; i++) { qx[i] = px[i]; qy[i] = py[i] + 6; } rellenar(qx, qy, N, Col{3, 10, 44}, 0.35f); }   // la sombra
+  rellenar(px, py, N, Col{20, 48, 153}, 0.6f); rellenar(px, py, N, BLANCO, 0.18f);   // el vidrio
+  // el líquido vivo: ondea, se ladea con lo que siente Mapi (su acelerómetro); cargando, más olas y burbujas
+  const float nivel = oy + (92.5f - 83.5f * pc / 100.f) * sc, fondoG = oy + 93 * sc;
   static float ladeo = 0; ladeo += (lim(gravedad.x * 45, -16, 16) - ladeo) * 0.25f;
-  const float fase = tAhora * (pilaCarga ? 4.2f : 2.4f), amp = pilaCarga ? 4.5f : 3;
-  auto sup = [&](float x) { return nivel + ladeo * (x - C) / 95 + amp * sinf(x * 0.055f + fase) + amp * 0.45f * sinf(x * 0.13f - fase * 1.3f); };
-  const Col liq2{liq.r * 0.55f, liq.g * 0.55f, liq.b * 0.55f};
-  for (int y = (int)fmaxf(0, nivel - 24); y < (int)(oy + 93 * sc) && y < D; y++) {
+  const float fase = tAhora * (pilaCarga ? 4.2f : 2.4f), amp = pilaCarga ? 5 : 3.5f;
+  auto sup = [&](float x) { return nivel + ladeo * (x - C) / 120 + amp * sinf(x * 0.045f + fase) + amp * 0.45f * sinf(x * 0.1f - fase * 1.3f); };
+  for (int y = (int)fmaxf(0, nivel - 26); y < (int)fondoG && y < D; y++) {
     const float yc = y + 0.5f; float xs[16]; int m = 0;
-    for (int i = 0; i < 14 && m < 16; i++) { const int j = (i + 1) % 14; if ((py[i] <= yc) != (py[j] <= yc)) xs[m++] = px[i] + (yc - py[i]) * (px[j] - px[i]) / (py[j] - py[i]); }
+    for (int i = 0; i < N && m < 16; i++) { const int j = (i + 1) % N; if ((py[i] <= yc) != (py[j] <= yc)) xs[m++] = px[i] + (yc - py[i]) * (px[j] - px[i]) / (py[j] - py[i]); }
     for (int i = 1; i < m; i++) { const float v = xs[i]; int j = i; while (j > 0 && xs[j - 1] > v) { xs[j] = xs[j - 1]; j--; } xs[j] = v; }
-    const float k = lim((yc - nivel) / (oy + 93 * sc - nivel), 0, 1);
-    const Col cl{liq.r + (liq2.r - liq.r) * k, liq.g + (liq2.g - liq.g) * k, liq.b + (liq2.b - liq.b) * k};
+    const float k = lim((yc - oy - 20 * sc) / (76 * sc), 0, 1);
+    const Col cl{c0.r + (c1.r - c0.r) * k, c0.g + (c1.g - c0.g) * k, c0.b + (c1.b - c0.b) * k};
     for (int q = 0; q + 1 < m; q += 2) for (int x = (int)ceilf(xs[q]); x <= (int)xs[q + 1] && x < D; x++) {
       const float d = yc - sup(x + 0.5f);
       if (d >= 0) mezclar(x, y, cl, lim(d + 0.5f, 0, 1));
-      if (d > -1.8f && d < 1.2f) mezclar(x, y, BLANCO, 0.55f * (1 - fabsf(d + 0.3f) / 1.5f));   // el brillo de la superficie
+      if (d > -2.2f && d < 1.4f) mezclar(x, y, BLANCO, 0.55f * (1 - fabsf(d + 0.4f) / 1.8f));   // el brillo de la superficie
     }
   }
   if (pilaCarga) for (int i = 0; i < 5; i++) {   // burbujas que suben
-    const float alto = oy + 88 * sc - nivel, sube = fmodf(tAhora * 38 + i * 29, fmaxf(10, alto)), bx = C - 50 + i * 25 + 4 * sinf(fase + i);
-    disco(bx, oy + 88 * sc - sube, 2.5f + (i % 2), BLANCO, 0.7f * (1 - sube / fmaxf(10, alto)));
+    const float alto = fondoG - 8 - nivel, sube = fmodf(tAhora * 40 + i * 31, fmaxf(10, alto)), bx = C - 60 + i * 30 + 5 * sinf(fase + i);
+    disco(bx, fondoG - 8 - sube, 3 + (i % 2), BLANCO, 0.7f * (1 - sube / fmaxf(10, alto)));
   }
-  for (int i = 0; i < 14; i++) { const int j = (i + 1) % 14; grueso(px[i], py[i], px[j], py[j], 3, BLANCO, 1); }
-  char b[32]; snprintf(b, sizeof b, "%d", pc); textoFilo(b, C, oy + 58 * sc, 46, BLANCO); texto("%", C, oy + 76 * sc, 18, BLANCO, 0.9f);
-  if (pilaReal >= 0) { snprintf(b, sizeof b, "Real %d km", pilaReal); textoArco(b, 205, 184, 26, BLANCO, false); }
-  if (pilaWltp >= 0) { snprintf(b, sizeof b, "WLTP %d km", pilaWltp); textoArco(b, 205, 6, 24, BLANCO, false); }
-  const char *et[3] = {"Hoy", "Viaje", "Promedio"}; char v[3][28] = {"", "", ""};
-  if (pilaHoy > 0) snprintf(v[0], 28, "%.1f kWh/100", pilaHoy);
-  if (pilaViaje >= 0) snprintf(v[1], 28, "%.1f km", pilaViaje);
-  if (pilaProm > 0) snprintf(v[2], 28, "%.1f kWh/100", pilaProm);
-  float y = 300;
-  for (int i = 0; i < 3; i++) {
-    if (!v[i][0]) continue;
-    for (char *q = v[i]; *q; q++) if (*q == '.') *q = ',';
-    texto(et[i], C - 8 - anchoTexto(et[i], 16), y, 16, Col{190, 205, 240}, 1, true); texto(v[i], C + 8, y, 18, BLANCO, 1, true); y += 32;
+  // el brillo de arriba y el borde de luz
+  figura(ox + 4 * sc, oy + 6 * sc, ox + 96 * sc, oy + 38 * sc, BLANCO, 0.16f, [=](float x, float y) { return (sqrtf((x - C) * (x - C) / (44 * sc * 44 * sc) + (y - oy - 22 * sc) * (y - oy - 22 * sc) / (16 * sc * 16 * sc)) - 1) * 16 * sc; });
+  for (int i = 0; i < N; i++) { const int j = (i + 1) % N; grueso(px[i], py[i], px[j], py[j], 5, BLANCO, 0.95f); }
+  // el número adentro (más arriba), el % debajo y abajo del gato los km que quedan
+  char b[24]; snprintf(b, sizeof b, "%d", pc);
+  textoFilo(b, C - (pilaCarga ? 12 : 0), oy + 60 * sc, pc == 100 ? 66 : 78, BLANCO);
+  texto("%", C, oy + 79 * sc, 28, BLANCO, 0.92f);
+  if (pilaCarga) {                                   // el rayito, que late
+    const float rx = C + anchoTexto(b, 78) / 2 + 4, ry = oy + 56 * sc, z = 2.2f * (0.92f + 0.14f * late);
+    float qx[6] = {rx + 2.5f * z, rx - 6.5f * z, rx - z, rx - 3.5f * z, rx + 6.5f * z, rx + z}, qy[6] = {ry - 11 * z, ry + 2 * z, ry + 2 * z, ry + 11 * z, ry - 3 * z, ry - 3 * z};
+    rellenar(qx, qy, 6, Col{255, 247, 194}, 1);
   }
-  if (pilaCarga) { snprintf(b, sizeof b, pilaKw > 0.3f ? "Cargando %.1f kW" : "Cargando", pilaKw); for (char *q = b; *q; q++) if (*q == '.') *q = ','; textoFilo(b, C, 404, 20, Col{255, 236, 150}); }
+  if (pilaWltp >= 0) { snprintf(b, sizeof b, "%d km", pilaWltp); textoFilo(b, C, fondoG + 40, 34, BLANCO); }
+  else if (pilaReal >= 0) { snprintf(b, sizeof b, "%d km", pilaReal); textoFilo(b, C, fondoG + 40, 34, BLANCO); }
+  if (pilaCarga && pilaKw > 0.3f) { snprintf(b, sizeof b, "%.1f kW", pilaKw); for (char *q = b; *q; q++) if (*q == '.') *q = ','; texto(b, C, fondoG + 76, 20, Col{255, 236, 150}); }
 }
 static void altTexto(char *b, size_t n) { if (altura >= 1000) snprintf(b, n, "%d.%03d m", altura / 1000, altura % 1000); else snprintf(b, n, "%d m", altura); }
 // abajo, en las dos pantallas: lo que alcanza la pila con el consumo de ahora (o la carga) y la altura por la curva
