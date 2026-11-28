@@ -156,7 +156,7 @@ final class CubiMapi {
             return;
         }
         if (s.startsWith("bat|")) {                                    // la pila de Mapi: "bat|85|1" (el 1: cargando)
-            String[] p = s.split("\|"); try { pila = Integer.parseInt(p[1].trim()); cargando = p.length > 2 && p[2].trim().equals("1"); } catch (Exception ignored) { }
+            String[] p = s.split("[|]"); try { pila = Integer.parseInt(p[1].trim()); cargando = p.length > 2 && p[2].trim().equals("1"); } catch (Exception ignored) { }
             return;
         }
         if (s.startsWith("ver|")) { version = s.substring(4); if (!actualizando) estado = "Conectado · firmware de la versión " + version + "."; return; }
