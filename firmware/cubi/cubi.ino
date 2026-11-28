@@ -775,9 +775,11 @@ void tareaPantalla(void *) {
       const int w = r.x1 - r.x0, h = r.y1 - r.y0;
       if (w <= 0 || h <= 0) continue;
       if (w == dib::RW) panel->draw16bitRGBBitmap(panX, panY + r.y0, e.mem + (uint32_t)r.y0 * dib::RW, dib::RW, h);
-      else {
-        for (int f = 0; f < h; f++) memcpy(tmpPanel + (uint32_t)f * w, e.mem + (uint32_t)(r.y0 + f) * dib::RW + r.x0, w * 2);
-        panel->draw16bitRGBBitmap(panX + r.x0, panY + r.y0, tmpPanel, w, h);
+      else {   // se abre la ventana una vez y se manda renglón por renglón desde la memoria (antes se copiaba a otra: PSRAM a PSRAM)
+        panel->startWrite();
+        panel->writeAddrWindow(panX + r.x0, panY + r.y0, w, h);
+        for (int f = 0; f < h; f++) bus->writePixels(e.mem + (uint32_t)(r.y0 + f) * dib::RW + r.x0, w);
+        panel->endWrite();
       }
       px += w * h;
     }
