@@ -1237,6 +1237,10 @@ public class CubiCarro extends CarAppService {
         int pila; private float destIzq;
         static final float WLTP_DE_NEDC = 435f / 520f;                // el Ora 5: 520 km NEDC son unos 435 km WLTP
         static final String CABEZA = "M16.5 6.2Q12.6 3.6 12 8.4L8.2 43C4.6 70 24 92.5 50 92.5S95.4 70 91.8 43L88 8.4Q87.4 3.6 83.5 6.2L64.5 20.6Q50 15.4 35.5 20.6Z";
+        // 4 huella, 5 corazón, 6 carrito (de lado, las ruedas se dibujan encima); 3 sigue siendo "no mostrar"
+        static final String HUELLA = "M22 68A28 24 0 1 0 78 68A28 24 0 1 0 22 68ZM9 40A9 12 0 1 0 27 40A9 12 0 1 0 9 40ZM26 20A10 13 0 1 0 46 20A10 13 0 1 0 26 20ZM54 20A10 13 0 1 0 74 20A10 13 0 1 0 54 20ZM73 40A9 12 0 1 0 91 40A9 12 0 1 0 73 40Z";
+        static final String CORAZON = "M50 90C20 68 4 52 4 32C4 16 16 6 29 6C39 6 46 12 50 20C54 12 61 6 71 6C84 6 96 16 96 32C96 52 80 68 50 90Z";
+        static final String CARRITO = "M10 72Q5 72 5 64V56Q5 48 14 47L24 45L33 30Q37 24 45 24H64Q72 24 77 31L85 44Q95 47 95 56V64Q95 72 90 72Z";
         static final String PASTI = "M31 92A27 27 0 0 1 25.4 38.6L28.2 12.4Q29 6.6 33.6 10.4L56 34.6L60 34.6L78.4 10.4Q83 6.6 83.8 12.4L86.6 38H129A27 27 0 0 1 129 92Z";
         private final Path pilaF = new Path(), pilaO = new Path(), pilaR = new Path(); private int pilaForma = -1, pilaSh = -1;
         private final Paint pq = new Paint(Paint.ANTI_ALIAS_FLAG); private final TextPaint ptq = new TextPaint(Paint.ANTI_ALIAS_FLAG);
@@ -1251,7 +1255,9 @@ public class CubiCarro extends CarAppService {
             boolean pas = pila == 2, osc = pila == 1, bajo = pc < 15; int W = pas ? 160 : 100, nivelC = bajo ? 0 : pc < 35 ? 1 : 2;
             int c0 = bajo ? 0xffff9a8a : pc < 35 ? 0xffffe08a : 0xffa8ffcb, c1 = bajo ? 0xfff0443a : pc < 35 ? 0xfff5a524 : 0xff2fc47a;
             int c2 = bajo ? 0xffff6b5e : pc < 35 ? 0xffffc94d : 0xff63e39b, borde = bajo ? 0xffff8072 : 0xffffffff;
-            if (pilaForma != pila) { pilaForma = pila; pilaF.set(androidx.core.graphics.PathParser.createPathFromPathData(pas ? PASTI : CABEZA)); }
+            if (pilaForma != pila) { pilaForma = pila; pilaF.set(androidx.core.graphics.PathParser.createPathFromPathData(pas ? PASTI : pila == 4 ? HUELLA : pila == 5 ? CORAZON : pila == 6 ? CARRITO : CABEZA)); }
+            final boolean nuevo = pila >= 4;                            // huella, corazón o carrito: el % va al lado del número
+            final float yA = pila == 4 ? 7 : pila == 5 ? 6 : pila == 6 ? 24 : 9, yB = pila == 4 ? 92 : pila == 5 ? 90 : pila == 6 ? 72 : 92.5f;   // de dónde a dónde se llena
             float ey = pas ? 44 : 22, ry = pas ? 9 : 16;
             if (pilaSh != pila * 4 + nivelC) {                        // los degradados van en medidas del dibujo: sirven para cualquier tamaño
                 pilaSh = pila * 4 + nivelC;
@@ -1278,7 +1284,7 @@ public class CubiCarro extends CarAppService {
             if (!osc) { pq.setColor(0x8c143099); c.drawPath(pilaF, pq); }
             pq.setColor(0xffffffff); pq.setShader(shVid); c.drawPath(pilaF, pq); pq.setShader(null);
             c.save(); c.clipPath(pilaF);
-            float ny = 92.5f - (92.5f - 9) * pc / 100f, nx = 4 + 152 * pc / 100f;
+            float ny = yB - (yB - yA) * pc / 100f, nx = 4 + 152 * pc / 100f;
             pilaO.rewind();
             if (pas) {                                                // de lado: la orilla del líquido es la que ondea
                 pilaO.moveTo(0, 30);
@@ -1305,15 +1311,21 @@ public class CubiCarro extends CarAppService {
             pq.setStyle(Paint.Style.FILL); pq.setColor(0xffffffff); pq.setShader(shBri); c.drawOval(W * 0.04f, ey - ry, W * 0.96f, ey + ry, pq); pq.setShader(null);   // el brillo de arriba
             c.restore();
             pq.setStyle(Paint.Style.STROKE); pq.setStrokeWidth(osc ? 2 : 3.4f); pq.setColor(0xffffffff); pq.setShader(shBor); c.drawPath(pilaF, pq); pq.setShader(null);   // el borde de luz
+            if (pila == 6) for (int i = 0; i < 2; i++) {                // las ruedas del carrito
+                float rx = i == 0 ? 28 : 73;
+                pq.setShader(null); pq.setStyle(Paint.Style.FILL); pq.setColor(0xff121628); c.drawCircle(rx, 72, 11, pq);
+                pq.setColor(0xffbec8dc); c.drawCircle(rx, 72, 4, pq);
+                pq.setStyle(Paint.Style.STROKE); pq.setStrokeWidth(2.6f); pq.setColor(0xffffffff); c.drawCircle(rx, 72, 11, pq); pq.setStyle(Paint.Style.FILL);
+            }
             chispas(c, dt, ahora, ny, carg, pas, nx, c0, c2);           // si se sacude: gotitas que rebosan y chispitas
             String t = String.valueOf(pc);                             // el número, adentro (más arriba) y debajo el %
-            float tam = pas ? 34 : pc == 100 ? 27 : 32, cx = (pas ? 82 : 50) - (carg ? 7 : 0), cy = pas ? 76 : 63;
+            float tam = pas ? 34 : pila == 6 ? (pc == 100 ? 20 : 24) : nuevo ? (pc == 100 ? 24 : 29) : pc == 100 ? 27 : 32, cx = (pas ? 82 : 50) - (carg || nuevo ? 7 : 0), cy = pas ? 76 : pila == 4 ? 78 : pila == 5 ? 52 : pila == 6 ? 58 : 63;
             ptq.setTypeface(Typeface.DEFAULT_BOLD); ptq.setTextSize(tam); ptq.setTextAlign(Paint.Align.CENTER); ptq.setLetterSpacing(-0.03f);
             ptq.setStyle(Paint.Style.STROKE); ptq.setStrokeWidth(3.2f); ptq.setStrokeJoin(Paint.Join.ROUND); ptq.setColor(0x8007123d); c.drawText(t, cx, cy, ptq);
             ptq.setStyle(Paint.Style.FILL); ptq.setColor(0xffffffff); c.drawText(t, cx, cy, ptq);
             {   // el porcentaje: en el gato debajo del número; en la pastilla al lado
-                float pt = pas ? 18 : 15, px = pas ? cx + ptq.measureText(t) / 2 + 2 : cx, py = pas ? cy : cy + 17;
-                ptq.setTextSize(pt); ptq.setTextAlign(pas ? Paint.Align.LEFT : Paint.Align.CENTER);
+                boolean lado = pas || nuevo; float pt = pas ? 18 : nuevo ? 13 : 15, px = lado ? cx + ptq.measureText(t) / 2 + 2 : cx, py = lado ? cy : cy + 17;
+                ptq.setTextSize(pt); ptq.setTextAlign(lado ? Paint.Align.LEFT : Paint.Align.CENTER);
                 ptq.setStyle(Paint.Style.STROKE); ptq.setStrokeWidth(2.4f); ptq.setColor(0x8007123d); c.drawText("%", px, py, ptq);
                 ptq.setStyle(Paint.Style.FILL); ptq.setColor(0xe6ffffff); c.drawText("%", px, py, ptq);
                 ptq.setTextSize(tam); ptq.setTextAlign(Paint.Align.CENTER);
@@ -1332,7 +1344,7 @@ public class CubiCarro extends CarAppService {
         static String kmWltp(CubiEnergia en) { return Double.isNaN(en.rangoCarro) ? "" : Math.round(en.rangoCarro * WLTP_DE_NEDC) + " km"; }
         private void pilaReloj(Canvas c, float x, float cy, float tam, CubiService sv) {
             final CubiEnergia en = CubiCarroDatos.cuentas;
-            if (pila >= 3 || Double.isNaN(en.energia)) return;
+            if (pila == 3 || Double.isNaN(en.energia)) return;
             int pc = (int) Math.max(0, Math.min(100, Math.round(en.bateria)));
             float ih = tam * 0.62f, iw = ih * (pila == 2 ? 160 / 96f : 100 / 96f), ix = x - tam * 0.12f - iw;
             if (ix < 0) return;

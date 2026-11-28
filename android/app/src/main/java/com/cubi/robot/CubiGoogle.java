@@ -202,6 +202,7 @@ final class CubiGoogle {
     boolean abrir(Context c, SurfaceContainer sc, final Pintor p, final float u) {
         try {
             if (sc.getSurface() == null || sc.getWidth() == 0 || sc.getHeight() == 0 || sc.getDpi() == 0) return false;
+            ctx = c; dpi = sc.getDpi();
             vd = c.getSystemService(DisplayManager.class).createVirtualDisplay("CubiGoogle", sc.getWidth(), sc.getHeight(), sc.getDpi(),
                     sc.getSurface(), DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY);
             pr = new Presentation(c, vd.getDisplay());
@@ -222,6 +223,18 @@ final class CubiGoogle {
                 try { m.setMyLocationEnabled(true); } catch (Throwable t) { }
                 try { m.setPadding(Math.round(mar.left), Math.round(mar.top), Math.round(mar.right), Math.round(mar.bottom)); } catch (Throwable t) { }
                 try { m.followMyLocation(GoogleMap.CameraPerspective.TILTED); } catch (Throwable t) { }
+                try {   // la ubicación pegada a la vía, la misma que usa la flechita de Google: el carro se para ahí
+                    snap = NavigationApi.getRoadSnappedLocationProvider((Application) c.getApplicationContext());
+                    snapL = new com.google.android.libraries.navigation.RoadSnappedLocationProvider.LocationListener() {
+                        @Override public void onLocationChanged(android.location.Location l) {
+                            sLa = l.getLatitude(); sLo = l.getLongitude(); sVel = l.hasSpeed() ? l.getSpeed() : 0;
+                            if (l.hasBearing()) sRumbo = l.getBearing();
+                            sT = System.currentTimeMillis();
+                        }
+                        public void onRawLocationSignal(android.location.Location l) { }
+                    };
+                    if (snap != null) snap.addLocationListener(snapL);
+                } catch (Throwable t) { }
             });
             return true;
         } catch (Throwable t) {
@@ -239,6 +252,7 @@ final class CubiGoogle {
         lienzo.invalidate();
         lat = la; lon = lo;
         if (mapa != null && tocado == 0) try { rumboG = mapa.getCameraPosition().bearing; rumboGT = System.currentTimeMillis(); } catch (Throwable ignored) { }
+        if (mapa != null) try { carroTic(la, lo); } catch (Throwable ignored) { }
         if (mapa != null && !Double.isNaN(la) && (CubiRadares.version != radVer || Double.isNaN(radLa) || CubiRadares.metros(radLa, radLo, la, lo) > 8000)) ponerRadares(la, lo);
         if (!m.equals(mar)) { mar.set(m); if (mapa != null) try { mapa.setPadding(Math.round(m.left), Math.round(m.top), Math.round(m.right), Math.round(m.bottom)); } catch (Throwable t) { } }
         // al abrir (apenas hay GPS) y a los 10 s de haberlo movido con el dedo, el mapa vuelve al carro
@@ -251,6 +265,64 @@ final class CubiGoogle {
             vista.setLayoutParams(lp);
         }
         if (vista.getVisibility() != View.VISIBLE) vista.setVisibility(View.VISIBLE);
+    }
+    // ---------- el carro (un Ora 5 visto desde arriba) en vez de la flechita ----------
+    // Se escoge en la app (carroAuto): 0 la flechita de Google, 1 crema (el dibujo tal cual), 2..6 otros colores.
+    // ponytail: va encima de la flechita de Google (la tapa, no la quita); si se asoma, probar setMyLocationEnabled(false)
+    // y seguir la cámara a mano.
+    private Context ctx; private int dpi = 160;
+    private com.google.android.libraries.navigation.RoadSnappedLocationProvider snap;
+    private com.google.android.libraries.navigation.RoadSnappedLocationProvider.LocationListener snapL;
+    private volatile double sLa = Double.NaN, sLo; private volatile float sRumbo, sVel; private volatile long sT;
+    private com.google.android.gms.maps.model.Marker carro; private int carroCol = -1;
+    private double mLa = Double.NaN, mLo; private float mRumbo; private long mT;
+    static final int[] COLOR_CARRO = {0, 0, 0xff96dcc8, 0xff969ea8, 0xffe1373c, 0xff4678e6, 0xff46484e};
+    private void carroTic(double la, double lo) {
+        int col = ctx == null ? 1 : ctx.getSharedPreferences("cubi", 0).getInt("carroAuto", 1);
+        long ahora = System.currentTimeMillis();
+        boolean fresco = ahora - sT < 3000;
+        double tLa = fresco ? sLa : la, tLo = fresco ? sLo : lo;
+        float tR = fresco ? sRumbo : !Float.isNaN(rumboG) ? rumboG : mRumbo;
+        if (col <= 0 || col >= COLOR_CARRO.length || Double.isNaN(tLa)) { if (carro != null) { carro.remove(); carro = null; } return; }
+        if (fresco) {   // Google da la posición una vez por segundo: se adelanta con la velocidad para que no ande a saltos
+            float s = Math.min(2, (ahora - sT) / 1000f) * sVel; double r = Math.toRadians(sRumbo);
+            tLa += s * Math.cos(r) / 111320.0; tLo += s * Math.sin(r) / (111320.0 * Math.cos(Math.toRadians(tLa)));
+        }
+        if (carro == null || col != carroCol) {
+            if (carro != null) carro.remove();
+            carroCol = col; mLa = tLa; mLo = tLo; mRumbo = tR;
+            carro = mapa.addMarker(new com.google.android.gms.maps.model.MarkerOptions().position(new com.google.android.gms.maps.model.LatLng(tLa, tLo))
+                    .icon(com.google.android.gms.maps.model.BitmapDescriptorFactory.fromBitmap(dibujoCarro(ctx, col, Math.round(56 * dpi / 160f))))
+                    .anchor(0.5f, 0.5f).flat(true).rotation(tR).zIndex(10));
+            if (carro == null) return;
+        }
+        float k = Math.min(1, (mT == 0 ? 0.05f : (ahora - mT) / 1000f) * 8); mT = ahora;   // se acerca suave
+        if (Double.isNaN(mLa) || Math.abs(tLa - mLa) > 0.01) { mLa = tLa; mLo = tLo; }
+        mLa += (tLa - mLa) * k; mLo += (tLo - mLo) * k;
+        float dr = ((tR - mRumbo) % 360 + 540) % 360 - 180; mRumbo = ((mRumbo + dr * k) % 360 + 360) % 360;
+        carro.setPosition(new com.google.android.gms.maps.model.LatLng(mLa, mLo)); carro.setRotation(mRumbo);
+    }
+    // el dibujo (crema) a la altura h; con otro color se pinta la carrocería (lo claro y sin color), sin tocar techo,
+    // vidrios ni luces. ponytail: los asientos claros del parabrisas también se tiñen un poquito.
+    static android.graphics.Bitmap dibujoCarro(Context c, int col, int h) {
+        android.graphics.BitmapFactory.Options o = new android.graphics.BitmapFactory.Options(); o.inScaled = false;
+        android.graphics.Bitmap b0 = android.graphics.BitmapFactory.decodeResource(c.getResources(), R.drawable.carro_ora, o);
+        android.graphics.Bitmap b = android.graphics.Bitmap.createScaledBitmap(b0, Math.max(8, Math.round(b0.getWidth() * h / (float) b0.getHeight())), Math.max(8, h), true);
+        int cc = COLOR_CARRO[col]; if (cc == 0) return b;
+        b = b.copy(android.graphics.Bitmap.Config.ARGB_8888, true);
+        int w = b.getWidth(), hh = b.getHeight(); int[] px = new int[w * hh]; b.getPixels(px, 0, w, 0, 0, w, hh);
+        int cr = (cc >> 16) & 255, cg = (cc >> 8) & 255, cb = cc & 255;
+        for (int i = 0; i < px.length; i++) {
+            int p = px[i], a = p >>> 24, r = (p >> 16) & 255, g = (p >> 8) & 255, bl = p & 255;
+            float l = (r + g + bl) / 3f, sat = Math.max(r, Math.max(g, bl)) - Math.min(r, Math.min(g, bl));
+            float wt = Math.max(0, Math.min(1, (l - 150) / 20f)) * Math.max(0, Math.min(1, (40 - sat) / 15f));
+            if (wt <= 0 || l > 238) continue;
+            float f = l / 235f;
+            r = Math.round(r + (Math.min(255, cr * f) - r) * wt); g = Math.round(g + (Math.min(255, cg * f) - g) * wt); bl = Math.round(bl + (Math.min(255, cb * f) - bl) * wt);
+            px[i] = (a << 24) | (r << 16) | (g << 8) | bl;
+        }
+        b.setPixels(px, 0, w, 0, 0, w, hh);
+        return b;
     }
     // los radares (OpenStreetMap) como íconos rojos en el mapa de Google: los de 15 km a la redonda, otra vez al alejarse 8 km
     private final java.util.List<com.google.android.gms.maps.model.Marker> marcas = new java.util.ArrayList<>();
@@ -296,6 +368,8 @@ final class CubiGoogle {
         if (mapa != null) try { mapa.animateCamera(CameraUpdateFactory.zoomBy(f - 1, new Point((int) (x - donde.left), (int) (y - donde.top)))); } catch (Throwable t) { }
     }
     void cerrar() {
+        try { if (snap != null && snapL != null) snap.removeLocationListener(snapL); } catch (Throwable t) { }
+        snap = null; snapL = null; carro = null; carroCol = -1; mLa = Double.NaN;
         try { if (vista != null) { vista.onPause(); vista.onStop(); vista.onDestroy(); } } catch (Throwable t) { }
         try { if (pr != null) pr.dismiss(); } catch (Throwable t) { }
         try { if (vd != null) vd.release(); } catch (Throwable t) { }

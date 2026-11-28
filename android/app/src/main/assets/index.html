@@ -284,7 +284,8 @@ pre.reg { margin: 0; max-height: 320px; overflow: auto; font: 11px/1.35 ui-monos
     <div class="fila"><span>Fondo</span><select id="carroFondo" aria-label="Fondo"><option value="-1">Automático</option><option value="0">Cielo</option><option value="1">Chicle</option><option value="2">Menta</option><option value="3">Lila</option><option value="4">Noche</option></select></div>
     <div class="fila"><span>Vista</span><select id="carroVista" aria-label="Vista"><option value="0">Mascota y mapa</option><option value="1">Solo la mascota</option><option value="2">Solo el mapa</option></select></div>
     <div class="fila"><span>Tamaño junto al mapa</span><select id="carroZeldaTam" aria-label="Tamaño"><option value="0">Grande</option><option value="1">Mediana</option><option value="2">Pequeña</option></select></div>
-    <div class="fila"><span>Pila del carro</span><select id="carroPila" aria-label="Pila"><option value="0">Gato de vidrio</option><option value="1">Gato oscuro</option><option value="2">Pastilla</option><option value="3">No mostrar</option></select></div>
+    <div class="fila"><span>Pila del carro</span><select id="carroPila" aria-label="Pila"><option value="0">Gato de vidrio</option><option value="1">Gato oscuro</option><option value="2">Pastilla</option><option value="4">Huella</option><option value="5">Corazón</option><option value="6">Carrito</option><option value="3">No mostrar</option></select></div>
+    <div class="fila"><span>El carro en el mapa</span><select id="carroAuto" aria-label="Carro en el mapa"><option value="1">Crema</option><option value="2">Verde menta</option><option value="3">Gris</option><option value="4">Rojo</option><option value="5">Azul</option><option value="6">Negro</option><option value="0">La flechita de Google</option></select></div>
   </div>
   <h2>Mapa</h2>
   <div class="card">
@@ -588,7 +589,7 @@ $('mapiEstilo').onchange = e => { if (A() && A().mapiAjustar) A().mapiAjustar('m
 $('mapasBajar').onclick = () => { if (!mapasZ.length) { toast('Primero busca y agrega una ciudad o departamento'); return; } if (A() && A().mapasBajar) { A().mapasBajar(); toast('Descargando los mapas…'); } };
 
 // ---------- Mascota Auto ----------
-['carroZelda', 'carroFondo', 'carroVista', 'carroZeldaTam', 'carroPila'].forEach(k => {
+['carroZelda', 'carroFondo', 'carroVista', 'carroZeldaTam', 'carroPila', 'carroAuto'].forEach(k => {
   $(k).onchange = e => { if (A() && A().carroPon) A().carroPon(k, +e.target.value); };
   if (A() && A().carroOpcion) setTimeout(() => { $(k).value = A().carroOpcion(k); }, 500);
 });

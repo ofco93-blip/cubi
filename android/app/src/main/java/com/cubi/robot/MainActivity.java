@@ -558,7 +558,8 @@ public class MainActivity extends Activity {
             android.content.SharedPreferences p = getSharedPreferences("cubi", 0);
             if (k.equals("carroZelda")) return p.getBoolean(k, true) ? 1 : 0;
             if (k.equals("carroZeldaTam")) return p.getInt(k, 0) % 3;
-            if (k.equals("carroPila")) return p.getInt(k, 0) % 4;
+            if (k.equals("carroPila")) return p.getInt(k, 0) % 7;
+            if (k.equals("carroAuto")) return p.getInt(k, 1) % 7;
             return k.equals("carroFondo") ? p.getInt(k, -1) : p.getInt("carroVista", p.getBoolean("carroSola", false) ? 1 : 0);
         }
 
@@ -584,7 +585,8 @@ public class MainActivity extends Activity {
             else if (k.equals("carroFondo")) e.putInt(k, Math.max(-1, Math.min(4, v)));
             else if (k.equals("carroVista")) e.putInt(k, Math.max(0, Math.min(2, v)));
             else if (k.equals("carroZeldaTam")) e.putInt(k, Math.max(0, Math.min(2, v)));
-            else if (k.equals("carroPila")) e.putInt(k, Math.max(0, Math.min(3, v)));
+            else if (k.equals("carroPila")) e.putInt(k, Math.max(0, Math.min(6, v)));
+            else if (k.equals("carroAuto")) e.putInt(k, Math.max(0, Math.min(6, v)));
             e.apply();
         }
 
