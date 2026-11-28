@@ -62,11 +62,11 @@ static const int W = 448, H = 368;
 static const float U = H / 368.f;
 static const uint8_t TCA9554 = 0x20;
 // Gigi corre en dos placas de Waveshare y al prender mira cuál es: solo la 1.75 redonda tiene el ES7210 (0x40) y el
-// CST9217 (0x5A). Ojo: la redonda también responde en 0x20, así que el expansor no sirve para distinguirlas. En la redonda (466 x 466) cambian el reloj de la pantalla (GPIO38), su reset (GPIO39), el táctil
-// (CST9217 en 0x5A), el MCLK del sonido (GPIO42) y los micrófonos (ES7210 en 0x40). La cara se sigue dibujando en
-// 368 x 448 y se manda centrada en el círculo.
+// CST9217 (0x5A). Ojo: la redonda también responde en 0x20, así que el expansor no sirve para distinguirlas.
+// En la redonda (466 x 466) cambian el reloj de la pantalla (GPIO38), su reset (GPIO39), el táctil, el MCLK del sonido
+// (GPIO42) y los micrófonos. Se dibuja en el círculo entero (dib::redonda): la cara al centro y los efectos hasta la orilla.
 bool placa175 = false;
-int panX = 0, panY = 0;                      // dónde cae el cuadro de 368 x 448 dentro del panel
+int panX = 0, panY = 0;                      // dónde cae la memoria dentro del panel (0: la llena entera)
 TouchDrvCST92xx tactil175;
 
 Arduino_DataBus *bus;
@@ -1064,18 +1064,18 @@ void imuPaso(uint32_t now) {
 uint32_t tDown = 0, nextDemo = 0; bool tPrev = false; int demoIdx = 0;
 void touchUpdate(uint32_t now) {
   uint8_t b[5]; bool t; int px = 0, py = 0;
-  if (placa175) {   // la redonda: el punto viene en 466 x 466 y en espejo (como en Mapi); se pasa al cuadro de 368 x 448
+  if (placa175) {   // la redonda: el punto viene en 466 x 466 y en espejo (como en Mapi)
     // ponytail: el espejo sale del ejemplo de Waveshare; si el toque sale al revés con Gigi en la mano, se quita aquí
     int16_t xs[1], ys[1];
     t = tpAddr && tactil175.getPoint(xs, ys, 1);
-    if (t) { px = constrain(466 - xs[0] - panX, 0, 367); py = constrain(466 - ys[0] - panY, 0, 447); }
+    if (t) { px = constrain(465 - xs[0], 0, dib::RW - 1); py = constrain(465 - ys[0], 0, dib::RH - 1); }
   } else {
     t = tpAddr && i2cR(tpAddr, 0x02, b, 5) && (b[0] & 0x0F) && (b[0] & 0x0F) < 3;
     if (t) { px = ((b[1] & 0x0F) << 8) | b[2]; py = ((b[3] & 0x0F) << 8) | b[4]; }
   }
   // dónde: el táctil da el punto en el panel vertical (368 x 448); se pasa a lo que se ve (acostado, 448 x 368)
   static int x0, y0, x, y; static bool arrastre;
-  if (t) { x = rotacion == 3 ? 447 - py : py; y = rotacion == 3 ? px : 367 - px; }
+  if (t) { x = (rotacion == 3 ? dib::RH - 1 - py : py) + dib::X0; y = (rotacion == 3 ? px : dib::RW - 1 - px) + dib::Y0; }
   if (t && !tPrev) { tDown = now; nextDemo = now + 1500; despertar(now); x0 = x; y0 = y; arrastre = false; }
   if (t && (abs(x - x0) > 40 || abs(y - y0) > 40)) arrastre = true;
   if (t && now > nextDemo && !arrastre && !panelAbierto) { reac(caras::CARICIA); nextDemo = now + 3000; }  // dejar el dedo: caricia
@@ -1274,7 +1274,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     if (p.has("mc")) musicaCel = p.get("mc") == "1";
     if (p.has("fr")) umbralFreno = constrain(p.get("fr").toFloat(), 0.15f, 0.9f);
     if (p.has("adl")) adelante = -adelante;  // al frenar se pone feliz: se invierte
-    if (p.has("rot")) { rotacion = rotacion == 3 ? 1 : 3; xSemaphoreTake(pantallaLibre, portMAX_DELAY); cv->setRotation(rotacion); memset(memorias[0], 0, 368 * 448 * 2); memset(memorias[1], 0, 368 * 448 * 2); dib::todo(); xSemaphoreGive(pantallaLibre); }
+    if (p.has("rot")) { rotacion = rotacion == 3 ? 1 : 3; xSemaphoreTake(pantallaLibre, portMAX_DELAY); cv->setRotation(rotacion); memset(memorias[0], 0, dib::RW * dib::RH * 2); memset(memorias[1], 0, dib::RW * dib::RH * 2); dib::todo(); xSemaphoreGive(pantallaLibre); }
     if (p.has("uv")) umbralVoz = constrain(p.get("uv").toFloat(), 0.05f, 0.95f);
     if (p.has("gb")) ganBoca = constrain(p.get("gb").toFloat(), 0.3f, 3.f);
     if (p.has("sk")) sensK = constrain(p.get("sk").toFloat(), 1.3f, 8.f);
@@ -1429,8 +1429,8 @@ void serialDebug() {
   while (Serial.available()) {
     char ch = Serial.read();
     if (ch == 'c') {
-      uint16_t dim[2] = { 368, 448 };
-      Serial.write("FB"); Serial.write((uint8_t *)dim, 4); Serial.write((uint8_t *)memorias[dib::cual ^ 1], 368 * 448 * 2); Serial.flush();
+      uint16_t dim[2] = { (uint16_t)dib::RW, (uint16_t)dib::RH };
+      Serial.write("FB"); Serial.write((uint8_t *)dim, 4); Serial.write((uint8_t *)memorias[dib::cual ^ 1], dib::RW * dib::RH * 2); Serial.flush();
     } else if (ch >= '0' && ch <= '8') { emoBase = NEUTRAL; demoHasta = 0; setEmo(Emo(ch - '0'), 8000); emoForzada = true; }
     else if (ch == 's' || ch == 'm') { emoHasta = 0; demo(ch == 's'); }
     else if (ch == 't') Serial.printf("cuadro %lu us (animar %lu, dibujar %lu, flush %lu)  ble=%d\n", (unsigned long)frameUs,
@@ -1463,7 +1463,7 @@ void setup() {
   if (placa175) {
     tactil175.setPins(40, 11);
     if (tactil175.begin(Wire, 0x5A)) tpAddr = 0x5A;
-    panX = 48; panY = 8;   // centrado en los 466 (49 y 9), corrido a pares porque el panel los pide
+    dib::redonda();
   } else {
     i2cW(TCA9554, 0x01, 0x07); i2cW(TCA9554, 0x03, 0xF8); delay(100);
     i2cW(TCA9554, 0x01, 0x00); delay(300);
@@ -1490,10 +1490,11 @@ void setup() {
   }
   panel->setBrightness(brillo);
   if (!placa175) { cv->fillScreen(0); cv->flush(); }   // en la redonda el lienzo caería corrido (ya se borró arriba)
-  tmpPanel = (uint16_t *)ps_malloc(368 * 448 * 2);
-  memorias[0] = cv->getFramebuffer();
-  memorias[1] = (uint16_t *)ps_malloc(368 * 448 * 2);
-  memset(memorias[1], 0, 368 * 448 * 2);
+  const size_t tamMem = dib::RW * dib::RH * 2;
+  tmpPanel = (uint16_t *)ps_malloc(tamMem);
+  memorias[0] = placa175 ? (uint16_t *)ps_calloc(1, tamMem) : cv->getFramebuffer();   // el lienzo es de 368 x 448: no le cabe la redonda
+  memorias[1] = (uint16_t *)ps_malloc(tamMem);
+  memset(memorias[1], 0, tamMem);
   colaPantalla = xQueueCreate(1, sizeof(Envio));
   pantallaLibre = xSemaphoreCreateBinary();
   xSemaphoreGive(pantallaLibre);

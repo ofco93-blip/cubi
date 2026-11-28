@@ -7,17 +7,23 @@ namespace dib {
 uint16_t *fb = nullptr;
 uint8_t giro = 0;
 Col tinte{255, 255, 255};
+int X0 = 0, Y0 = 0, X1 = W, Y1 = H, RW = 368, RH = 448;
 int cx0 = W, cy0 = H, cx1 = 0, cy1 = 0;
 uint8_t cual = 0;
 struct RL { int x0, y0, x1, y1; };                  // rectángulo acostado
 static RL previo[2] = {{0, 0, W, H}, {0, 0, W, H}}, ultimo = {0, 0, W, H};
+void redonda() {
+  RW = RH = MAXD; X0 = (W - MAXD) / 2; Y0 = (H - MAXD) / 2; X1 = X0 + MAXD; Y1 = Y0 + MAXD;   // -9..457 x -49..417
+  todo();
+}
 
 // el fondo ya ordenado como queda en memoria (una fila del panel), para cada giro
-static uint16_t fondoMem[2][H];
+static uint16_t fondoMem[2][MAXD];
 static bool hayFondo = false;
 void ponerFondo(const Col &a, const Col &b) {
-  for (int y = 0; y < H; y++) {
-    Col c = mezcla(a, b, y / (H - 1.f));
+  const int n = Y1 - Y0;
+  for (int y = 0; y < n; y++) {
+    Col c = mezcla(a, b, y / (n - 1.f));
     uint16_t v = empacar(c.r, c.g, c.b);
     fondoMem[1][y] = v; fondoMem[0][RW - 1 - y] = v;
   }
@@ -27,19 +33,19 @@ void sinFondo() { hayFondo = false; }
 
 static void borrar(const RL &r) {
   if (r.x0 >= r.x1 || r.y0 >= r.y1) return;
-  int ya = max(0, r.y0), yb = min(H, r.y1);
+  int ya = max(Y0, r.y0), yb = min(Y1, r.y1);
   if (ya >= yb) return;
-  for (int x = max(0, r.x0); x < min(W, r.x1); x++) {
+  for (int x = max(X0, r.x0); x < min(X1, r.x1); x++) {
     // una fila del panel por cada x: las y seguidas quedan juntas en memoria
     uint32_t a = idx(x, giro ? ya : yb - 1);
-    if (hayFondo) memcpy(fb + a, &fondoMem[giro ? 1 : 0][giro ? ya : RW - yb], (yb - ya) * 2);
+    if (hayFondo) memcpy(fb + a, &fondoMem[giro ? 1 : 0][giro ? ya - Y0 : RW - (yb - Y0)], (yb - ya) * 2);
     else memset(fb + a, 0, (yb - ya) * 2);
   }
 }
 
 void empezar() {
   borrar(previo[cual]);
-  cx0 = W; cy0 = H; cx1 = 0; cy1 = 0;
+  cx0 = X1; cy0 = Y1; cx1 = X0; cy1 = Y0;
 }
 
 Rect terminar() {
@@ -51,7 +57,7 @@ Rect terminar() {
   }
   previo[cual] = cur; ultimo = cur;
   if (u.x0 >= u.x1 || u.y0 >= u.y1) return {0, 0, 0, 0};
-  u.x0 = max(0, u.x0); u.y0 = max(0, u.y0); u.x1 = min(W, u.x1); u.y1 = min(H, u.y1);
+  u.x0 = max(X0, u.x0) - X0; u.y0 = max(Y0, u.y0) - Y0; u.x1 = min(X1, u.x1) - X0; u.y1 = min(Y1, u.y1) - Y0;   // ya en medidas del panel
   Rect r;
   if (giro) { r.x0 = u.y0; r.x1 = u.y1; r.y0 = RH - u.x1; r.y1 = RH - u.x0; }
   else { r.x0 = RW - u.y1; r.x1 = RW - u.y0; r.y0 = u.x0; r.y1 = u.x1; }
@@ -62,7 +68,7 @@ Rect terminar() {
   return r;
 }
 
-void todo() { previo[0] = previo[1] = ultimo = {0, 0, W, H}; }
+void todo() { previo[0] = previo[1] = ultimo = {X0, Y0, X1, Y1}; }
 
 float anchoTexto(const char *s, float tam) {
   float esc = tam / FUENTE_ALTO, w = 0;
@@ -88,8 +94,8 @@ void texto(const char *s, float cx, float cy, float tam, const Col &c0, float al
     if (!l) continue;
     if (l->w) {
       float gx0 = x + l->x0 * esc, gy0 = base + l->y0 * esc;
-      int ax = (int)fmaxf(0, floorf(gx0)), ay = (int)fmaxf(0, floorf(gy0));
-      int bx = (int)fminf(W, ceilf(gx0 + l->w * esc)), by = (int)fminf(H, ceilf(gy0 + l->h * esc));
+      int ax = (int)fmaxf(X0, floorf(gx0)), ay = (int)fmaxf(Y0, floorf(gy0));
+      int bx = (int)fminf(X1, ceilf(gx0 + l->w * esc)), by = (int)fminf(Y1, ceilf(gy0 + l->h * esc));
       if (ax < bx && ay < by) {
         marcar(ax, ay, bx, by);
         for (int py = ay; py < by; py++) {

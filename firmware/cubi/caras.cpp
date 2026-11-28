@@ -113,10 +113,11 @@ static Rostro neutro(int tono = AZUL) {
 }
 // mirar a un lado (lx, ly en -1..1): el ojo del lado al que mira crece un poquito
 static void mirar(Rostro &r, float lx, float ly) {
-  r.L.x += lx * MIRA; r.R.x += lx * MIRA; r.L.y += ly * 30; r.R.y += ly * 30;
+  const float mx = MIRA * (X1 - X0) / W, my = 30 + 0.6f * (Y1 - Y0 - H);   // en la redonda se mueve más (80 y 89 en vez de 50 y 30)
+  r.L.x += lx * mx; r.R.x += lx * mx; r.L.y += ly * my; r.R.y += ly * my;
   float g = 0.06f * lx;
   r.L.w *= 1 - g; r.L.h *= 1 - g; r.R.w *= 1 + g; r.R.h *= 1 + g;
-  r.bx += lx * 24;
+  r.bx += lx * 24 * (X1 - X0) / W;
 }
 static void escalar(Rostro &r, float sw, float sh) { r.L.w *= sw; r.R.w *= sw; r.L.h *= sh; r.R.h *= sh; }
 static void mover(Rostro &r, float dx, float dy) { r.L.x += dx; r.R.x += dx; r.L.y += dy; r.R.y += dy; r.bx += dx; r.by += dy; }
@@ -469,7 +470,7 @@ static void pilita(float x, float y, float nivel, bool parpadea, float alfa) {
 static void confeti(float u, float alfa) {
   for (int i = 0; i < 22; i++) {
     float p = fmodf(u * (0.35f + 0.2f * hash(i, 4)) + hash(i, 5), 1.f);
-    float x = hash(i, 6) * W + sinf(u * 3 + i) * 12, y = -10 + p * (H + 20);
+    float x = X0 + hash(i, 6) * (X1 - X0) + sinf(u * 3 + i) * 12, y = Y0 - 10 + p * (Y1 - Y0 + 20);
     Marco m = marco(x, y, u * 4 * (hash(i, 7) - 0.5f) + i);
     pieza(m, -6, -4, 6, 4, solido(COLORES[i % 5], alfa * campana(p, 0, 1) * 1.4f), [](float a, float b) { return dCaja(a, b, 0, 0, 6, 3.5f, 1); });
   }
@@ -1186,12 +1187,14 @@ enum { MARCO, ABAJO, ARRIBA, OVALO_LUZ };   // OVALO_LUZ: viñeta ovalada, la m�
 static void luzBorde(int donde, const Col &c, float alfa, float ancho, float radio = 44) {
   if (alfa < 0.03f) return;
   ConColor cc; dib::SinZoom sz;
-  if (donde == MARCO) resplandor(0, 0, W, H, c, alfa, ancho, [=](float px, float py) { return fabsf(dCaja(px, py, W / 2.f, H / 2.f, W / 2.f - 5, H / 2.f - 5, radio)); });   // un contorno redondeado que brilla hacia adentro y hacia afuera
-  else if (donde == OVALO_LUZ) resplandor(0, 0, W, H, c, alfa, ancho, [](float px, float py) {
-    const float ax = (px - W / 2.f) / (W * 0.6f), ay = (py - H / 2.f) / (H * 0.6f);
-    return fmaxf(0, (1 - sqrtf(ax * ax + ay * ay)) * H * 0.6f); });
-  else if (donde == ABAJO) resplandor(0, H, W, H, c, alfa, ancho, [=](float, float py) { return ancho * (1 - sqrtf(fmaxf(0, 1 - (H - py) / ancho))); });
-  else resplandor(0, 0, W, 0, c, alfa, ancho, [=](float, float py) { return ancho * (1 - sqrtf(fmaxf(0, 1 - py / ancho))); });
+  const float R = dib::radioPantalla();
+  if (donde == MARCO && R > 0) resplandor(X0, Y0, X1, Y1, c, alfa, ancho, [=](float px, float py) { return fabsf(dCirculo(px, py, W / 2.f, H / 2.f, R - 5)); });   // la redonda: un aro
+  else if (donde == MARCO) resplandor(0, 0, W, H, c, alfa, ancho, [=](float px, float py) { return fabsf(dCaja(px, py, W / 2.f, H / 2.f, W / 2.f - 5, H / 2.f - 5, radio)); });   // un contorno redondeado que brilla hacia adentro y hacia afuera
+  else if (donde == OVALO_LUZ) resplandor(X0, Y0, X1, Y1, c, alfa, ancho, [](float px, float py) {
+    const float w = X1 - X0, h = Y1 - Y0, ax = (px - W / 2.f) / (w * 0.6f), ay = (py - H / 2.f) / (h * 0.6f);
+    return fmaxf(0, (1 - sqrtf(ax * ax + ay * ay)) * h * 0.6f); });
+  else if (donde == ABAJO) resplandor(X0, Y1, X1, Y1, c, alfa, ancho, [=](float, float py) { return ancho * (1 - sqrtf(fmaxf(0, 1 - (Y1 - py) / ancho))); });
+  else resplandor(X0, Y0, X1, Y0, c, alfa, ancho, [=](float, float py) { return ancho * (1 - sqrtf(fmaxf(0, 1 - (py - Y0) / ancho))); });
 }
 
 static void haloEscucha(float u, const Entradas &e) {
@@ -1262,20 +1265,20 @@ static void ambienteCanta(float u, const Entradas &e) {
   if (modo == 0) {                                     // dos luces chicas que dan la vuelta por el borde, una frente a la otra
     for (int j = 0; j < 2; j++) {
       const float a = u * 0.4f + j * PI + 0.5f * sinf(u * 0.7f + j);
-      circulo(CX + cosf(a) * (W / 2.f - 6), H / 2.f + sinf(a) * (H / 2.f - 6), (34 + 6 * j) * entra * (1 + 0.1f * g), osc(j ? c1 : c0, 0.3f), 1);
+      circulo(CX + cosf(a) * ((X1 - X0) / 2.f - 6), H / 2.f + sinf(a) * ((Y1 - Y0) / 2.f - 6), (34 + 6 * j) * entra * (1 + 0.1f * g), osc(j ? c1 : c0, 0.3f), 1);
     }
   } else if (modo == 1) {                              // dos focos finos que barren desde el techo
     for (int s2 = -1; s2 <= 1; s2 += 2) {
       const float ax = CX + s2 * 150, bx = CX + s2 * (60 + 110 * sinf(u * 1.3f + s2 * 0.8f));
-      figura(0, 0, W, H, solido(osc(s2 < 0 ? c0 : c1, 0.26f + 0.08f * g)), [=](float px, float py) { return dTriangulo(px, py, ax, -12, bx - 22, H + 10, bx + 22, H + 10); });
+      figura(X0, Y0, X1, Y1, solido(osc(s2 < 0 ? c0 : c1, 0.26f + 0.08f * g)), [=](float px, float py) { return dTriangulo(px, py, ax, Y0 - 12, bx - 22, Y1 + 10, bx + 22, Y1 + 10); });
     }
   } else if (modo == 2) {                              // dos rayos que barren y cambian de color
     for (int i = 0; i < 2; i++)
-      linea(CX + (i ? 60 : -60), -6, CX + 240 * sinf(u * 1.1f + i * 2.3f), H + 6, 1.8f, i ? c1 : c0, (0.4f + 0.3f * g) * entra);
+      linea(CX + (i ? 60 : -60), Y0 - 6, CX + 240 * sinf(u * 1.1f + i * 2.3f), Y1 + 6, 1.8f, i ? c1 : c0, (0.4f + 0.3f * g) * entra);
   }
   {                                                    // una notita de vez en cuando (una sola a la vez, cada 4 s, alternando lado)
     const float ciclo = u / 4.f; const int k = (int)ciclo; const float q = (ciclo - k) / 0.55f;
-    if (q < 1) notaColor((k % 2 ? W - 60 : 56) + 9 * sinf(q * 6), 190 - 80 * q, 12, c1, entra * campana(q, 0, 1) * 0.95f);
+    if (q < 1) notaColor((k % 2 ? X1 - 60 : X0 + 56) + 9 * sinf(q * 6), 190 - 80 * q, 12, c1, entra * campana(q, 0, 1) * 0.95f);
   }
 }
 
@@ -1318,7 +1321,8 @@ static void extrasBase(float t, const Entradas &e, bool delante) {
 
 // ---------------------------------------------------------------- lluvia sobre el vidrio de la pantalla
 // Caen gotas en el vidrio (algunas escurren), se va empañando y pasa el limpiaparabrisas: ida y vuelta.
-static const float LP_Y = H + 30, LP_L = 470;   // pivote del limpiaparabrisas (abajo, fuera de la pantalla) y su largo
+#define LP_Y (Y1 + 30.f)            // pivote del limpiaparabrisas (abajo, fuera de la pantalla)
+#define LP_L (Y1 - Y0 + 102.f)      // y su largo (470 en la cuadrada)
 static float limpiaAng(float u) {               // ángulo desde la vertical: -1,45 = acostado a la izquierda
   if (u < 3.4f) return -1.45f;
   if (u < 4.2f) return -1.45f + 2.9f * suave((u - 3.4f) / 0.8f);
@@ -1328,12 +1332,12 @@ static float limpiaAng(float u) {               // ángulo desde la vertical: -1
 static void lluviaVidrio(float u) {
   const float limpio = u < 3.4f ? -1.45f : u < 4.2f ? limpiaAng(u) : 1.45f, fin = tramo(u, 6.4f, 7.0f);
   float emp = 0.42f * tramo(u, 0.6f, 3.0f) * (1 - fin);   // empañado: gris claro donde no ha pasado el limpiaparabrisas
-  if (emp > 0.01f && limpio < 1.44f) figura(0, 0, W, H, solido(Col{150, 162, 178}, emp), [=](float px, float py) {
+  if (emp > 0.01f && limpio < 1.44f) figura(X0, Y0, X1, Y1, solido(Col{150, 162, 178}, emp), [=](float px, float py) {
     float dx = px - CX, dy = LP_Y - py;
     return (limpio - atan2f(dx, dy)) * sqrtf(dx * dx + dy * dy);
   });
   for (int i = 0; i < 28; i++) {                           // gotas
-    float x = 20 + hash(i, 21) * (W - 40), y0 = 16 + hash(i, 22) * (H - 50), t0 = 0.15f + hash(i, 23) * 2.8f, sz = 3 + 5 * hash(i, 24);
+    float x = X0 + 20 + hash(i, 21) * (X1 - X0 - 40), y0 = Y0 + 16 + hash(i, 22) * (Y1 - Y0 - 50), t0 = 0.15f + hash(i, 23) * 2.8f, sz = 3 + 5 * hash(i, 24);
     bool corre = hash(i, 25) < 0.35f;
     float t = u - t0;
     if (u >= 3.4f && atan2f(x - CX, LP_Y - y0) < limpio)   // la barrió el limpiaparabrisas: vuelve a caer un rato después
@@ -1357,7 +1361,8 @@ static void lluviaVidrio(float u) {
 static void solDestello(float u, float a) {
   ConColor cc;
   SinZoom sz;                                                         // el sol va en la esquina: sin zoom
-  const float sx = W - 46 - curvaAhora * 150, sy = 30;
+  const bool red = dib::radioPantalla() > 0;
+  const float sx = (red ? CX + 110 : W - 46) - curvaAhora * 150, sy = red ? H / 2.f - 140 : 30;
   figura(sx - 70, sy - 70, sx + 70, sy + 70, solido(Col{255, 214, 90}, a, 46), [=](float px, float py) { return dCirculo(px, py, sx, sy, 22 + 2 * sinf(u * 3)); });
   for (int k = 0; k < 8; k++) {                                      // rayitos que giran despacio
     float g = u * 0.4f + k * PI / 4, r0 = 32, r1 = 46 + 6 * sinf(u * 4 + k);
@@ -1393,15 +1398,15 @@ static void solHistoria(float u) {
   const float fin = 1 - tramo(u, 6.4f, 7.0f);
   float b = campana(u, 0.15f, 1.5f);                                  // 1) un rayo de luz barre el vidrio y lo deslumbra
   if (b > 0.01f) {
-    const float bx = -120 + (W + 240) * tramo(u, 0.15f, 1.5f), c = cosf(0.5f), sn = sinf(0.5f);
+    const float bx = X0 - 120 + (X1 - X0 + 240) * tramo(u, 0.15f, 1.5f), c = cosf(0.5f), sn = sinf(0.5f);
     ConColor cc;
-    figura(0, 0, W, H, solido(Col{255, 238, 196}, 0.38f * b, 70), [=](float px, float py) { return fabsf((px - bx) * c + (py - EY) * sn) - 26; });
+    figura(X0, Y0, X1, Y1, solido(Col{255, 238, 196}, 0.38f * b, 70), [=](float px, float py) { return fabsf((px - bx) * c + (py - EY) * sn) - 26; });
   }
   solDestello(u, tramo(u, 0.1f, 0.5f) * fin * (u < 3.6f ? 1 : 0.6f));
   if (u > 1.5f && u < 3.9f) {                                         // 2) manito de visera sobre los ojos
     const float entra = tramo(u, 1.5f, 1.95f) * (1 - tramo(u, 3.45f, 3.85f));
     const float y = fminf(ahora.L.y - ahora.L.h / 2, ahora.R.y - ahora.R.h / 2) - 4, x = ahora.R.x + 12;
-    manoBlanca(W + 90 - (W + 90 - x) * entra, y - 30 * (1 - entra) + 3 * sinf(u * 3), PI + 0.1f, 2.1f, false);
+    manoBlanca(X1 + 90 - (X1 + 90 - x) * entra, y - 30 * (1 - entra) + 3 * sinf(u * 3), PI + 0.1f, 2.1f, false);
   }
   if (u > 3.4f) {                                                     // 3) caen las gafas, rebotan, brillan y se quedan
     const float p = tramo(u, 3.4f, 3.95f);
@@ -1447,7 +1452,7 @@ static void pistolaFrente(float u) {
   }
   if (tiro > 0 && tiro < 0.5f) {                                      // ¡pum!: el destello llena la pantalla y un aro rosado crece hacia uno
     const float t = tiro / 0.5f, Ra = 30 + 430 * t;
-    figura(0, 0, W, H, solido(Col{255, 230, 240}, 0.8f * (1 - t)), [](float, float) { return -1.f; });
+    figura(X0, Y0, X1, Y1, solido(Col{255, 230, 240}, 0.8f * (1 - t)), [](float, float) { return -1.f; });
     figura(x - Ra - 16, y - Ra - 16, x + Ra + 16, y + Ra + 16, solido(rayo, 1 - t), [=](float px, float py) { return fabsf(dCirculo(px, py, x, y, Ra)) - 3 - 9 * (1 - t); });
   }
   if (tiro > 0.05f && tiro < 1.8f) {                                  // el confeti sale hacia uno: se abre desde la boca y crece
@@ -1508,13 +1513,13 @@ static void pistolaConfeti(float u) {
     dib::texto(c, CX, 52, 70 + 30 * (1 - tramo(f, 0, 0.25f)), BLANCO, 1 - tramo(f, 0.8f, 1));
   }
   if (tiro > 0 && tiro < 0.45f) {                                     // ¡pum!: el rayo cruza hasta el copiloto
-    const float a2 = 1 - tramo(tiro, 0.25f, 0.45f), dx = cosf(ang), dy = sinf(ang), largo = (W + 40 - px) / fmaxf(dx, 0.3f);
+    const float a2 = 1 - tramo(tiro, 0.25f, 0.45f), dx = cosf(ang), dy = sinf(ang), largo = (X1 + 40 - px) / fmaxf(dx, 0.3f);
     const float ex = px + dx * largo, ey = py + dy * largo;
     linea(px, py, ex, ey, 9, rayo, 0.8f * a2, 18);
     linea(px, py, ex, ey, 3, BLANCO, a2);
   }
   if (tiro > 0.1f && tiro < 1.8f) {                                   // el confeti revienta donde está el copiloto
-    const float t2 = tiro - 0.1f, al = 1 - tramo(t2, 1.1f, 1.7f), bx = W - 30, by = py + sinf(ang) * (W - 30 - px);
+    const float t2 = tiro - 0.1f, al = 1 - tramo(t2, 1.1f, 1.7f), bx = X1 - 30, by = py + sinf(ang) * (X1 - 30 - px);
     for (int i = 0; i < 30; i++) {
       const float an = PI * (0.55f + 0.9f * hash(i, 1)), v = 120 + 260 * hash(i, 2);   // sale hacia atrás y hacia arriba
       Marco p2 = marco(bx + cosf(an) * v * t2, by + sinf(an) * v * t2 * 0.9f - 120 * t2 + 260 * t2 * t2, t2 * 10 * (hash(i, 3) - 0.5f) + i, 1.2f);
@@ -1567,7 +1572,7 @@ static void kame(float u) {
   }
   // ¡HA!: la bola sale hacia uno, crece hasta llenar la pantalla y deja anillos y rayas de velocidad
   const float fl = campana(sale, 0, 0.5f);
-  if (fl > 0.01f) figura(0, 0, W, H, solido(azul, 0.35f * fl), [](float, float) { return -1.f; });
+  if (fl > 0.01f) figura(X0, Y0, X1, Y1, solido(azul, 0.35f * fl), [](float, float) { return -1.f; });
   const float g = tramo(sale, 0, 0.45f), cy = by + (EY - by) * g, Rg = R * 1.6f + 480 * g * g, a = 1 - tramo(sale, 0.5f, 1.6f);
   if (a > 0.01f) { circulo(CX, cy, Rg + 30, azul, 0.8f * a, 40); circulo(CX, cy, Rg * 0.7f, BLANCO, a, 20); }
   for (int i = 0; i < 2; i++) {
@@ -1971,19 +1976,19 @@ inline void proy(const Cam &m, float x, float y, float &sx, float &sy, float &k)
 }
 // una fila de pixeles de xa a xb; los dos extremos se mezclan según cuánto los cubre (borde suave)
 void fila(int y, float xa, float xb, const Col &c, float a) {
-  if (y < 0 || y >= H || xb <= 0 || xa >= W || xb <= xa) return;
-  if (xa < 0) xa = 0;
-  if (xb > W) xb = W;
+  if (y < Y0 || y >= Y1 || xb <= X0 || xa >= X1 || xb <= xa) return;
+  if (xa < X0) xa = X0;
+  if (xb > X1) xb = X1;
   const int i0 = (int)xa, i1 = (int)xb;
   if (i0 == i1) { dib::mezclar(dib::idx(i0, y), c, (xb - xa) * a); return; }
   dib::mezclar(dib::idx(i0, y), c, (1 - (xa - i0)) * a);
   for (int x = i0 + 1; x < i1; x++) dib::mezclar(dib::idx(x, y), c, a);
-  if (i1 < W) dib::mezclar(dib::idx(i1, y), c, (xb - i1) * a);
+  if (i1 < X1) dib::mezclar(dib::idx(i1, y), c, (xb - i1) * a);
 }
 void rellenar(const float *px, const float *py, int n, const Col &c, float a) {   // polígono cualquiera, fila por fila
   float y0 = 1e9f, y1 = -1e9f;
   for (int i = 0; i < n; i++) { y0 = fminf(y0, py[i]); y1 = fmaxf(y1, py[i]); }
-  const int iy0 = (int)fmaxf(0, ceilf(y0 - 0.5f)), iy1 = (int)fminf(H - 1, floorf(y1 - 0.5f));
+  const int iy0 = (int)fmaxf(Y0, ceilf(y0 - 0.5f)), iy1 = (int)fminf(Y1 - 1, floorf(y1 - 0.5f));
   for (int iy = iy0; iy <= iy1; iy++) {
     const float yc = iy + 0.5f; float xs[16]; int m = 0;
     for (int i = 0; i < n && m < 16; i++) {
@@ -1995,7 +2000,7 @@ void rellenar(const float *px, const float *py, int n, const Col &c, float a) { 
   }
 }
 void ovalo(float cx, float cy, float rx, float ry, const Col &c, float a) {
-  for (int iy = (int)fmaxf(0, cy - ry); iy <= (int)fminf(H - 1, cy + ry); iy++) {
+  for (int iy = (int)fmaxf(Y0, cy - ry); iy <= (int)fminf(Y1 - 1, cy + ry); iy++) {
     const float d = (iy + 0.5f - cy) / ry;
     if (d > -1 && d < 1) { const float hw = rx * sqrtf(1 - d * d); fila(iy, cx - hw, cx + hw, c, a); }
   }
@@ -2170,7 +2175,7 @@ static void pantallaMapa(float lado, float u, float a) {
   ConColor cc;   // el mapa conserva sus colores en las caras blancas
   const bool dia = mapaDeDia;
   { Pintura f; f.arriba = f.abajo = dia || !mapaHay() ? (dia ? Col{233, 236, 239} : Col{8, 14, 32}) : Col{22, 29, 41}; f.y0 = 0; f.y1 = H; f.alfa = a;
-    figura(0, 0, W, H, f, [](float, float) { return -1.f; }); }
+    figura(X0, Y0, X1, Y1, f, [](float, float) { return -1.f; }); }
   const float cy = 304;
   if (mapaHay()) pintarMapa(cy, a);
   else {                                                                                                  // sin mapa: una carretera recta con sus rayas corriendo
@@ -2317,7 +2322,7 @@ static void extrasReac(float u, bool delante) {
       break;
     case GIRO_IZQ:
     case GIRO_DER: {
-      float lado = laReac == GIRO_IZQ ? -1 : 1, borde = lado > 0 ? W - 2 : 2;
+      float lado = laReac == GIRO_IZQ ? -1 : 1, borde = lado > 0 ? X1 - 2 : X0 + 2;
       if (!delante && u > 0.1f && u < 0.45f) {                       // estelas del vuelo
         for (int i = 0; i < 5; i++) {
           float y = EY - 70 + i * 35, x = CX + lado * (40 + 150 * tramo(u, 0.12f, 0.3f)) - lado * i * 6;
@@ -2693,7 +2698,7 @@ static void extrasReac(float u, bool delante) {
     case AMOR:
       if (delante) for (int i = 0; i < 5; i++) {
         float p = fmodf(u * 0.5f + i * 0.2f, 1.f);
-        corazonito(40 + i * 92 + sinf(p * 6 + i) * 12, H - 20 - p * 300, 12 + 4 * (i % 2), campana(p, 0, 1) * 0.8f);
+        corazonito(X0 + 40 + i * (X1 - X0 - 80) / 4.f + sinf(p * 6 + i) * 12, Y1 - 20 - p * (Y1 - Y0 - 70), 12 + 4 * (i % 2), campana(p, 0, 1) * 0.8f);
       }
       break;
     case MAREO:
@@ -2733,7 +2738,7 @@ static void extrasReac(float u, bool delante) {
       }
       if (delante) for (int i = 0; i < 9; i++) {
         float p = fmodf(u * (0.25f + 0.1f * hash(i, 12)) + hash(i, 13), 1.f);
-        copo(hash(i, 14) * W + sinf(u * 2 + i) * 14, -10 + p * (H + 20), 9 + 5 * hash(i, 15), u + i, campana(p, 0, 1) * (1 - tramo(u, 4.5f, 5.0f)));
+        copo(X0 + hash(i, 14) * (X1 - X0) + sinf(u * 2 + i) * 14, Y0 - 10 + p * (Y1 - Y0 + 20), 9 + 5 * hash(i, 15), u + i, campana(p, 0, 1) * (1 - tramo(u, 4.5f, 5.0f)));
       }
       break;
     case CURIOSA:
@@ -2860,7 +2865,7 @@ void gatoCalco() {
 // pega la calcomanía con el centro de la gata en (cx, cy), agrandada z veces
 void gatoPegar(float cx, float cy, float z) {
   const int x0 = (int)(cx - SOX * GS * z), y0 = (int)(cy - SOY * GS * z);
-  const int ax = x0 < 0 ? 0 : x0, ay = y0 < 0 ? 0 : y0, bx = (int)fminf(W, x0 + SW * z), by = (int)fminf(H, y0 + SH * z);
+  const int ax = x0 < X0 ? X0 : x0, ay = y0 < Y0 ? Y0 : y0, bx = (int)fminf(X1, x0 + SW * z), by = (int)fminf(Y1, y0 + SH * z);
   if (ax >= bx || ay >= by) return;
   dib::marcar(ax, ay, bx, by);
   const float iz = 1 / z;
@@ -2981,7 +2986,7 @@ static void cuadroGato(float t, const Entradas &e, float u) {
   }
   const long clave = tm * 4000L + (musica ? 2000 + (suma & 1023) : hh < 0 ? 1999 : hh * 60 + mm);
   if (clave != gClave || !gFondo) {
-    figura(0, 0, W, H, solido(FONDO[tm]), [](float, float) { return -1.f; });
+    figura(X0, Y0, X1, Y1, solido(FONDO[tm]), [](float, float) { return -1.f; });
     if (musica) {
       if (letraTxt[0]) {                                           // con letra: el nombre arriba, chico, y el renglón que va, en grande (en dos pisos si es largo)
         texto(tit, CX, 22, anchoTexto(tit, 30) > W * 0.9f ? 22 : 30, TENUE[tm]);
@@ -3057,7 +3062,7 @@ void cuadro(float t, float dt, const Entradas &e0) {
   const bool delCarro = laReac == GIRO_IZQ || laReac == GIRO_DER || laReac == BACHE || laReac == ACELERON || laReac == FRENAZO || laReac == ARRANQUE;
   if (elPaquete == GATO && (laReac == NINGUNA || delCarro)) { cuadroGato(t, e, delCarro ? t - reacDesde : -1); dib::zoom = 1; dib::blanco = false; return; }
   if (gVenia) {   // venía la gata (fondo de color en toda la pantalla): se borra todo y se manda la pantalla entera
-    gVenia = false; gClave = -1; memset(dib::fb, 0, dib::RW * dib::RH * 2); dib::marcar(0, 0, W, H); dib::todo();
+    gVenia = false; gClave = -1; memset(dib::fb, 0, dib::RW * dib::RH * 2); dib::marcar(X0, Y0, X1, Y1); dib::todo();
   }
   float vel;
   float u = t - reacDesde;

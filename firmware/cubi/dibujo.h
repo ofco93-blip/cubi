@@ -7,8 +7,16 @@
 
 namespace dib {
 
-constexpr int W = 448, H = 368;          // lo que se ve (Isa acostada)
-constexpr int RW = 368, RH = 448;        // el panel
+constexpr int W = 448, H = 368;          // las medidas de la cara (Isa acostada): todo se describe en estas medidas
+// Lo que se ve, en esas mismas medidas: en la 1.8 es justo 0..W x 0..H; en la redonda (466 x 466) sobra pantalla
+// por todos lados y va de X0..X1 x Y0..Y1 (con negativos). Lo que llena la pantalla (fondos, lluvia, luces del borde)
+// usa X0..X1 x Y0..Y1; la cara sigue en el centro (W/2, H/2), que en la redonda cae en el centro del círculo.
+extern int X0, Y0, X1, Y1;
+extern int RW, RH;                       // el panel: 368 x 448 en la 1.8, 466 x 466 en la redonda
+constexpr int MAXD = 466;                // lo más grande que puede ser un lado
+void redonda();                          // pasa todo a la pantalla redonda (llamar antes de pedir las memorias)
+// qué tan lejos del centro de la pantalla está un punto, para lo que va pegado a la orilla redonda (-1 = cuadrada)
+inline float radioPantalla() { return RW == RH ? RW / 2.f : -1; }
 extern uint16_t *fb;
 extern uint8_t giro;                     // 0 o 1: hacia qué lado está acostada
 
@@ -28,6 +36,7 @@ inline void marcar(int x0, int y0, int x1, int y1) {
 }
 
 inline uint32_t idx(int x, int y) {
+  x -= X0; y -= Y0;
   return giro ? (uint32_t)(RH - 1 - x) * RW + y : (uint32_t)x * RW + (RW - 1 - y);
 }
 
@@ -130,8 +139,8 @@ void figura1(float bx0, float by0, float bx1, float by1, const Pintura &p0, F d)
   Pintura p = p0;
   if (blanco) { p.arriba = sinColor(p.arriba); p.abajo = sinColor(p.abajo); p.haloCol = sinColor(p.haloCol); }
   float m = p.halo + 1.5f;
-  int x0 = (int)fmaxf(0, floorf(bx0 - m)), y0 = (int)fmaxf(0, floorf(by0 - m));
-  int x1 = (int)fminf(W, ceilf(bx1 + m)), y1 = (int)fminf(H, ceilf(by1 + m));
+  int x0 = (int)fmaxf(X0, floorf(bx0 - m)), y0 = (int)fmaxf(Y0, floorf(by0 - m));
+  int x1 = (int)fminf(X1, ceilf(bx1 + m)), y1 = (int)fminf(Y1, ceilf(by1 + m));
   if (x0 >= x1 || y0 >= y1) return;
   marcar(x0, y0, x1, y1);
   const float inv = 1.f / fmaxf(1.f, p.y1 - p.y0);
@@ -205,14 +214,15 @@ void resplandor(float bx0, float by0, float bx1, float by1, const Col &c0, float
   const Col c = blanco ? sinColor(c0) : c0;
   const float z = zoom, iz = 1.f / z, ox = zx - zx * iz, oy = zy - zy * iz, ih = 1.f / halo;
   constexpr int P = 4;
-  int x0 = (int)fmaxf(0, floorf(zx + (bx0 - zx) * z - halo)) & ~(P - 1), y0 = (int)fmaxf(0, floorf(zy + (by0 - zy) * z - halo)) & ~(P - 1);
-  const int x1 = (int)fminf(W, ceilf(zx + (bx1 - zx) * z + halo)), y1 = (int)fminf(H, ceilf(zy + (by1 - zy) * z + halo));
+  int x0 = (int)fmaxf(X0, floorf(zx + (bx0 - zx) * z - halo)), y0 = (int)fmaxf(Y0, floorf(zy + (by0 - zy) * z - halo));
+  x0 = X0 + ((x0 - X0) & ~(P - 1)); y0 = Y0 + ((y0 - Y0) & ~(P - 1));
+  const int x1 = (int)fminf(X1, ceilf(zx + (bx1 - zx) * z + halo)), y1 = (int)fminf(Y1, ceilf(zy + (by1 - zy) * z + halo));
   if (x0 >= x1 || y0 >= y1) return;
   marcar(x0, y0, x1, y1);
   const int ny = (y1 - y0 + P - 1) / P + 1;
   const int cr = (int)lim(c.r, 0, 255) >> 3, cg = (int)lim(c.g, 0, 255) >> 2, cz = (int)lim(c.b, 0, 255) >> 3;   // el color, ya en 5-6-5
   const float a64 = alfa * 64;
-  float ca[H / P + 2], cb[H / P + 2], *izq = ca, *der = cb;                       // las distancias de dos columnas vecinas
+  float ca[MAXD / P + 2], cb[MAXD / P + 2], *izq = ca, *der = cb;                       // las distancias de dos columnas vecinas
   auto columna = [&](float *v, int x) { for (int j = 0; j < ny; j++) v[j] = d(ox + x * iz, oy + (y0 + j * P) * iz) * z; };
   columna(izq, x0);
   for (int tx = x0; tx < x1; tx += P) {

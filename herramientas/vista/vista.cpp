@@ -11,7 +11,7 @@
 using namespace caras;
 // "vista medir": cuánto tarda cada baile por cuadro (con voz y sin voz). En el ESP32 es ~60 veces más lento.
 static int medir() {
-  static uint16_t mem[dib::RW * dib::RH];
+  static uint16_t mem[dib::MAXD * dib::MAXD];
   dib::fb = mem; dib::giro = 0;
   iniciar(7);
   for (int b : {REPOSO, HABLA}) {
@@ -39,7 +39,8 @@ int main(int argc, char **argv) {
   if (argc > 1 && std::string(argv[1]) == "medir") return medir();
   if (argc < 4) return 1;
   std::string que = argv[1]; float seg = atof(argv[2]);
-  static uint16_t mem[dib::RW * dib::RH];
+  static uint16_t mem[dib::MAXD * dib::MAXD];
+  if (getenv("REDONDA")) dib::redonda();   // REDONDA=1: la pantalla redonda de 466 (Gigi en la 1.75)
   dib::fb = mem; dib::giro = 0;
   FILE *o = fopen(argv[3], "wb");
   iniciar(7);
@@ -95,7 +96,8 @@ int main(int argc, char **argv) {
   if (que == "maps_recto") { mostrarGrados(1200, 4.5f, true); mostrarCalle("Autopista Norte"); }
   if (que == "altura") { cuadro(0, dt, Entradas()); reaccion(SORPRESA); mostrarGrados(2600, 4, true); }   // subimos a 2.600 m
   if (que == "clima") { cuadro(0, dt, Entradas()); reaccion(SOL); mostrarGrados(28, duracion(SOL)); }   // "Cubi, ¿cómo está el clima?"
-  static uint8_t rgb[dib::W * dib::H * 3];
+  const int VW = dib::X1 - dib::X0, VH = dib::Y1 - dib::Y0;   // lo que se ve
+  static uint8_t rgb[dib::MAXD * dib::MAXD * 3];
   for (int i = 0; i < (int)(seg * FPS); i++) {
     float t = i * dt;
     Entradas e;
@@ -127,11 +129,13 @@ int main(int argc, char **argv) {
     if (!avisos.empty() && i % (int)FPS == 0) { const Aviso &v = avisos[std::min(avisos.size() - 1, (size_t)(i / (int)FPS))]; mapaPos(v.x, v.y, v.r); mapaVel(28); mostrarGrados(v.m, 3, true); mostrarDestino(4300 - i / (int)FPS * 8, "5:42"); }   // un aviso por segundo, como el celular
     if (mapaDemo && i % 25 == 0) mapaPos(4 * sinf(t), -150 + t * 14, que == "maps_der" ? 25 * t / 4.5f : que == "maps_izq" ? -25 * t / 4.5f : 0);   // va andando
     dib::empezar(); if (que == "actualizando") progreso(t, t / seg); else cuadro(t, dt, e); dib::terminar();
-    for (int y = 0; y < dib::H; y++) for (int x = 0; x < dib::W; x++) {
-      uint16_t p = mem[dib::idx(x, y)]; uint8_t *q = rgb + (y * dib::W + x) * 3;
+    for (int y = 0; y < VH; y++) for (int x = 0; x < VW; x++) {
+      uint16_t p = mem[dib::idx(x + dib::X0, y + dib::Y0)]; uint8_t *q = rgb + (y * VW + x) * 3;
       q[0] = ((p >> 11) & 31) * 255 / 31; q[1] = ((p >> 5) & 63) * 255 / 63; q[2] = (p & 31) * 255 / 31;
+      const float dx = x + 0.5f - VW / 2.f, dy = y + 0.5f - VH / 2.f;
+      if (dib::radioPantalla() > 0 && dx * dx + dy * dy > VW * VW / 4.f) q[0] = q[1] = q[2] = 40;   // fuera del círculo: gris
     }
-    fwrite(rgb, 1, sizeof rgb, o);
+    fwrite(rgb, 1, VW * VH * 3, o);
   }
   fclose(o);
 }

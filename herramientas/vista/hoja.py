@@ -2,7 +2,7 @@
 # Uso: python3 hoja.py <vista> <carpeta_salida> [caras...]
 import sys, os, subprocess
 from PIL import Image
-W, H = 448, 368
+W, H = (466, 466) if os.environ.get("REDONDA") else (448, 368)   # REDONDA=1: la pantalla redonda
 vista, sal, pedidas = sys.argv[1], sys.argv[2], sys.argv[3:]
 os.makedirs(sal, exist_ok=True)
 hoja = []
