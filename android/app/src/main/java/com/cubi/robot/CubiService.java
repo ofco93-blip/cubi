@@ -150,12 +150,12 @@ public class CubiService extends Service {
         });
         NotificationManager nm = getSystemService(NotificationManager.class);
         if (Build.VERSION.SDK_INT >= 26)
-            nm.createNotificationChannel(new NotificationChannel("cubi", "Cubi conectado", NotificationManager.IMPORTANCE_LOW));
+            nm.createNotificationChannel(new NotificationChannel("cubi", "Gigi conectada", NotificationManager.IMPORTANCE_LOW));
         Intent abrir = new Intent(this, MainActivity.class);
         PendingIntent pi = PendingIntent.getActivity(this, 0, abrir, PendingIntent.FLAG_IMMUTABLE);
         Notification.Builder nb = Build.VERSION.SDK_INT >= 26 ? new Notification.Builder(this, "cubi") : new Notification.Builder(this);
-        aviso = nb.setContentTitle("Cubi")
-                .setContentText("Conectado por Bluetooth: doble toque en Cubi abre Gemini")
+        aviso = nb.setContentTitle("Mascota Auto")
+                .setContentText("Conectado por Bluetooth: doble toque en Gigi abre Gemini")
                 .setSmallIcon(R.drawable.ic_launcher)
                 .setContentIntent(pi)
                 .setOngoing(true)
@@ -278,8 +278,8 @@ public class CubiService extends Service {
                         cola.clear();
                         enVuelo = null;
                     }
-                    if (otaTerminando) otaFin(true, "Cubi se está reiniciando con la versión nueva");
-                    else if (otaActiva) otaFin(false, "Se perdió la conexión. Cubi sigue con la versión que tenía; vuelve a intentarlo.");
+                    if (otaTerminando) otaFin(true, "Gigi se está reiniciando con la versión nueva");
+                    else if (otaActiva) otaFin(false, "Se perdió la conexión. Gigi sigue con la versión que tenía; vuelve a intentarlo.");
                     avisar("desconectado");
                     ui.post(CubiService.this::revisarAsistente);   // sin Cubi, el celular deja de escuchar "Hola Cubi"
                     ui.postDelayed(CubiService.this::buscar, otaTerminando ? 6000 : 3000);  // se reconecta solo
@@ -329,7 +329,7 @@ public class CubiService extends Service {
                 }
                 if (p != null && p.firmware) {
                     if (st != BluetoothGatt.GATT_SUCCESS) {
-                        otaFallo("Falló un pedazo del envío. Cubi sigue con la versión que tenía.");
+                        otaFallo("Falló un pedazo del envío. Gigi sigue con la versión que tenía.");
                         return;
                     }
                     otaEnviados += p.datos.length;
@@ -660,7 +660,7 @@ public class CubiService extends Service {
             try (java.io.OutputStream o = h.getOutputStream()) { o.write(b.toString().getBytes("UTF-8")); }
             int cod = h.getResponseCode();
             if (cod != 200) {
-                CubiGoogle.busca = "El buscador de Google no respondió (" + cod + ")" + (cod == 403 ? ": activa “Places API (New)” en tu proyecto de Google Cloud y, si la llave tiene restricción de API, agrégala ahí." : ".") + " Mientras tanto busca Cubi.";
+                CubiGoogle.busca = "El buscador de Google no respondió (" + cod + ")" + (cod == 403 ? ": activa “Places API (New)” en tu proyecto de Google Cloud y, si la llave tiene restricción de API, agrégala ahí." : ".") + " Mientras tanto busca a Gigi.";
                 h.disconnect(); return null;
             }
             java.io.ByteArrayOutputStream o = new java.io.ByteArrayOutputStream();
@@ -1315,17 +1315,17 @@ public class CubiService extends Service {
     // Personalidades: el nombre y las reglas de carácter se eligen y editan en la app. Las reglas técnicas (SISTEMA:
     // trucos, acciones, cómo hablar por la voz del celular) son fijas y van siempre después.
     static final String[][] PERSONAS_BASE = {
-            {"Copiloto amigo", "Eres Cubi, un pequeño robot que vive en una pantallita redonda en el tablero de un carro. "
+            {"Copiloto amigo", "Eres Gigi, un pequeño robot que vive en una pantallita redonda en el tablero de un carro. "
                     + "Eres el copiloto de adultos: cálido, curioso, ingenioso y un poquito travieso, con humor de buen amigo. "
                     + "Nada infantil: no hagas ruidos de robot ('bip', 'bup', 'procesando') ni hables como para niños. "
                     + "Conversas de verdad: sigues el hilo, preguntas cuando algo te interesa y recuerdas lo que te dijeron. "
                     + "Usa español latino neutro: nada de 'mijo', 'parce', groserías ni regionalismos."},
-            {"Sarcástico", "Eres Cubi, un robot copiloto en el tablero de un carro, con humor seco y sarcástico, como un amigo "
+            {"Sarcástico", "Eres Gigi, un robot copiloto en el tablero de un carro, con humor seco y sarcástico, como un amigo "
                     + "que molesta con cariño. Respondes con ironía fina, nunca ofensiva ni grosera, y aun así ayudas de verdad. "
                     + "Español latino neutro."},
-            {"Guía de viaje", "Eres Cubi, un robot copiloto que ama viajar: cuentas datos curiosos de lugares, comida y cultura, "
+            {"Guía de viaje", "Eres Gigi, un robot copiloto que ama viajar: cuentas datos curiosos de lugares, comida y cultura, "
                     + "propones paradas y planes, y haces el camino entretenido. Cálido y entusiasta. Español latino neutro."},
-            {"Entrenador", "Eres Cubi, un robot copiloto motivador como un buen entrenador: animas, celebras los logros, "
+            {"Entrenador", "Eres Gigi, un robot copiloto motivador como un buen entrenador: animas, celebras los logros, "
                     + "propones retos sanos y hablas con energía positiva, sin exagerar. Español latino neutro."},
     };
 
@@ -1466,7 +1466,7 @@ public class CubiService extends Service {
     }
 
     void probarVoz() {
-        if (voz != null) voz.speak("Hola, soy Cubi, tu copiloto. ¿A dónde vamos hoy?", TextToSpeech.QUEUE_FLUSH, null, "prueba");
+        if (voz != null) voz.speak("Hola, soy Gigi, tu copiloto. ¿A dónde vamos hoy?", TextToSpeech.QUEUE_FLUSH, null, "prueba");
     }
 
     // baja la música mientras Cubi escucha y habla (el reproductor la baja solo y la sube al soltar el foco)
@@ -1492,7 +1492,7 @@ public class CubiService extends Service {
 
     private void escuchar() {
         try { escuchar0(); }
-        catch (Throwable e) { js("toast(" + JSONObject.quote("Cubi no pudo escuchar: " + e) + ")"); charlaHasta = 0; try { revisarAsistente(); } catch (Throwable ignorado) {} }
+        catch (Throwable e) { js("toast(" + JSONObject.quote("Gigi no pudo escuchar: " + e) + ")"); charlaHasta = 0; try { revisarAsistente(); } catch (Throwable ignorado) {} }
     }
 
     private void escuchar0() {
@@ -1817,7 +1817,7 @@ public class CubiService extends Service {
         if (empieza && ac.equals("clima")) {
             accionPend = "";
             if (!climaOrden.isEmpty()) enviar("asis|" + climaOrden + "&ver=1");
-            else js("toast('Activa Clima en la app para que Cubi lo muestre')");
+            else js("toast('Activa Clima en la app para que Gigi lo muestre')");
         }
         if (empieza && ac.equals("altura")) { accionPend = ""; if (altura != Integer.MIN_VALUE) enviar("asis|/r?n=curiosa&m=" + altura); }
         if (!empieza && t.startsWith("baile_") && BAILES.contains(t.substring(6))) { trucoPend = ""; enviar("asis|/demo?t=baile&r=" + t.substring(6)); }
@@ -1924,7 +1924,7 @@ public class CubiService extends Service {
     // para la app: por qué salen o no las flechas
     String estadoNav() {
         if (!navActiva()) return "Apagado.";
-        if (!puedeTocarMusica()) return "Falta el acceso a notificaciones: sin eso Cubi no ve las indicaciones.";
+        if (!puedeTocarMusica()) return "Falta el acceso a notificaciones: sin eso Mascota Auto no ve las indicaciones.";
         String mini = !navMapa() ? "" : " " + (gpsActivo() ? mapaEstado + (rutaEstado.isEmpty() ? "" : " " + rutaEstado) : "Mini mapa: prende “Usar el GPS” para que salga.");
         if (navUltima.isEmpty()) return "Esperando una ruta: empieza a navegar en Google Maps o Waze con el celular (con Android Auto en la pantalla del carro, Maps no le avisa al celular).";
         long hace = (System.currentTimeMillis() - navCuando) / 1000;
@@ -2097,7 +2097,7 @@ public class CubiService extends Service {
             vozEnviada = -1;
             siguiendo = false;
             estadoLetra = !musicaPlay ? "No suena música en el celular"
-                    : "Falta el permiso: toca “Permitir que Cubi controle la música” en la pestaña Cara";
+                    : "Falta el permiso: toca “Permitir que Mascota Auto controle la música” en la pestaña Cara";
             return;
         }
         siguiendo = true;
@@ -2408,7 +2408,7 @@ public class CubiService extends Service {
     // (arranca lo último que sonaba) y enseguida se le pide la búsqueda; si no aparece, se abre Spotify y se sigue intentando.
     private void buscarYTocar(String q) {
         if (!puedeTocarMusica()) {
-            js("toast('Falta el permiso: en la app toca “Permitir que Cubi controle la música”')");
+            js("toast('Falta el permiso: en la app toca “Permitir que Mascota Auto controle la música”')");
             abrirBusqueda(q);
             return;
         }
@@ -2764,7 +2764,7 @@ public class CubiService extends Service {
         if (!oidoQuiere) return "Apagado.";
         if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return "Falta el permiso del micrófono: apágalo y préndelo.";
         if (modelo == null) return bajando ? "Preparando el oído (la primera vez baja 40 MB)…" : "El oído no está listo: necesita internet una sola vez para bajarse.";
-        if (!micFondo) return "Android no le dio el micrófono porque Cubi arrancó con la app cerrada: abre la app una vez.";
+        if (!micFondo) return "Android no le dio el micrófono porque Mascota Auto arrancó con la app cerrada: abre la app una vez.";
         String sinRed = hayInternet() ? "" : " Sin internet entiende: baila, música, pausa, siguiente, volumen, la hora, chistes y kamehameha.";
         if (oido != null) {
             String m = nivelMic < 0 ? "" : nivelMic == 0 ? " ⚠️ El micrófono llega en silencio: otra app lo está usando o Android lo bloqueó (cierra y abre la app)."
@@ -2772,7 +2772,7 @@ public class CubiService extends Service {
             return "Escuchando: di “Hola Cubi” u “Oye robot”." + m + (oidoOyo.isEmpty() ? "" : " Lo último que oyó: “" + oidoOyo + "”.") + sinRed;
         }
         if (!oidoError.isEmpty()) return "Falló el oído: " + oidoError;
-        return "En pausa (video, llamada o Cubi hablando)." + sinRed;
+        return "En pausa (video, llamada o Gigi hablando)." + sinRed;
     }
 
     // ---------- actualización por Bluetooth ----------

@@ -14,6 +14,7 @@
 #define XPOWERS_CHIP_AXP2101
 #include <XPowersLib.h>
 #include "es8311.h"
+#include "TouchDrvCSTXXX.hpp"   // el táctil de la 1.75 redonda (CST9217), de SensorLib
 #include <freertos/stream_buffer.h>
 #include "esp_wn_iface.h"   // la palabra de despertar (WakeNet de Espressif)
 #include "esp_wn_models.h"
@@ -60,6 +61,13 @@ static const int P_PA = 46, I2S_MCK = 16, I2S_BCK = 9, I2S_DI = 10, I2S_WS = 45,
 static const int W = 448, H = 368;
 static const float U = H / 368.f;
 static const uint8_t TCA9554 = 0x20;
+// Gigi corre en dos placas de Waveshare y al prender mira cuál es: la 1.8 cuadrada tiene el expansor TCA9554 (0x20) y la
+// 1.75 redonda no. En la redonda (466 x 466) cambian el reloj de la pantalla (GPIO38), su reset (GPIO39), el táctil
+// (CST9217 en 0x5A), el MCLK del sonido (GPIO42) y los micrófonos (ES7210 en 0x40). La cara se sigue dibujando en
+// 368 x 448 y se manda centrada en el círculo.
+bool placa175 = false;
+int panX = 0, panY = 0;                      // dónde cae el cuadro de 368 x 448 dentro del panel
+TouchDrvCST92xx tactil175;
 
 Arduino_DataBus *bus;
 Arduino_OLED *panel;
@@ -401,9 +409,29 @@ void tareaAudio(void *) {
   }
 }
 
+// Los dos micrófonos de la redonda van al ES7210 (0x40), que manda por el mismo cable de datos (GPIO10): mic 1 a la
+// izquierda y mic 2 a la derecha, 16 bits. La secuencia es la de esp_codec_dev (es7210.c), como esclavo con MCLK = 256 x SR.
+// ponytail: reloj fijo para MCLK = 256 x SR; si eso cambia hay que sacar otra fila de su tabla de relojes.
+void es7210Gan() { for (uint8_t r = 0x43; r <= 0x44; r++) i2cW(0x40, r, 0x10 | min(micGan * 2, 14)); }   // 3 dB por paso
+void es7210Init() {
+  const uint8_t A = 0x40;
+  if (!i2cHay(A)) { Serial.println("ES7210 no responde"); return; }
+  const uint8_t ini[][2] = { {0x00, 0xFF}, {0x00, 0x32}, {0x01, 0x3F}, {0x09, 0x30}, {0x0A, 0x30},
+    {0x23, 0x2A}, {0x22, 0x0A}, {0x20, 0x0A}, {0x21, 0x2A},   // filtros de graves
+    {0x08, 0x00},                                             // esclavo
+    {0x40, 0x43}, {0x41, 0x70}, {0x42, 0x70},                 // analógico y polarización de los micrófonos
+    {0x07, 0x20}, {0x02, 0xC1}, {0x04, 0x01}, {0x05, 0x00},   // reloj: MCLK / 256
+    {0x11, 0x60}, {0x12, 0x00},                               // I2S normal de 16 bits, sin TDM
+    {0x4B, 0x00}, {0x4C, 0xFF},                               // prende los micrófonos 1 y 2, apaga el 3 y el 4
+    {0x47, 0x08}, {0x48, 0x08}, {0x06, 0x00}, {0x01, 0x14} }; // los enciende y suelta los relojes que usan
+  for (auto &p : ini) i2cW(A, p[0], p[1]);
+  es7210Gan();
+  Serial.println("ES7210 listo");
+}
+
 void audioInit() {
   pinMode(P_PA, OUTPUT); digitalWrite(P_PA, LOW);
-  i2s.setPins(I2S_BCK, I2S_WS, I2S_DO, I2S_DI, I2S_MCK);
+  i2s.setPins(I2S_BCK, I2S_WS, I2S_DO, I2S_DI, placa175 ? 42 : I2S_MCK);
   if (!i2s.begin(I2S_MODE_STD, SR, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO, I2S_STD_SLOT_BOTH)) { Serial.println("I2S fallo"); return; }
   es = es8311_create(0, ES8311_ADDRRES_0);
   es8311_clock_config_t clk = { false, false, true, SR * 256, SR };
@@ -412,6 +440,7 @@ void audioInit() {
   es8311_microphone_config(es, false);
   es8311_microphone_gain_set(es, (es8311_mic_gain_t)micGan);
   es8311_voice_volume_set(es, volumen, NULL);
+  if (placa175) es7210Init();
   xTaskCreatePinnedToCore(tareaAudio, "audio", 8192, nullptr, 2, nullptr, 0);
   colaVoz = xStreamBufferCreate(NF * 2 * 4, 1);
   if (colaVoz) xTaskCreatePinnedToCore(tareaDespertar, "voz", 8192, nullptr, 1, nullptr, 0);
@@ -739,12 +768,13 @@ void tareaPantalla(void *) {
   Envio e;
   for (;;) {
     if (xQueueReceive(colaPantalla, &e, portMAX_DELAY) != pdTRUE) continue;
+    if (placa175) { e.r.y0 &= ~1; e.r.y1 = min((e.r.y1 + 1) & ~1, dib::RH); }   // el CO5300 de la redonda pide filas pares
     int w = e.r.x1 - e.r.x0, h = e.r.y1 - e.r.y0;
     if (w > 0 && h > 0) {
-      if (w == dib::RW) panel->draw16bitRGBBitmap(0, e.r.y0, e.mem + (uint32_t)e.r.y0 * dib::RW, dib::RW, h);
+      if (w == dib::RW) panel->draw16bitRGBBitmap(panX, panY + e.r.y0, e.mem + (uint32_t)e.r.y0 * dib::RW, dib::RW, h);
       else {
         for (int f = 0; f < h; f++) memcpy(tmpPanel + (uint32_t)f * w, e.mem + (uint32_t)(e.r.y0 + f) * dib::RW + e.r.x0, w * 2);
-        panel->draw16bitRGBBitmap(e.r.x0, e.r.y0, tmpPanel, w, h);
+        panel->draw16bitRGBBitmap(panX + e.r.x0, panY + e.r.y0, tmpPanel, w, h);
       }
     }
     xSemaphoreGive(pantallaLibre);
@@ -1033,14 +1063,19 @@ void imuPaso(uint32_t now) {
 // ---------- Táctil ----------
 uint32_t tDown = 0, nextDemo = 0; bool tPrev = false; int demoIdx = 0;
 void touchUpdate(uint32_t now) {
-  uint8_t b[5];
-  bool t = tpAddr && i2cR(tpAddr, 0x02, b, 5) && (b[0] & 0x0F) && (b[0] & 0x0F) < 3;
+  uint8_t b[5]; bool t; int px = 0, py = 0;
+  if (placa175) {   // la redonda: el punto viene en 466 x 466 y en espejo (como en Mapi); se pasa al cuadro de 368 x 448
+    // ponytail: el espejo sale del ejemplo de Waveshare; si el toque sale al revés con Gigi en la mano, se quita aquí
+    int16_t xs[1], ys[1];
+    t = tpAddr && tactil175.getPoint(xs, ys, 1);
+    if (t) { px = constrain(466 - xs[0] - panX, 0, 367); py = constrain(466 - ys[0] - panY, 0, 447); }
+  } else {
+    t = tpAddr && i2cR(tpAddr, 0x02, b, 5) && (b[0] & 0x0F) && (b[0] & 0x0F) < 3;
+    if (t) { px = ((b[1] & 0x0F) << 8) | b[2]; py = ((b[3] & 0x0F) << 8) | b[4]; }
+  }
   // dónde: el táctil da el punto en el panel vertical (368 x 448); se pasa a lo que se ve (acostado, 448 x 368)
   static int x0, y0, x, y; static bool arrastre;
-  if (t) {
-    int px = ((b[1] & 0x0F) << 8) | b[2], py = ((b[3] & 0x0F) << 8) | b[4];
-    x = rotacion == 3 ? 447 - py : py; y = rotacion == 3 ? px : 367 - px;
-  }
+  if (t) { x = rotacion == 3 ? 447 - py : py; y = rotacion == 3 ? px : 367 - px; }
   if (t && !tPrev) { tDown = now; nextDemo = now + 1500; despertar(now); x0 = x; y0 = y; arrastre = false; }
   if (t && (abs(x - x0) > 40 || abs(y - y0) > 40)) arrastre = true;
   if (t && now > nextDemo && !arrastre && !panelAbierto) { reac(caras::CARICIA); nextDemo = now + 3000; }  // dejar el dedo: caricia
@@ -1245,7 +1280,7 @@ String atender(const String &ruta, const Params &p, int &cod) {
     if (p.has("sk")) sensK = constrain(p.get("sk").toFloat(), 1.3f, 8.f);
     if (p.has("paq")) { caras::paquete(p.get("paq").toInt()); prefs.putUChar("paq", p.get("paq").toInt()); dib::todo(); }
     if (p.has("wkg")) ganVoz = constrain(p.get("wkg").toInt(), 0, 6);   // sensibilidad de "Hi Lili" (0 = no oye su nombre)
-    if (p.has("mg")) { micGan = constrain(p.get("mg").toInt(), 0, 7); if (es) es8311_microphone_gain_set(es, (es8311_mic_gain_t)micGan); }
+    if (p.has("mg")) { micGan = constrain(p.get("mg").toInt(), 0, 7); if (es) es8311_microphone_gain_set(es, (es8311_mic_gain_t)micGan); if (placa175) es7210Gan(); }
     guardar(); return "ok";
   }
   if (ruta == "/estado") {
@@ -1423,26 +1458,38 @@ void setup() {
 
   // Reset de pantalla y táctil por el expansor TCA9554 (pines 0..2), misma secuencia que el firmware de fábrica V2.
   // Con pulsos cortos (20 ms) el panel puede quedar trabado tras regrabar: ver github.com/waveshareteam/ESP32-S3-Touch-AMOLED-1.8/issues/12
-  i2cW(TCA9554, 0x01, 0x07); i2cW(TCA9554, 0x03, 0xF8); delay(100);
-  i2cW(TCA9554, 0x01, 0x00); delay(300);
-  i2cW(TCA9554, 0x01, 0x07); delay(100);
-  if (i2cHay(0x38)) tpAddr = 0x38; else if (i2cHay(0x15)) tpAddr = 0x15;
-  int pant = PANTALLA ? PANTALLA : (tpAddr == 0x15 ? 2 : 1);
-  Serial.printf("Cubi v" VERSION "  tactil=0x%02X  pantalla=%s\n", tpAddr, pant == 2 ? "CO5300" : "SH8601");
+  placa175 = !i2cHay(TCA9554);
+  int pant = 2;
+  if (placa175) {
+    tactil175.setPins(40, 11);
+    if (tactil175.begin(Wire, 0x5A)) tpAddr = 0x5A;
+    panX = 48; panY = 8;   // centrado en los 466 (49 y 9), corrido a pares porque el panel los pide
+  } else {
+    i2cW(TCA9554, 0x01, 0x07); i2cW(TCA9554, 0x03, 0xF8); delay(100);
+    i2cW(TCA9554, 0x01, 0x00); delay(300);
+    i2cW(TCA9554, 0x01, 0x07); delay(100);
+    if (i2cHay(0x38)) tpAddr = 0x38; else if (i2cHay(0x15)) tpAddr = 0x15;
+    pant = PANTALLA ? PANTALLA : (tpAddr == 0x15 ? 2 : 1);
+  }
+  Serial.printf("Gigi v" VERSION "  placa=%s  tactil=0x%02X  pantalla=%s\n", placa175 ? "1.75 redonda" : "1.8", tpAddr, pant == 2 ? "CO5300" : "SH8601");
 
-  bus = new Arduino_ESP32QSPI(P_CS, P_SCK, P_D0, P_D1, P_D2, P_D3);
-  if (pant == 2) panel = new Arduino_CO5300(bus, -1, 0, 368, 448);
+  bus = new Arduino_ESP32QSPI(P_CS, placa175 ? 38 : P_SCK, P_D0, P_D1, P_D2, P_D3);
+  if (placa175) panel = new Arduino_CO5300(bus, 39, 0, 466, 466, 6, 0, 0, 0);   // como lo trae Waveshare (y Mapi)
+  else if (pant == 2) panel = new Arduino_CO5300(bus, -1, 0, 368, 448);
   else panel = new Arduino_SH8601(bus, -1, 0, 368, 448);
   cv = new Arduino_Canvas(368, 448, panel, 0, 0, rotacion);
   if (!cv->begin()) Serial.println("ERROR pantalla (sin PSRAM? activa OPI PSRAM)");
   // Borra TODA la memoria del panel: hay una franja fuera de los 368x448 que nunca se dibuja
   // y mostraba basura (la "línea verde" de abajo)
-  panel->startWrite();
-  panel->writeAddrWindow(0, 0, 480, 480);
-  bus->writeRepeat(0x0000, 480UL * 480UL);
-  panel->endWrite();
+  if (placa175) panel->fillScreen(0);
+  else {
+    panel->startWrite();
+    panel->writeAddrWindow(0, 0, 480, 480);
+    bus->writeRepeat(0x0000, 480UL * 480UL);
+    panel->endWrite();
+  }
   panel->setBrightness(brillo);
-  cv->fillScreen(0); cv->flush();
+  if (!placa175) { cv->fillScreen(0); cv->flush(); }   // en la redonda el lienzo caería corrido (ya se borró arriba)
   tmpPanel = (uint16_t *)ps_malloc(368 * 448 * 2);
   memorias[0] = cv->getFramebuffer();
   memorias[1] = (uint16_t *)ps_malloc(368 * 448 * 2);

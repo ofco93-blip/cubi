@@ -84,11 +84,11 @@ final class CubiGoogle {
     static void aceptar(Activity a) {
         try {
             poner(a);
-            NavigationApi.showTermsAndConditionsDialog(a, "Cubi", ok -> {
+            NavigationApi.showTermsAndConditionsDialog(a, "Mascota Auto", ok -> {
                 estado = ok ? "" : "Google: falta aceptar los términos.";
                 if (ok) preparar(a);
             });
-        } catch (Throwable t) { estado = puesta.isEmpty() || puesta.equals(llave(a)) ? "Google: " + t : "Google: para cambiar la llave, cierra Cubi del todo y vuelve a abrirla."; }
+        } catch (Throwable t) { estado = puesta.isEmpty() || puesta.equals(llave(a)) ? "Google: " + t : "Google: para cambiar la llave, cierra Mascota Auto del todo y vuelve a abrirla."; }
     }
 
     // la voz de la navegación: 0 todo, 1 solo alertas, 2 callada (el botón del parlante en la pantalla del carro)

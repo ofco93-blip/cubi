@@ -108,7 +108,7 @@ public class CubiCarro extends CarAppService {
             super(c);
             new Thread(() -> {
                 java.util.List<String[]> r = null; String a = "";
-                try { SpotifyApi sp = new SpotifyApi(c); if (!sp.conectado()) a = "Conecta Spotify en la app de Cubi (pestaña Voz, Conexiones)."; else r = sp.listas(); }
+                try { SpotifyApi sp = new SpotifyApi(c); if (!sp.conectado()) a = "Conecta Spotify en la app Mascota Auto (pestaña Voz, Conexiones)."; else r = sp.listas(); }
                 catch (Exception e) { a = "No pude traer tus listas (¿hay internet?)."; }
                 final java.util.List<String[]> rr = r == null ? new java.util.ArrayList<>() : r; final String aa = a;
                 new Handler(Looper.getMainLooper()).post(() -> { ls = rr; aviso = aa; invalidate(); });
@@ -364,16 +364,16 @@ public class CubiCarro extends CarAppService {
             ItemList.Builder lb = new ItemList.Builder();
             if (CubiGoogle.puede(getCarContext())) {                    // con llave de Google: cuál de los dos mapas sale
                 boolean g = CubiGoogle.elegido(getCarContext());
-                lb.addItem(fila("Mapa", g ? "Google (cambia al volver a conectar el carro)" : "El de Cubi (cambia al volver a conectar el carro)", () -> p.edit().putBoolean("mapaGoogle", !g).apply()));
+                lb.addItem(fila("Mapa", g ? "Google (cambia al volver a conectar el carro)" : "El propio (cambia al volver a conectar el carro)", () -> p.edit().putBoolean("mapaGoogle", !g).apply()));
             }
             ItemList lista = lb
                     .addItem(new Row.Builder().setTitle("Buscar destino").addText("Traza la ruta y la abre en Google Maps").setOnClickListener(() -> getScreenManager().push(new Buscar(getCarContext()))).build())
-                    .addItem(fila("Personaje en esta pantalla", zelda ? "Zelda" : "Cubi", () -> p.edit().putBoolean("carroZelda", !zelda).apply()))
+                    .addItem(fila("Personaje en esta pantalla", zelda ? "Zelda" : "Gigi", () -> p.edit().putBoolean("carroZelda", !zelda).apply()))
                     .addItem(fila("Fondo de Zelda", FONDOS[fondo + 1], () -> p.edit().putInt("carroFondo", fondo >= 4 ? -1 : fondo + 1).apply()))
                     .addItem(fila("Tamaño de Zelda junto al mapa", TAMANOS[p.getInt("carroZeldaTam", 0) % 3], () -> p.edit().putInt("carroZeldaTam", (p.getInt("carroZeldaTam", 0) + 1) % 3).apply()))
                     .addItem(fila("Vista", VISTAS[vista], () -> p.edit().putInt("carroVista", (vista + 1) % 3).apply()))
                     .build();
-            return new ListTemplate.Builder().setTitle("Opciones de Cubi").setHeaderAction(Action.BACK).setSingleList(lista).build();
+            return new ListTemplate.Builder().setTitle("Opciones de Mascota Auto").setHeaderAction(Action.BACK).setSingleList(lista).build();
         }
 
         private Row fila(String titulo, String valor, Runnable alTocar) {
@@ -497,10 +497,10 @@ public class CubiCarro extends CarAppService {
                 float cy = (y0 + y1 - pie) / 2;
                 texto(c, String.format(Locale.US, "%d:%02d", cal.get(java.util.Calendar.HOUR_OF_DAY), cal.get(java.util.Calendar.MINUTE)), x0 + w / 2, cy + 4 * u, 28 * u, TINTA, true, Paint.Align.CENTER, w);
                 if (s != null && s.kmh >= 3) texto(c, Math.round(s.kmh) + " km/h", x0 + w / 2, cy + 17 * u, 7 * u, GRIS, false, Paint.Align.CENTER, w);
-                if (s == null) texto(c, "Abre la app de Cubi en el celular", x0 + w / 2, cy + 20 * u, 5.5f * u, GRIS, false, Paint.Align.CENTER, w - 8 * u);
+                if (s == null) texto(c, "Abre la app Mascota Auto en el celular", x0 + w / 2, cy + 20 * u, 5.5f * u, GRIS, false, Paint.Align.CENTER, w - 8 * u);
             }
             if (nav && !conMapa)                                         // sin mapa: por qué (sin GPS, bajando las calles, sin internet…)
-                texto(c, s.gpsActivo() ? s.carroEstado : "Para ver el mapa, prende “Usar el GPS” en la app de Cubi", x0 + w / 2, y0 + (y1 - y0) * 0.9f, 4.5f * u, fundido ? 0xe6ffffff : GRIS, false, Paint.Align.CENTER, w - 8 * u);
+                texto(c, s.gpsActivo() ? s.carroEstado : "Para ver el mapa, prende “Usar el GPS” en la app Mascota Auto", x0 + w / 2, y0 + (y1 - y0) * 0.9f, 4.5f * u, fundido ? 0xe6ffffff : GRIS, false, Paint.Align.CENTER, w - 8 * u);
             if ((nav || conMapa) && fundido && aLoAncho && !google && !(sinCaja && conMapa)) {
                 String f = falta(s, nav), av = s.rutaAviso(), dn = s.destinoNombre();
                 final String pre = !dn.isEmpty() && !f.isEmpty() ? "→ " + dn : conMapa ? calleAhora : "";   // con destino va su nombre; sin destino, la calle por la que va

@@ -29,7 +29,13 @@ static const int P_CS = 12, P_SCK = 38, P_D0 = 4, P_D1 = 5, P_D2 = 6, P_D3 = 7, 
 
 constexpr int D = 466;                     // la pantalla
 constexpr float C = D / 2.f;
-Arduino_DataBus *bus; Arduino_CO5300 *panel;
+Arduino_DataBus *bus; Arduino_OLED *panel;
+// Mapi también corre en la 1.8 cuadrada (368 x 448): al prender mira si está el expansor TCA9554 (0x20), que solo tiene
+// esa placa. Allá cambian el reloj de la pantalla (GPIO11), el reset (por el expansor) y el táctil (FT3168 0x38 o CST816 0x15).
+// La imagen redonda de 466 se achica a 368 x 368 y va centrada; para dejarla acostada se gira desde la app (como siempre).
+// ponytail: es la vista redonda achicada; el diseño propio para la cuadrada (flecha a un lado, mapa al otro) va después.
+bool placa18 = false; uint8_t tp18 = 0; uint16_t *chico;
+constexpr int CH = 368, CHY = (448 - CH) / 2;   // el cuadro achicado y dónde cae en el panel
 uint16_t *fb;                              // la memoria del cuadro (en la PSRAM)
 float tAhora = 0;
 
@@ -576,6 +582,26 @@ static uint16_t *girar() {
   }
   return fbGiro;
 }
+// de 466 a 368, mezclando los cuatro vecinos (así la letra no sale dentada)
+static uint16_t *achicar(const uint16_t *src) {
+  const int32_t k = (int32_t)((D - 1) * 65536.f / (CH - 1));
+  for (int y = 0; y < CH; y++) {
+    const int32_t sy = y * k, iy = sy >> 16, fy = (sy >> 10) & 63, iy1 = iy + 1 < D ? iy + 1 : iy;
+    const uint16_t *a = src + iy * D, *b = src + iy1 * D; uint16_t *o = chico + y * CH;
+    for (int x = 0; x < CH; x++) {
+      const int32_t sx = x * k, ix = sx >> 16, fx = (sx >> 10) & 63, ix1 = ix + 1 < D ? ix + 1 : ix;
+      const uint16_t p00 = a[ix], p01 = a[ix1], p10 = b[ix], p11 = b[ix1];
+      int32_t c[3];
+      for (int j = 0; j < 3; j++) {
+        const int sh = j == 0 ? 11 : j == 1 ? 5 : 0, m = j == 1 ? 63 : 31;
+        const int32_t v0 = ((p00 >> sh) & m) * (64 - fx) + ((p01 >> sh) & m) * fx, v1 = ((p10 >> sh) & m) * (64 - fx) + ((p11 >> sh) & m) * fx;
+        c[j] = (v0 * (64 - fy) + v1 * fy + 2048) >> 12;
+      }
+      o[x] = (uint16_t)((c[0] << 11) | (c[1] << 5) | c[2]);
+    }
+  }
+  return chico;
+}
 // la flecha del giro
 static void flecha(float cx, float cy, float k, const char *dir) {
   if (!strcmp(dir, "fin")) {
@@ -856,9 +882,16 @@ static void tactilTarea(void *) {
   for (;;) {
     vTaskDelay(pdMS_TO_TICKS(10));
     int16_t xs[2] = {0, 0}, ys[2] = {0, 0}; uint8_t np = 0;
-    if (xSemaphoreTake(i2cLlave, pdMS_TO_TICKS(30))) { np = tactil.getPoint(xs, ys, 1); xSemaphoreGive(i2cLlave); }
+    float px = 0, py = 0;
+    if (placa18) {   // la cuadrada: el punto viene en el panel de 368 x 448; se pasa a la imagen de 466
+      uint8_t b[5];
+      if (xSemaphoreTake(i2cLlave, pdMS_TO_TICKS(30))) { np = i2cR(tp18, 0x02, b, 5) && (b[0] & 0x0F) && (b[0] & 0x0F) < 3; xSemaphoreGive(i2cLlave); }
+      if (np) { px = (((b[1] & 0x0F) << 8) | b[2]) * (float)D / CH; py = ((((b[3] & 0x0F) << 8) | b[4]) - CHY) * (float)D / CH; }
+    } else {
+      if (xSemaphoreTake(i2cLlave, pdMS_TO_TICKS(30))) { np = tactil.getPoint(xs, ys, 1); xSemaphoreGive(i2cLlave); }
+      if (np) { px = TACTIL_ESPEJO ? D - xs[0] : xs[0]; py = TACTIL_ESPEJO ? D - ys[0] : ys[0]; }
+    }
     if (np) {
-      float px = TACTIL_ESPEJO ? D - xs[0] : xs[0], py = TACTIL_ESPEJO ? D - ys[0] : ys[0];
       if (fabsf(giroPantalla) >= 0.5f) { const float a = -giroPantalla * PI / 180, dx = px - C, dy = py - C; px = C + dx * cosf(a) - dy * sinf(a); py = C + dx * sinf(a) + dy * cosf(a); }
       if (!tocando) { tocando = true; tx0 = px; ty0 = py; inicio = millis(); bisel = false; }   // sin bisel: Mapi no controla la música
       txN = px; tyN = py;
@@ -883,14 +916,28 @@ void setup() {
   Wire.begin(P_SDA, P_SCL, 400000);
   fb = (uint16_t *)ps_malloc(D * D * 2);
   callesHay = (Calles *)ps_calloc(1, sizeof(Calles)); callesCarga = (Calles *)ps_calloc(1, sizeof(Calles));
-  bus = new Arduino_ESP32QSPI(P_CS, P_SCK, P_D0, P_D1, P_D2, P_D3);
-  panel = new Arduino_CO5300(bus, P_RST, 0, D, D, 6, 0, 0, 0);   // el 6: así lo trae el ejemplo de Waveshare para esta placa
+  Wire.beginTransmission(0x20); placa18 = Wire.endTransmission() == 0;
+  if (placa18) {   // reset de pantalla y táctil por el expansor, la misma secuencia que usa Gigi en esta placa
+    i2cW(0x20, 0x01, 0x07); i2cW(0x20, 0x03, 0xF8); delay(100);
+    i2cW(0x20, 0x01, 0x00); delay(300);
+    i2cW(0x20, 0x01, 0x07); delay(100);
+    for (uint8_t a : {0x38, 0x15}) { Wire.beginTransmission(a); if (Wire.endTransmission() == 0) { tp18 = a; break; } }
+    chico = (uint16_t *)ps_malloc(CH * CH * 2);
+    bus = new Arduino_ESP32QSPI(P_CS, 11, P_D0, P_D1, P_D2, P_D3);
+    if (tp18 == 0x38) panel = new Arduino_SH8601(bus, -1, 0, 368, 448);   // la V1 (FT3168) trae SH8601; la V2 (CST816), CO5300
+    else panel = new Arduino_CO5300(bus, -1, 0, 368, 448);
+  } else {
+    bus = new Arduino_ESP32QSPI(P_CS, P_SCK, P_D0, P_D1, P_D2, P_D3);
+    panel = new Arduino_CO5300(bus, P_RST, 0, D, D, 6, 0, 0, 0);   // el 6: así lo trae el ejemplo de Waveshare para esta placa
+  }
   if (!panel->begin()) Serial.println("Mapi: la pantalla no arrancó");
   panel->fillScreen(0); panel->setBrightness(200);
+  if (placa18) { panel->startWrite(); panel->writeAddrWindow(0, 0, 480, 480); bus->writeRepeat(0, 480UL * 480UL); panel->endWrite(); }   // la franja fuera de los 368 x 448 (en Gigi salía una línea verde)
+  Serial.printf("Mapi: placa %s (táctil 0x%02X)\n", placa18 ? "1.8 cuadrada" : "1.75 redonda", tp18);
   imuInit();
   portada = (uint16_t *)ps_malloc(POR * POR * 2);
-  tactil.setPins(40, 11);
-  hayTactil = tactil.begin(Wire, 0x5A);
+  if (placa18) hayTactil = tp18 != 0;
+  else { tactil.setPins(40, 11); hayTactil = tactil.begin(Wire, 0x5A); }
   i2cLlave = xSemaphoreCreateMutex();
   if (hayTactil) xTaskCreatePinnedToCore(tactilTarea, "tactil", 4096, nullptr, 1, nullptr, 0);
   Serial.println(hayTactil ? "Mapi: táctil listo" : "Mapi: sin táctil");
@@ -924,7 +971,8 @@ void loop() {
   const uint32_t pintado = millis();
   // ponytail: dibujar y mandar en paralelo (dos memorias, otro núcleo) dañó la pantalla en la 2.0.415 (sin calles, fondo
   // en rayas): se volvió a uno tras otro. Reintentarlo solo con Mapi en el cable para ver qué dice.
-  panel->draw16bitRGBBitmap(0, 0, girar(), D, D);
+  if (placa18) panel->draw16bitRGBBitmap(0, CHY, achicar(girar()), CH, CH);
+  else panel->draw16bitRGBBitmap(0, 0, girar(), D, D);
   if (Serial.available() && Serial.read() == 't')
     Serial.printf("cuadro %lu ms (dibujo %lu: fondo %lu, calles %lu, velo %lu, letreros %lu; pantalla %lu, giro %d)\n", (unsigned long)(millis() - ahora), (unsigned long)(pintado - ahora),
                   (unsigned long)tFondo, (unsigned long)tMapa, (unsigned long)tVela, (unsigned long)(pintado - ahora - tFondo - tMapa - tVela), (unsigned long)(millis() - pintado), (int)giroPantalla);
