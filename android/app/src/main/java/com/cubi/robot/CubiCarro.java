@@ -544,7 +544,7 @@ public class CubiCarro extends CarAppService {
                 if (!rec.isEmpty()) {
                     // sin destino: "Buscar" y debajo los dos últimos destinos con lo que se tarda (tocar uno arranca el viaje)
                     tiempos(s, rec);
-                    float bw = 70 * u, ph = 9 * u, rh = 11.5f * u, bh = 1.6f * u + ph + u + rec.size() * rh + 0.6f * u, bx1 = x1 - 3 * u, bx0 = bx1 - bw, by0 = Math.max(u, y0 - 4 * u), rr = 5.5f * u;
+                    float bw = 70 * u, ph = 9 * u, rh = 11.5f * u, bh = 1.6f * u + ph + u + rec.size() * rh + 0.6f * u, bx1 = x1 - 3 * u, bx0 = bx1 - bw, by0 = Math.max(4 * u, y0), rr = 5.5f * u;   // más abajo: arriba se cortaba con el borde de la pantalla del carro
                     gr.set(bx0, by0, bx1, by0 + bh); destIzq = bx0; pieDest = by0 + bh;
                     p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(bx0, by0 + 0.8f * u, bx1, by0 + bh + 0.8f * u, rr, rr, p);
                     p.setColor(0x8c0a1430); c.drawRoundRect(gr, rr, rr, p);
@@ -1346,9 +1346,9 @@ public class CubiCarro extends CarAppService {
             final CubiEnergia en = CubiCarroDatos.cuentas;
             if (pila == 3 || Double.isNaN(en.energia)) return;
             int pc = (int) Math.max(0, Math.min(100, Math.round(en.bateria)));
-            float ih = tam * 0.62f, iw = ih * (pila == 2 ? 160 / 96f : 100 / 96f), ix = x - tam * 0.12f - iw;
+            float ih = tam * 0.86f, iw = ih * (pila == 2 ? 160 / 96f : 100 / 96f), ix = x - tam * 0.12f - iw;   // la pila junto a la hora, casi tan alta como los números
             if (ix < 0) return;
-            pilaIcono(c, ix, cy - ih * 0.62f, ih, pc, en.cargando, sv);
+            pilaIcono(c, ix, cy - ih * 0.58f, ih, pc, en.cargando, sv);
             String km = "";                                        // los km van en la burbuja de abajo
             if (!km.isEmpty()) texto(c, km, ix + iw / 2, cy + ih * 0.38f + tam * 0.16f, tam * 0.13f, 0xf0ffffff, true, Paint.Align.CENTER, iw * 2.2f);
         }

@@ -975,7 +975,7 @@ void setup() {
     chico = (uint16_t *)ps_malloc(368 * 448 * 2); FW = 448; FH = 368;
     bus = new Arduino_ESP32QSPI(P_CS, 11, P_D0, P_D1, P_D2, P_D3);
     if (tp18 == 0x38) panel = new Arduino_SH8601(bus, -1, 0, 368, 448);   // la V1 (FT3168) trae SH8601; la V2 (CST816), CO5300
-    else panel = new Arduino_CO5300(bus, -1, 0, 368, 448);
+    else panel = new Arduino_CO5300(bus, -1, 0, 368, 448, 16, 0, 0, 0);   // la V2 trae un margen de 16 columnas (V2_PANEL_X_GAP del ejemplo de Waveshare): sin él la imagen salía corrida
   } else {
     bus = new Arduino_ESP32QSPI(P_CS, P_SCK, P_D0, P_D1, P_D2, P_D3);
     panel = new Arduino_CO5300(bus, P_RST, 0, D, D, 6, 0, 0, 0);   // el 6: así lo trae el ejemplo de Waveshare para esta placa
