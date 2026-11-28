@@ -30,7 +30,7 @@ static const int P_CS = 12, P_SCK = 38, P_D0 = 4, P_D1 = 5, P_D2 = 6, P_D3 = 7, 
 constexpr int D = 466;                     // la pantalla
 constexpr float C = D / 2.f;
 Arduino_DataBus *bus; Arduino_OLED *panel;
-// Mapi también corre en la 1.8 cuadrada (368 x 448): al prender mira si está el expansor TCA9554 (0x20), que solo tiene
+// Mapi también corre en la 1.8 cuadrada (368 x 448): al prender mira si faltan el ES7210 (0x40) y el CST9217 (0x5A), que solo tiene la redonda
 // esa placa. Allá cambian el reloj de la pantalla (GPIO11), el reset (por el expansor) y el táctil (FT3168 0x38 o CST816 0x15).
 // La imagen redonda de 466 se achica a 368 x 368 y va centrada; para dejarla acostada se gira desde la app (como siempre).
 // Allá se dibuja acostada (448 x 368): flecha y datos a la izquierda, mapa a la derecha (pintarCuadrada).
@@ -965,7 +965,8 @@ void setup() {
   Wire.begin(P_SDA, P_SCL, 400000);
   fb = (uint16_t *)ps_malloc(D * D * 2);
   callesHay = (Calles *)ps_calloc(1, sizeof(Calles)); callesCarga = (Calles *)ps_calloc(1, sizeof(Calles));
-  Wire.beginTransmission(0x20); placa18 = Wire.endTransmission() == 0;
+  auto hay = [](uint8_t a) { Wire.beginTransmission(a); return Wire.endTransmission() == 0; };
+  placa18 = !hay(0x40) && !hay(0x5A);   // la redonda tiene el ES7210 (0x40) y el CST9217 (0x5A); también responde en 0x20, así que eso no sirve
   if (placa18) {   // reset de pantalla y táctil por el expansor, la misma secuencia que usa Gigi en esta placa
     i2cW(0x20, 0x01, 0x07); i2cW(0x20, 0x03, 0xF8); delay(100);
     i2cW(0x20, 0x01, 0x00); delay(300);

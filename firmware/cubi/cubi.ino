@@ -61,8 +61,8 @@ static const int P_PA = 46, I2S_MCK = 16, I2S_BCK = 9, I2S_DI = 10, I2S_WS = 45,
 static const int W = 448, H = 368;
 static const float U = H / 368.f;
 static const uint8_t TCA9554 = 0x20;
-// Gigi corre en dos placas de Waveshare y al prender mira cuál es: la 1.8 cuadrada tiene el expansor TCA9554 (0x20) y la
-// 1.75 redonda no. En la redonda (466 x 466) cambian el reloj de la pantalla (GPIO38), su reset (GPIO39), el táctil
+// Gigi corre en dos placas de Waveshare y al prender mira cuál es: solo la 1.75 redonda tiene el ES7210 (0x40) y el
+// CST9217 (0x5A). Ojo: la redonda también responde en 0x20, así que el expansor no sirve para distinguirlas. En la redonda (466 x 466) cambian el reloj de la pantalla (GPIO38), su reset (GPIO39), el táctil
 // (CST9217 en 0x5A), el MCLK del sonido (GPIO42) y los micrófonos (ES7210 en 0x40). La cara se sigue dibujando en
 // 368 x 448 y se manda centrada en el círculo.
 bool placa175 = false;
@@ -1458,7 +1458,7 @@ void setup() {
 
   // Reset de pantalla y táctil por el expansor TCA9554 (pines 0..2), misma secuencia que el firmware de fábrica V2.
   // Con pulsos cortos (20 ms) el panel puede quedar trabado tras regrabar: ver github.com/waveshareteam/ESP32-S3-Touch-AMOLED-1.8/issues/12
-  placa175 = !i2cHay(TCA9554);
+  placa175 = i2cHay(0x40) || i2cHay(0x5A);   // los micrófonos (ES7210) o el táctil (CST9217): solo los tiene la redonda
   int pant = 2;
   if (placa175) {
     tactil175.setPins(40, 11);
