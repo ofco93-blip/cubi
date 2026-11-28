@@ -40,6 +40,7 @@ final class CubiMapi {
     static volatile CubiMapi yo;
     static boolean listo() { CubiMapi m = yo; return m != null && m.listo; }
     static String estado() { CubiMapi m = yo; return m == null ? "Apagado." : m.estado; }
+    static volatile int pila = -1; static volatile boolean cargando;   // la pila de Mapi (-1 = no se sabe o no tiene)
 
     private final CubiService sv;
     private final Handler ui = new Handler(Looper.getMainLooper());
@@ -95,6 +96,7 @@ final class CubiMapi {
                         synchronized (cola) { gatt = null; listo = ocupado = false; cola.clear(); colaImg.clear(); }
                         if (actualizando) estado = terminando ? "Mapi se reinició con la versión nueva." : "Se cortó la actualización: Mapi sigue con la versión que tenía.";
                         else estado = "Mapi se desconectó; lo busco otra vez.";
+                        pila = -1;
                         actualizando = terminando = false; fw = null;
                         ui.postDelayed(CubiMapi.this::buscar, 3000);
                     }
@@ -151,6 +153,10 @@ final class CubiMapi {
         }
         if (s.startsWith("tecla|")) {                                  // un botón de la música en la pantalla de Mapi
             try { final int k = Integer.parseInt(s.substring(6).trim()); ui.post(() -> sv.musicaTecla(k)); } catch (Exception ignored) { }
+            return;
+        }
+        if (s.startsWith("bat|")) {                                    // la pila de Mapi: "bat|85|1" (el 1: cargando)
+            String[] p = s.split("\|"); try { pila = Integer.parseInt(p[1].trim()); cargando = p.length > 2 && p[2].trim().equals("1"); } catch (Exception ignored) { }
             return;
         }
         if (s.startsWith("ver|")) { version = s.substring(4); if (!actualizando) estado = "Conectado · firmware de la versión " + version + "."; return; }

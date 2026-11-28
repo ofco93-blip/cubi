@@ -527,7 +527,8 @@ function mapi() {
   if (!A() || !A().mapiEstado) return;
   const e = A().mapiEstado(), si = e.startsWith('Conectado');
   $('dotMapi').classList.toggle('on', si);
-  $('mapiPill').textContent = si ? 'Mapi conectado' : 'Mapi';
+  let pc = A().mapiPila ? A().mapiPila() : -1; const carga = pc >= 1000; if (carga) pc -= 1000;   // la pila de Mapi (si tiene)
+  $('mapiPill').textContent = si ? 'Mapi conectado' + (pc >= 0 ? ' · ' + pc + '%' + (carga ? ' ⚡' : '') : '') : 'Mapi';
   $('mapiEstado').textContent = e; $('mapiNota').textContent = e;
   if (A().mapasEstado) $('mapasNota').textContent = A().mapasEstado();
 }

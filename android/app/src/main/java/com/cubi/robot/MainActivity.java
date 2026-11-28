@@ -640,6 +640,8 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public String mapiEstado() { return CubiMapi.estado(); }
         @JavascriptInterface
+        public int mapiPila() { int p = CubiMapi.pila; return p < 0 ? -1 : p + (CubiMapi.cargando ? 1000 : 0); }   // -1: no se sabe; 1000 + %: cargando
+        @JavascriptInterface
         public boolean mapiActualizando() { return CubiMapi.actualizando(); }
         @JavascriptInterface
         public String mapiVersion() { return CubiMapi.version(); }

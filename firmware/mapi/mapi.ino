@@ -395,6 +395,7 @@ static void orden(const String &linea) {
 
 // ---------------------------------------------------------------- Bluetooth
 QueueHandle_t colaBle; bool conectado = false; BLECharacteristic *tx;
+volatile bool pilaPedida = false;   // la app quiere saber la pila de Mapi
 struct Orden { char t[244]; };
 // Actualización por Bluetooth (como la de Cubi): "/ota/inicio?tam=&md5=", el archivo en pedazos por la característica
 // OTA (cada uno con confirmación, en orden) y "/ota/fin" (verifica y reinicia). Responde "ota|ok" o "ota|!por qué".
@@ -433,7 +434,7 @@ class Rx : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *c) override {
     String v = c->getValue();
     if (v.startsWith("/ota/")) { ota(v); return; }           // la actualización se atiende de una (no espera al dibujo)
-    if (v == "/hola") { avisar("ver|" VERSION_MAPI); return; }   // la app pregunta qué versión tiene
+    if (v == "/hola") { avisar("ver|" VERSION_MAPI); pilaPedida = true; return; }   // la app pregunta qué versión tiene (y la pila va enseguida)
     if (v.startsWith("/caratula")) {                         // viene una carátula: cuántos bytes (los pedazos llegan por IMG)
       porN = min((uint32_t)valor(v.substring(v.indexOf('?') + 1), "n").toInt(), (uint32_t)(POR * POR * 2)); porHay = 0; porOk = false; return;
     }
@@ -1000,6 +1001,16 @@ void loop() {
   const uint32_t ahora = millis(); dtCuadro = (ahora - antes) / 1000.f; tAhora += dtCuadro; antes = ahora;
   imuCuadro(dtCuadro);
   if (reinicioEn && (int32_t)(ahora - reinicioEn) > 0) ESP.restart();   // actualizado: arranca con la versión nueva
+  // la pila de Mapi para la app: del AXP2101 de la placa (0x34), cada 30 s. "bat|-1" si no tiene batería puesta.
+  static uint32_t tPila = 0;
+  if (conectado && !otaTotal && (pilaPedida || ahora - tPila > 30000) && xSemaphoreTake(i2cLlave, pdMS_TO_TICKS(30))) {
+    pilaPedida = false; tPila = ahora;
+    uint8_t st0 = 0, st1 = 0, pc = 0, g = 0; bool ok = i2cR(0x34, 0x00, &st0, 1) && i2cR(0x34, 0x01, &st1, 1) && i2cR(0x34, 0xA4, &pc, 1);
+    if (ok && i2cR(0x34, 0x18, &g, 1) && !(g & 0x08)) i2cW(0x34, 0x18, g | 0x08);   // el medidor de la pila, por si viene apagado
+    xSemaphoreGive(i2cLlave);
+    char b[24]; snprintf(b, sizeof b, "bat|%d|%d", ok && (st0 & 0x08) ? min((int)pc, 100) : -1, ok && ((st1 >> 5) & 3) == 1 ? 1 : 0);   // 0x00 bit 3: hay pila; 0x01 bits 5-6 = 01: cargando
+    avisar(b);
+  }
   Orden o; int n = 0;
   while (n++ < 12 && xQueueReceive(colaBle, &o, 0) == pdTRUE) orden(String(o.t));
   if (placa18) pagina = 1;                     // la cuadrada solo tiene el mapa
