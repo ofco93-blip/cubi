@@ -668,7 +668,7 @@ extern float biselF;
   if (porOk && portada) {
     if (!vela) vineta();                          // (arma la tabla de la orilla)
     const float RR = C - 1, k = (POR / 2 - 1) / RR;   // con zoom: el círculo de la pantalla cabe dentro de la carátula
-    const int32_t cs = (int32_t)(cosf(vuelta) * k * 65536), sn = (int32_t)(sinf(vuelta) * k * 65536), m = D / 2, mid = (POR / 2) << 16;
+    const int32_t cs = (int32_t)(cosf(vuelta) * k * 65536), sn = (int32_t)(sinf(vuelta) * k * 65536), mid = (POR / 2) << 16; const int m = D / 2;
     for (int y = 0; y < D; y++) {
       const int dy = y - m, hx = (int)(RR * RR) - dy * dy; if (hx <= 0) continue;
       const int w = (int)sqrtf(hx), xa = max(0, m - w), xb = min(D - 1, m + w);
