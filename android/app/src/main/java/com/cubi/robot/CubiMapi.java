@@ -48,6 +48,7 @@ final class CubiMapi {
     private volatile boolean listo, ocupado, parado;
     private static final class Paq { final boolean fw; final int canal; final byte[] d; Paq(boolean f, byte[] x) { fw = f; canal = f ? 1 : 0; d = x; } Paq(int c, byte[] x) { fw = false; canal = c; d = x; } }
     private final ArrayDeque<Paq> cola = new ArrayDeque<>();
+    private final ArrayDeque<Paq> colaImg = new ArrayDeque<>();   // los pedazos de la carátula: van cuando la otra fila está vacía (no atrasan el giro ni la canción)
     private volatile String estado = "Buscando a Mapi…";
     private static volatile List<String> ultMapa; private static volatile int ultVias; private static volatile String ultCierre;
     private String yaGiro = "", yaLlega = "", yaPila = "", yaClima = "", yaLimite = "", yaAjuste = "", yaAlt = ""; private long yaHora, yaSinGps, yaCalle, yaLim;
@@ -91,7 +92,7 @@ final class CubiMapi {
                     if (nuevo == BluetoothProfile.STATE_CONNECTED) g.requestMtu(247);
                     else if (nuevo == BluetoothProfile.STATE_DISCONNECTED) {
                         g.close();
-                        synchronized (cola) { gatt = null; listo = ocupado = false; cola.clear(); }
+                        synchronized (cola) { gatt = null; listo = ocupado = false; cola.clear(); colaImg.clear(); }
                         if (actualizando) estado = terminando ? "Mapi se reinició con la versión nueva." : "Se cortó la actualización: Mapi sigue con la versión que tenía.";
                         else estado = "Mapi se desconectó; lo busco otra vez.";
                         actualizando = terminando = false; fw = null;
@@ -194,8 +195,8 @@ final class CubiMapi {
     }
     private void siguiente() {
         synchronized (cola) {
-            if (!listo || ocupado || cola.isEmpty() || gatt == null || rx == null) return;
-            Paq p = cola.poll();
+            if (!listo || ocupado || (cola.isEmpty() && colaImg.isEmpty()) || gatt == null || rx == null) return;
+            Paq p = !cola.isEmpty() ? cola.poll() : colaImg.poll();
             BluetoothGattCharacteristic c = p.canal == 1 ? otaC : p.canal == 2 ? imgC : rx;
             if (c == null) { siguienteLuego(); return; }
             c.setValue(p.d); c.setWriteType(p.canal == 2 ? BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE : BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);   // con confirmación (la carátula sin: va mucho más rápido)
@@ -261,7 +262,7 @@ final class CubiMapi {
                 o[2 * i] = (byte) v; o[2 * i + 1] = (byte) (v >> 8);       // como la guarda el ESP32 (el byte bajo primero)
             }
             mandar("/caratula?n=" + o.length);
-            synchronized (cola) { for (int i = 0; i < o.length; i += 240) cola.add(new Paq(2, java.util.Arrays.copyOfRange(o, i, Math.min(o.length, i + 240)))); }
+            synchronized (cola) { colaImg.clear(); for (int i = 0; i < o.length; i += 240) colaImg.add(new Paq(2, java.util.Arrays.copyOfRange(o, i, Math.min(o.length, i + 240)))); }
             siguiente();
         } catch (Throwable ignored) { }
     }

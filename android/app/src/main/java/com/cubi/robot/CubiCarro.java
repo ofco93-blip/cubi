@@ -437,7 +437,7 @@ public class CubiCarro extends CarAppService {
                     final Canvas cZ = c; final CubiService sZ = s;
                     final boolean navG = google && nav && s != null;
                     sinHora = (navZ || navG) && zEsc < 1;                                                 // el aviso del giro ocupa el puesto de la hora
-                    detras = google ? () -> { googleR.set(0, 0, cZ.getWidth(), cZ.getHeight()); googleM.set(googleR.right - aR, aT, googleR.right - aR, googleR.bottom - abajo - mZ); /* igual a los dos lados: la flecha del carro va en la mitad */ cZ.drawRect(googleR, borra); if (navG) tarjetaGiro(cZ, sZ, zEsc < 1 ? aL : googleM.left, aT, 81 * uZ, uZ, 1); }   // toda la pantalla: Zelda y la barra flotan sobre el mapa
+                    detras = google ? () -> { googleR.set(0, 0, cZ.getWidth(), cZ.getHeight()); googleM.set(googleR.right - aR, aT, googleR.right - aR, googleR.bottom - abajo - mZ); /* igual a los dos lados: la flecha del carro va en la mitad */ cZ.drawRect(googleR, borra); if (navG) tarjetaGiro(cZ, sZ, zEsc < 1 ? aL : googleM.left, Math.max(uZ, aT - 5 * uZ), 81 * uZ, uZ, 1); }   // toda la pantalla: Zelda y la barra flotan sobre el mapa
                             : !mapZ ? null : () -> {
                         float iz = Math.max(zLibre, aL + aW * 0.3f * zEsc);
                         sinCaja = true; this.corte = abajo + mZ; mapaExt = iz - aL;
@@ -544,7 +544,7 @@ public class CubiCarro extends CarAppService {
                 if (!rec.isEmpty()) {
                     // sin destino: "Buscar" y debajo los dos últimos destinos con lo que se tarda (tocar uno arranca el viaje)
                     tiempos(s, rec);
-                    float bw = 70 * u, ph = 9 * u, rh = 11.5f * u, bh = 1.6f * u + ph + u + rec.size() * rh + 0.6f * u, bx1 = x1 - 3 * u, bx0 = bx1 - bw, by0 = y0 + 2 * u, rr = 5.5f * u;
+                    float bw = 70 * u, ph = 9 * u, rh = 11.5f * u, bh = 1.6f * u + ph + u + rec.size() * rh + 0.6f * u, bx1 = x1 - 3 * u, bx0 = bx1 - bw, by0 = Math.max(u, y0 - 4 * u), rr = 5.5f * u;
                     gr.set(bx0, by0, bx1, by0 + bh); destIzq = bx0; pieDest = by0 + bh;
                     p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(bx0, by0 + 0.8f * u, bx1, by0 + bh + 0.8f * u, rr, rr, p);
                     p.setColor(0x8c0a1430); c.drawRoundRect(gr, rr, rr, p);
@@ -576,7 +576,7 @@ public class CubiCarro extends CarAppService {
                     }
                 }
                 else if (botones || dos || !dn.isEmpty()) {
-                    float bh = (dos ? 18 : 11) * u, bw = (dos || !dn.isEmpty() ? 73 : 42) * u, by0 = y0 + 3 * u, bx1 = x1 - 31 * u, bx0 = bx1 - bw, rr = Math.min(6 * u, bh / 2);   // a la derecha queda libre la esquina donde aparece por ratos "Opciones"
+                    float bh = (dos ? 18 : 11) * u, bw = (dos || !dn.isEmpty() ? 73 : 42) * u, by0 = Math.max(u, y0 - 4 * u), bx1 = x1 - 31 * u, bx0 = bx1 - bw, rr = Math.min(6 * u, bh / 2);   // a la derecha queda libre la esquina donde aparece por ratos "Opciones"
                     gr.set(bx0, by0, bx1, by0 + bh); destIzq = bx0;
                     p.setStyle(Paint.Style.FILL); p.setColor(0x5005070c); c.drawRoundRect(bx0, by0 + 0.8f * u, bx1, by0 + bh + 0.8f * u, rr, rr, p);
                     p.setColor(0x3cffffff); c.drawRoundRect(gr, rr, rr, p);
@@ -628,7 +628,7 @@ public class CubiCarro extends CarAppService {
                 if (rd != null && dr[0] < 500) {
                     String t = "Radar a " + Math.max(10, Math.round(dr[0] / 10) * 10) + " m" + (rd.max > 0 ? "  ·  " + rd.max + " km/h" : "");
                     tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(5.5f * u);
-                    float th = 12 * u, tw = tp.measureText(t) + 22 * u, cxr = Math.min((x0 + x1) / 2, destIzq - 3 * u - tw / 2), ry0 = y0 + 3 * u;
+                    float th = 12 * u, tw = tp.measureText(t) + 22 * u, cxr = Math.min((x0 + x1) / 2, destIzq - 3 * u - tw / 2), ry0 = Math.max(u, y0 - 4 * u);
                     float late = dr[0] < 150 ? 0.5f + 0.5f * (float) Math.sin(ahora / 140.0) : 0;
                     radR.set(cxr - tw / 2, ry0, cxr + tw / 2, ry0 + th);
                     if (late > 0) { p.setStyle(Paint.Style.FILL); p.setColor(0xffd93025); p.setAlpha((int) (90 * late)); c.drawRoundRect(radR.left - 2 * u, radR.top - 2 * u, radR.right + 2 * u, radR.bottom + 2 * u, th, th, p); p.setAlpha(255); }
@@ -908,7 +908,8 @@ public class CubiCarro extends CarAppService {
             // silueta es blanca. Va en espejo; al revés (sin espejo) queda en el mismo sitio, porque está centrada en x=784.
             float rx = clip.equals("senala") ? 80 : 360, bw = b.getWidth();
             // con el mapa de Google no hay repisa: va exactamente encima de la pastilla del clima (su borde de arriba)
-            float cjZ = reprAncho ? caja * 0.8f : caja, pisoZ = google && estilo == 2 ? y1 - caja / 2 - cjZ * 0.37f : repisa;
+            burbujaAlta = google && estilo == 2;
+            float cjZ = reprAncho ? caja * 0.8f : caja, pisoZ = google && estilo == 2 ? y1 - caja / 2 - cjZ * 0.37f - cjZ * 0.74f * ALTA : repisa;   // Zelda se para encima de la burbuja (la alta)
             float izq = (alReves ? x0 + (rx - 288) * scz : x0 + (1280 - rx - bw) * scz) + zDx;
             c.saveLayer(izq - 1, pisoZ - 648 * scz - 1, izq + bw * scz + 1, pisoZ, null);
             mz.setScale(alReves ? scz : -scz, scz); mz.postTranslate(alReves ? izq : izq + bw * scz, pisoZ - 648 * scz); c.concat(mz);
@@ -957,7 +958,9 @@ public class CubiCarro extends CarAppService {
         int googleVoz;                                                // la voz de Google (0 todo, 1 alertas, 2 callada)
         private final RectF vozR = new RectF();                       // el botón del parlante
         boolean tocaVoz(float x, float y) { return vozR.contains(x, y); }
-        private float climaX0, climaX1, zDx;                          // de dónde a dónde quedó la pastilla del clima, y lo que se corre Zelda para quedar centrada en ella
+        private float climaX0, climaX1, zDx;
+        private boolean burbujaAlta;                                  // con el mapa de Google la burbuja del clima es más alta (dos renglones)
+        static final float ALTA = 0.9f;                               // cuánto más alta (en altos de la burbuja normal)                          // de dónde a dónde quedó la pastilla del clima, y lo que se corre Zelda para quedar centrada en ella
         final RectF googleM = new RectF();                            // lo que le tapan a ese recuadro Zelda (izquierda), la barra (abajo) y los bordes
         private final Paint borra = new Paint();                      // abre el hueco transparente por donde se ve el mapa de Google, que va debajo
         { borra.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)); }
@@ -1016,7 +1019,44 @@ public class CubiCarro extends CarAppService {
             String izq = (hora.isEmpty() ? "" : hora + (grados.isEmpty() ? "" : "   ")) + grados;
             p.setStyle(Paint.Style.FILL);
             climaX0 = climaX1 = 0;
-            if (!izq.isEmpty()) {
+            if (!izq.isEmpty() && burbujaAlta) {
+                // Con el mapa de Google: la burbuja más alta, en dos renglones. Arriba el clima y la ciudad; abajo, con su
+                // montañita la altura y con su carreterita los km que quedan (WLTP). Zelda se para encima (pisoZ).
+                int msnm = sv == null ? Integer.MIN_VALUE : sv.altura != Integer.MIN_VALUE ? sv.altura : sv.climaAltura;
+                String lugar = sv == null ? "" : sv.climaLugar, alt = msnm == Integer.MIN_VALUE ? "" : String.format(Locale.GERMANY, "%,d m", msnm), km = kmWltp(CubiCarroDatos.cuentas);
+                float t2 = t - ph * ALTA, fila1 = t2 + ph * 0.72f, fila2 = base;
+                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(tam); float wi = tp.measureText(izq);
+                tp.setTypeface(Typeface.DEFAULT); tp.setTextSize(tam * 0.8f); float wl = lugar.isEmpty() ? 0 : ph * 0.4f + tp.measureText(lugar);
+                tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(tam * 0.78f);
+                float wa = alt.isEmpty() ? 0 : ph * 0.62f + tp.measureText(alt), wk = km.isEmpty() ? 0 : ph * 0.75f + tp.measureText(km);
+                float dib = grados.isEmpty() ? 0 : ph * 0.95f, x = x0 + mg * 2;
+                float w1 = ph * 0.45f + dib + wi + wl + ph * 0.45f, w2 = ph * 0.45f + wa + (wa > 0 && wk > 0 ? ph * 0.7f : 0) + wk + ph * 0.45f;
+                float fin = Math.min(x + Math.max(w1, w2), cx - medio);
+                vidrio(c, x, t2, fin, bm); finIzq = fin; climaX0 = x; climaX1 = fin;
+                p.setStyle(Paint.Style.FILL); p.setColor(0x40ffffff); c.drawRect(x + ph * 0.4f, t + ph * 0.02f, fin - ph * 0.4f, t + ph * 0.02f + Math.max(1, ph * 0.03f), p);   // la rayita entre los dos renglones
+                float q = x + ph * 0.45f;
+                noche = sv != null && sv.climaNoche;
+                if (dib > 0) { clima(c, q + ph * 0.36f, t2 + ph * 0.5f, ph * 0.3f, estado.toLowerCase(Locale.ROOT)); q += dib; }
+                texto(c, izq, q, fila1, tam, 0xffffffff, true, Paint.Align.LEFT, fin - q);
+                if (wl > 0) texto(c, lugar, q + wi + ph * 0.4f, fila1, tam * 0.8f, 0xf2ffffff, false, Paint.Align.LEFT, fin - q - wi - ph * 0.4f);
+                q = x + ph * 0.45f;
+                if (wa > 0) {                                                     // la montañita y los metros
+                    float mw = ph * 0.48f, mh = tam * 0.55f;
+                    gp.rewind(); gp.moveTo(q, fila2); gp.lineTo(q + mw * 0.36f, fila2 - mh); gp.lineTo(q + mw * 0.56f, fila2 - mh * 0.55f);
+                    gp.lineTo(q + mw * 0.7f, fila2 - mh * 0.75f); gp.lineTo(q + mw, fila2); gp.close();
+                    p.setColor(0xf2ffffff); c.drawPath(gp, p);
+                    texto(c, alt, q + ph * 0.62f, fila2, tam * 0.78f, 0xffffffff, true, Paint.Align.LEFT, wa);
+                    q += wa + ph * 0.7f;
+                }
+                if (wk > 0) {                                                     // la carreterita (la autonomía) y los km
+                    float rw = ph * 0.5f, rh = tam * 0.62f, rb = fila2, rt = fila2 - rh;
+                    gp.rewind(); gp.moveTo(q, rb); gp.lineTo(q + rw * 0.36f, rt); gp.lineTo(q + rw * 0.64f, rt); gp.lineTo(q + rw, rb); gp.close();
+                    p.setColor(0xf2ffffff); c.drawPath(gp, p);
+                    p.setColor(0xff2a4aa8); float lc = q + rw / 2, lw = Math.max(1, rw * 0.06f);
+                    for (int k = 0; k < 3; k++) { float y1r = rb - rh * (0.08f + k * 0.34f), y0r = y1r - rh * 0.18f; c.drawRect(lc - lw * (1.4f - k * 0.3f), y0r, lc + lw * (1.4f - k * 0.3f), y1r, p); }
+                    texto(c, km, q + ph * 0.75f, fila2, tam * 0.78f, 0xffffffff, true, Paint.Align.LEFT, wk);
+                }
+            } else if (!izq.isEmpty()) {
                 tp.setTypeface(Typeface.DEFAULT_BOLD); tp.setTextSize(tam);
                 float wi = tp.measureText(izq); tp.setTypeface(Typeface.DEFAULT); tp.setTextSize(tam * 0.72f);
                 float we = estado.isEmpty() ? 0 : tp.measureText(estado) + ph * 0.25f, dib = grados.isEmpty() ? 0 : ph * 0.95f;
@@ -1297,7 +1337,7 @@ public class CubiCarro extends CarAppService {
             float ih = tam * 0.62f, iw = ih * (pila == 2 ? 160 / 96f : 100 / 96f), ix = x - tam * 0.12f - iw;
             if (ix < 0) return;
             pilaIcono(c, ix, cy - ih * 0.62f, ih, pc, en.cargando, sv);
-            String km = en.cargando ? "" : kmWltp(en);
+            String km = "";                                        // los km van en la burbuja de abajo
             if (!km.isEmpty()) texto(c, km, ix + iw / 2, cy + ih * 0.38f + tam * 0.16f, tam * 0.13f, 0xf0ffffff, true, Paint.Align.CENTER, iw * 2.2f);
         }
         // Cuando el carro sacude el líquido (curva, frenada, acelerón) rebosa un poquito: saltan gotitas del lado que sube y

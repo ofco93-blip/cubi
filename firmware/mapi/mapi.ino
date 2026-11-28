@@ -690,16 +690,7 @@ extern float biselF;
   if (musDur > 0) aroBorde(frac, Col{255, 120, 200});
   if (musTit[0]) textoArco(musTit, 200, -90, 26, BLANCO, false);
   if (musArt[0]) textoArco(musArt, 176, -90, 16, Col{225, 210, 255}, false);
-  const float by = 362;                         // los botones: anterior, pausa o seguir, siguiente
-  disco(C - 78, by, 26, BLANCO, 0.16f); disco(C + 78, by, 26, BLANCO, 0.16f); disco(C, by, 34, BLANCO, 0.92f);
-  for (int s = -1; s <= 1; s += 2) {
-    const float bx = C + s * 78; float px[3] = {bx - 8 * s, bx + 6 * s, bx - 8 * s}, py[3] = {by - 10, by, by + 10};
-    rellenar(px, py, 3, BLANCO, 1); float qx[4] = {bx + 6 * s, bx + 10 * s, bx + 10 * s, bx + 6 * s}, qy[4] = {by - 10, by - 10, by + 10, by + 10}; rellenar(qx, qy, 4, BLANCO, 1);
-  }
-  const Col os{t.r * 0.25f, t.g * 0.25f, t.b * 0.25f};
-  if (musSuena) for (int s = -1; s <= 1; s += 2) { float px[4] = {C + s * 7 - 4, C + s * 7 + 4, C + s * 7 + 4, C + s * 7 - 4}, py[4] = {by - 12, by - 12, by + 12, by + 12}; rellenar(px, py, 4, os, 1); }
-  else { float px[3] = {C - 8, C + 12, C - 8}, py[3] = {by - 13, by, by + 13}; rellenar(px, py, 3, os, 1); }
-  if (musDur > 0) { char a[12], b[12], c[28]; tiempoTxt(pos, a, sizeof a); tiempoTxt(musDur, b, sizeof b); snprintf(c, sizeof c, "%s / %s", a, b); texto(c, C, 410, 16, Col{235, 222, 255}); }
+  if (musDur > 0) { char a[12], b[12], c[28]; tiempoTxt(pos, a, sizeof a); tiempoTxt(musDur, b, sizeof b); snprintf(c, sizeof c, "%s / %s", a, b); textoFilo(c, C, 396, 22, BLANCO); }
 }
 // el carro: el gato de la pila, igual al de Mascota Auto (de vidrio, con el líquido vivo) y debajo los km que quedan (WLTP)
 static const float GATO[36][2] = {{16.5f, 6.2f}, {14.8f, 5.4f}, {13.4f, 5.5f}, {12.5f, 6.5f}, {12.0f, 8.4f}, {8.2f, 43.0f}, {7.8f, 50.9f}, {8.7f, 58.5f}, {10.7f, 65.6f}, {13.9f, 72.1f}, {18.0f, 77.9f}, {23.0f, 82.9f}, {28.8f, 86.9f}, {35.3f, 89.9f}, {42.4f, 91.8f}, {50.0f, 92.5f}, {57.6f, 91.8f}, {64.7f, 89.9f}, {71.2f, 86.9f}, {77.0f, 82.9f}, {82.0f, 77.9f}, {86.1f, 72.1f}, {89.3f, 65.6f}, {91.3f, 58.5f}, {92.2f, 50.9f}, {91.8f, 43.0f}, {88.0f, 8.4f}, {87.5f, 6.5f}, {86.6f, 5.5f}, {85.2f, 5.4f}, {83.5f, 6.2f}, {64.5f, 20.6f}, {57.2f, 18.7f}, {50.0f, 18.0f}, {42.8f, 18.6f}, {35.5f, 20.6f}};
@@ -852,7 +843,8 @@ static void pintar() {
 TouchDrvCST92xx tactil; bool hayTactil = false, tocando = false, bisel = false; float tx0, ty0, txN, tyN, tocaT, biselF = -1;
 // el bisel: en la música, el dedo dando la vuelta por el borde lleva la canción a ese punto (arriba = el principio)
 static float fraccionDe(float x, float y) { float a = atan2f(y - C, x - C) + PI / 2; if (a < 0) a += 2 * PI; return a / (2 * PI); }
-static void tocar(float x, float y) {
+static void tocar(float x, float y) {   // ponytail: Mapi solo muestra la música (el usuario no quiere que la controle); se deja por si vuelve
+  return;
   if (pagina != 2) return;
   auto cerca = [&](float bx, float by, float r) { return (x - bx) * (x - bx) + (y - by) * (y - by) < r * r; };
   if (cerca(C - 78, 362, 38)) avisar("tecla|-1");
@@ -868,7 +860,7 @@ static void tactilTarea(void *) {
     if (np) {
       float px = TACTIL_ESPEJO ? D - xs[0] : xs[0], py = TACTIL_ESPEJO ? D - ys[0] : ys[0];
       if (fabsf(giroPantalla) >= 0.5f) { const float a = -giroPantalla * PI / 180, dx = px - C, dy = py - C; px = C + dx * cosf(a) - dy * sinf(a); py = C + dx * sinf(a) + dy * cosf(a); }
-      if (!tocando) { tocando = true; tx0 = px; ty0 = py; inicio = millis(); bisel = pagina == 2 && musDur > 0 && hypotf(px - C, py - C) > C - 48; }
+      if (!tocando) { tocando = true; tx0 = px; ty0 = py; inicio = millis(); bisel = false;   // sin bisel: Mapi no controla la música }
       txN = px; tyN = py;
       if (bisel) biselF = fraccionDe(px, py);
     } else if (tocando) {
