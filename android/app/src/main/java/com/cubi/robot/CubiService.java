@@ -2513,6 +2513,7 @@ public class CubiService extends Service {
         return Build.VERSION.SDK_INT >= 29 && c.getClientAudioSource() == MediaRecorder.AudioSource.MIC;
     }
 
+    private String telMandado = "";   // lo último que se le dijo a Gigi de una llamada ("llamada" sonando, "encurso", "" nada)
     private void revisarAsistente() {
         ui.removeCallbacks(revisar);
         AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
@@ -2521,7 +2522,17 @@ public class CubiService extends Service {
         boolean graba = false;  // la grabación de "Hola Cubi" (la nuestra) no cuenta
         for (AudioRecordingConfiguration c : am.getActiveRecordingConfigurations())
             if (c.getClientAudioSessionId() != miSesion && !oidoDeRobot(c)) graba = true;
-        graba &= am.getMode() != AudioManager.MODE_IN_CALL;
+        // En llamada (normal o videollamada de WhatsApp, Meet...) el celular cambia de modo: eso no es un asistente
+        // escuchando. Gigi pone su cara de teléfono (sonando: la de timbre) y al colgar vuelve. Lo que abrió Gigi (Gemini o
+        // la charla con Claude, en los últimos 2 min) también usa el modo de comunicación: eso sí es el asistente.
+        final int modoAudio = am.getMode();
+        String tel = modoAudio == AudioManager.MODE_RINGTONE ? "llamada"
+                : (modoAudio == AudioManager.MODE_IN_CALL || modoAudio == AudioManager.MODE_IN_COMMUNICATION) && !ventana && ahora >= charlaHasta ? "encurso" : "";
+        if (!tel.equals(telMandado)) {
+            if (!tel.isEmpty() || !telMandado.isEmpty()) enviar("asis|/evento?tipo=" + (tel.isEmpty() ? "colgar" : tel));
+            telMandado = tel;
+        }
+        graba &= modoAudio != AudioManager.MODE_IN_CALL && tel.isEmpty();
         boolean suenaAsis = false, suenaNav = false, suenaVoz = false, suenaMedia = false;
         if (Build.VERSION.SDK_INT >= 26) for (AudioPlaybackConfiguration c : am.getActivePlaybackConfigurations()) {
             int u = c.getAudioAttributes().getUsage();
