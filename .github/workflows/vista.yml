@@ -28,7 +28,9 @@ jobs:
             REDONDA=1 python3 herramientas/vista/hoja.py ./vista_pc redonda mini_reposo mini_escucha mini_habla mini_piensa mini_duerme mini_telefono mini_saludo mini_bache mini_frenazo mini_aceleron mini_arranque mini_izq mini_der mini_caricia mini_whatsapp mini_llamada mini_calor mini_risa mini_sorpresa mini_amor mini_mareo mini_llegamos mini_sol mini_lluvia mini_frio mini_bateria mini_guino mini_curiosa mini_kamehameha mini_confeti mini_cinturon mini_sonrojo mini_enojo mini_papas mini_bebida mini_consola mini_cono mini_crispetas mini_feliz mini_triste mini_sueno mini_ppt_piedra mini_ppt_papel mini_ppt_tijera mini_canta_pop mini_canta_urbano mini_canta_electro mini_canta_tropical mini_canta_kpop mini_canta_corazon mini_canta_groove mini_canta_guitarra mini_canta_disfruta mini_canta_rock mini_canta_jazz mini_canta_dj mini_canta_piano mini_canta_barras mini_canta_manos mini_canta_acordeon mini_canta_vela lino_reposo lino_risa lino_amor mochi_reposo mochi_risa mochi_sonrojo gato_reposo gato_canta_pop clima altura
           ) > log.txt 2>&1 || { grep -v "^+" log.txt | grep -m 12 . | tail -12 | while read -r l; do echo "::error::$l"; done; exit 1; }
       - name: Tiempos por baile
-        run: echo "::notice::$(sort -t' ' -k3 -n -r medir.txt | tr '\n' ';')"
+        run: |
+          echo "::notice::$(sort -t' ' -k3 -n -r medir.txt | tr '\n' ';')"
+          echo "::notice::cuadrada / redonda: $(grep -vE '^mini_' medir.txt | tr '\n' ';') // $(grep -vE '^mini_' medir_redonda.txt | tr '\n' ';')"
       - uses: actions/upload-artifact@v4
         with:
           name: redonda
