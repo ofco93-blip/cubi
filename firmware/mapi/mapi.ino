@@ -588,11 +588,13 @@ static uint16_t *girar() {
 // más de 90° desde la app, se gira para el otro lado (por si Mapi queda montado de cabeza).
 static uint16_t *acostar() {
   const bool otro = fabsf(giroPantalla) > 90;
-  for (int py = 0; py < FW; py++) {
-    uint16_t *o = chico + py * FH;
-    if (otro) { const uint16_t *src = fb + (FW - 1 - py); for (int px = 0; px < FH; px++) o[px] = src[px * FW]; }
-    else { const uint16_t *src = fb + py; for (int px = 0; px < FH; px++) o[px] = src[(FH - 1 - px) * FW]; }
-  }
+  // por cuadritos de 16 x 16: saltar de fila en fila por la PSRAM pixel a pixel se llevaba ~120 ms del cuadro
+  constexpr int T = 16;
+  for (int by = 0; by < FW; by += T) for (int bx = 0; bx < FH; bx += T)
+    for (int py = by; py < by + T && py < FW; py++) {
+      uint16_t *o = chico + py * FH;
+      for (int px = bx; px < bx + T && px < FH; px++) o[px] = otro ? fb[px * FW + (FW - 1 - py)] : fb[(FH - 1 - px) * FW + py];
+    }
   return chico;
 }
 // la flecha del giro
