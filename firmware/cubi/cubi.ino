@@ -1482,7 +1482,8 @@ void setup() {
   else if (pant == 2) panel = new Arduino_CO5300(bus, -1, 0, 368, 448);
   else panel = new Arduino_SH8601(bus, -1, 0, 368, 448);
   cv = new Arduino_Canvas(368, 448, panel, 0, 0, rotacion);
-  if (!cv->begin()) Serial.println("ERROR pantalla (sin PSRAM? activa OPI PSRAM)");
+  // la redonda a 80 MHz: a 40 un cuadro de la música (casi todo el círculo) tardaba ~100 ms en llegar y se veía con lag
+  if (!cv->begin(placa175 ? 80000000 : GFX_NOT_DEFINED)) Serial.println("ERROR pantalla (sin PSRAM? activa OPI PSRAM)");
   // Borra TODA la memoria del panel: hay una franja fuera de los 368x448 que nunca se dibuja
   // y mostraba basura (la "línea verde" de abajo)
   if (placa175) panel->fillScreen(0);
