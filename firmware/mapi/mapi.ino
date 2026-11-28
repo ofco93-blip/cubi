@@ -33,10 +33,12 @@ Arduino_DataBus *bus; Arduino_OLED *panel;
 // Mapi también corre en la 1.8 cuadrada (368 x 448): al prender mira si está el expansor TCA9554 (0x20), que solo tiene
 // esa placa. Allá cambian el reloj de la pantalla (GPIO11), el reset (por el expansor) y el táctil (FT3168 0x38 o CST816 0x15).
 // La imagen redonda de 466 se achica a 368 x 368 y va centrada; para dejarla acostada se gira desde la app (como siempre).
-// ponytail: es la vista redonda achicada; el diseño propio para la cuadrada (flecha a un lado, mapa al otro) va después.
+// Allá se dibuja acostada (448 x 368): flecha y datos a la izquierda, mapa a la derecha (pintarCuadrada).
 bool placa18 = false; uint8_t tp18 = 0; uint16_t *chico;
 constexpr int CH = 368, CHY = (448 - CH) / 2;   // el cuadro achicado y dónde cae en el panel
 uint16_t *fb;                              // la memoria del cuadro (en la PSRAM)
+int FW = D, FH = D;                        // el cuadro: 466 x 466 en la redonda; 448 x 368 (acostado) en la cuadrada
+float mapaCx = C;                          // dónde va el carro de lado a lado en el mapa
 float tAhora = 0;
 
 // ---------------------------------------------------------------- dibujo
@@ -49,8 +51,8 @@ static inline uint16_t empacar(float r, float g, float b) {
   return (uint16_t)(((R & 0xF8) << 8) | ((G & 0xFC) << 3) | (B >> 3));
 }
 static inline void mezclar(int x, int y, const Col &c, float a) {
-  if (a <= 0.004f || x < 0 || y < 0 || x >= D || y >= D) return;
-  uint16_t &p = fb[y * D + x];
+  if (a <= 0.004f || x < 0 || y < 0 || x >= FW || y >= FH) return;
+  uint16_t &p = fb[y * FW + x];
   if (a >= 0.996f) { p = empacar(c.r, c.g, c.b); return; }
   float r = ((p >> 11) & 31) * (255.f / 31), g = ((p >> 5) & 63) * (255.f / 63), b = (p & 31) * (255.f / 31);
   p = empacar(r + (c.r - r) * a, g + (c.g - g) * a, b + (c.b - b) * a);
@@ -75,7 +77,7 @@ static float dTriangulo(float px, float py, float ax, float ay, float bx, float 
 }
 // pinta una figura descrita por su distancia, con borde suave; color de arriba a abajo (degradado) y transparencia
 template <typename F> void figura(float bx0, float by0, float bx1, float by1, const Col &c0, const Col &c1, float a, F d) {
-  int x0 = (int)fmaxf(0, bx0 - 2), y0 = (int)fmaxf(0, by0 - 2), x1 = (int)fminf(D, bx1 + 2), y1 = (int)fminf(D, by1 + 2);
+  int x0 = (int)fmaxf(0, bx0 - 2), y0 = (int)fmaxf(0, by0 - 2), x1 = (int)fminf(FW, bx1 + 2), y1 = (int)fminf(FH, by1 + 2);
   float inv = 1.f / fmaxf(1, by1 - by0);
   for (int y = y0; y < y1; y++) {
     float k = lim((y - by0) * inv, 0, 1); Col c{c0.r + (c1.r - c0.r) * k, c0.g + (c1.g - c0.g) * k, c0.b + (c1.b - c0.b) * k};
@@ -85,20 +87,20 @@ template <typename F> void figura(float bx0, float by0, float bx1, float by1, co
 template <typename F> void figura(float bx0, float by0, float bx1, float by1, const Col &c, float a, F d) { figura(bx0, by0, bx1, by1, c, c, a, d); }
 // una fila de pixeles de xa a xb, con los extremos suaves
 static void fila(int y, float xa, float xb, const Col &c, float a) {
-  if (y < 0 || y >= D || xb <= 0 || xa >= D || xb <= xa) return;
+  if (y < 0 || y >= FH || xb <= 0 || xa >= FW || xb <= xa) return;
   if (xa < 0) xa = 0;
-  if (xb > D) xb = D;
+  if (xb > FW) xb = FW;
   const int i0 = (int)xa, i1 = (int)xb;
   if (i0 == i1) { mezclar(i0, y, c, (xb - xa) * a); return; }
   mezclar(i0, y, c, (1 - (xa - i0)) * a);
   uint16_t v = empacar(c.r, c.g, c.b);
-  for (int x = i0 + 1; x < i1; x++) { if (a >= 0.996f) fb[y * D + x] = v; else mezclar(x, y, c, a); }
-  if (i1 < D) mezclar(i1, y, c, (xb - i1) * a);
+  for (int x = i0 + 1; x < i1; x++) { if (a >= 0.996f) fb[y * FW + x] = v; else mezclar(x, y, c, a); }
+  if (i1 < FW) mezclar(i1, y, c, (xb - i1) * a);
 }
 static void rellenar(const float *px, const float *py, int n, const Col &c, float a, float yDesde = -1e9f) {   // polígono, fila por fila (desde yDesde hacia abajo)
   float y0 = 1e9f, y1 = -1e9f;
   for (int i = 0; i < n; i++) { y0 = fminf(y0, py[i]); y1 = fmaxf(y1, py[i]); }
-  const int iy0 = (int)fmaxf(fmaxf(0, ceilf(yDesde - 0.5f)), ceilf(y0 - 0.5f)), iy1 = (int)fminf(D - 1, floorf(y1 - 0.5f));
+  const int iy0 = (int)fmaxf(fmaxf(0, ceilf(yDesde - 0.5f)), ceilf(y0 - 0.5f)), iy1 = (int)fminf(FH - 1, floorf(y1 - 0.5f));
   for (int iy = iy0; iy <= iy1; iy++) {
     const float yc = iy + 0.5f; float xs[16]; int m = 0;
     for (int i = 0; i < n && m < 16; i++) { const int j = i + 1 == n ? 0 : i + 1; if ((py[i] <= yc) != (py[j] <= yc)) xs[m++] = px[i] + (yc - py[i]) * (px[j] - px[i]) / (py[j] - py[i]); }
@@ -107,7 +109,7 @@ static void rellenar(const float *px, const float *py, int n, const Col &c, floa
   }
 }
 static void disco(float cx, float cy, float r, const Col &c, float a) {
-  for (int iy = (int)fmaxf(0, cy - r); iy <= (int)fminf(D - 1, cy + r); iy++) {
+  for (int iy = (int)fmaxf(0, cy - r); iy <= (int)fminf(FH - 1, cy + r); iy++) {
     const float dy = (iy + 0.5f - cy) / r;
     if (dy > -1 && dy < 1) { const float hw = r * sqrtf(1 - dy * dy); fila(iy, cx - hw, cx + hw, c, a); }
   }
@@ -144,7 +146,7 @@ static void texto(const char *s, float x, float cy, float tam, const Col &c, flo
     if (!l) continue;
     if (l->w) {
       float gx0 = x + l->x0 * esc, gy0 = base + l->y0 * esc;
-      int ax = (int)fmaxf(0, floorf(gx0)), ay = (int)fmaxf(0, floorf(gy0)), bx = (int)fminf(D, ceilf(gx0 + l->w * esc)), by = (int)fminf(D, ceilf(gy0 + l->h * esc));
+      int ax = (int)fmaxf(0, floorf(gx0)), ay = (int)fmaxf(0, floorf(gy0)), bx = (int)fminf(FW, ceilf(gx0 + l->w * esc)), by = (int)fminf(FH, ceilf(gy0 + l->h * esc));
       for (int py = ay; py < by; py++) {
         float v = (py + 0.5f - gy0) / esc - 0.5f; int v0 = (int)floorf(v); float fv = v - v0;
         for (int px = ax; px < bx; px++) {
@@ -463,14 +465,14 @@ static void fondo() {   // el azul de la pantalla grande, más oscuro abajo: se 
     fondoFijo = (uint16_t *)ps_malloc(D * D * 2);
     // con tramado: la pantalla tiene pocos tonos por color y sin esto el degradado se ve en rayas
     static const float T[16] = {0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5};
-    for (int y = 0; y < D; y++) for (int x = 0; x < D; x++) {
+    for (int y = 0; y < FH; y++) for (int x = 0; x < FW; x++) {
       const float t = (T[(x & 3) | ((y & 3) << 2)] + 0.5f) / 16.f;
       // el fondo del mapa de Google de la pantalla grande (#101b38), un poco más claro arriba
-      const float r = (20 - 8.f * y / D) / 8.f, g = (33 - 12.f * y / D) / 4.f, b = (66 - 20.f * y / D) / 8.f;
-      fondoFijo[y * D + x] = (uint16_t)(((int)(r + t) << 11) | ((int)(g + t) << 5) | (int)(b + t));
+      const float r = (20 - 8.f * y / FH) / 8.f, g = (33 - 12.f * y / FH) / 4.f, b = (66 - 20.f * y / FH) / 8.f;
+      fondoFijo[y * FW + x] = (uint16_t)(((int)(r + t) << 11) | ((int)(g + t) << 5) | (int)(b + t));
     }
   }
-  memcpy(fb, fondoFijo, D * D * 2);
+  memcpy(fb, fondoFijo, FW * FH * 2);
 }
 static void mapa(float cyCarro) {
   const float dtp = lim(tAhora - fijoT, 0, 1.6f), k = 0.25f;   // sigue andando con la velocidad que traía; se corrige suave
@@ -488,7 +490,7 @@ static void mapa(float cyCarro) {
   const float F = 470 * zoomMapa, ALTO = 150, ATRAS = 150, IN = 0.82f, cI = cosf(IN), sI = sinf(IN), CERCA = -110, LEJOS = 560;
   const float cy0 = cyCarro + F * (ATRAS * sI - ALTO * cI) / (ATRAS * cI + ALTO * sI);
   auto proy = [&](float x, float y, float &sx, float &sy, float &kk) {
-    const float prof = (y + ATRAS) * cI + ALTO * sI; kk = F / prof; sx = C + x * kk; sy = cy0 - ((y + ATRAS) * sI - ALTO * cI) * kk;
+    const float prof = (y + ATRAS) * cI + ALTO * sI; kk = F / prof; sx = mapaCx + x * kk; sy = cy0 - ((y + ATRAS) * sI - ALTO * cI) * kk;
   };
   const float h = mrumbo * PI / 180, ch = cosf(h), sh = sinf(h);
   auto aCarro = [&](int i, float &x, float &y) {   // del mapa (este, norte) al carro (derecha, adelante)
@@ -536,7 +538,7 @@ static void mapa(float cyCarro) {
       if (py < cerca) { const float t = (cerca - py) / (qy - py); px += (qx - px) * t; py = cerca; }   // se recorta en el borde de la cámara
       if (qy < cerca) { const float t = (cerca - qy) / (py - qy); qx += (px - qx) * t; qy = cerca; }
       float sx0, sy0, k0, sx1, sy1, k1; proy(px, py, sx0, sy0, k0); proy(qx, qy, sx1, sy1, k1);
-      if (fmaxf(sx0, sx1) < -20 || fminf(sx0, sx1) > D + 20 || fmaxf(sy0, sy1) < -20 || fminf(sy0, sy1) > D + 20) continue;
+      if (fmaxf(sx0, sx1) < -20 || fminf(sx0, sx1) > FW + 20 || fmaxf(sy0, sy1) < -20 || fminf(sy0, sy1) > FH + 20) continue;
       // un cuadrilátero que se angosta con la distancia, y la unión redonda
       const float w0 = ps.ancho * k0 / 2, w1 = ps.ancho * k1 / 2, ddx = sx1 - sx0, ddy = sy1 - sy0, l = sqrtf(ddx * ddx + ddy * ddy) + 1e-4f, nx = -ddy / l, ny = ddx / l;
       float X[4] = {sx0 + nx * w0, sx1 + nx * w1, sx1 - nx * w1, sx0 - nx * w0}, Y[4] = {sy0 + ny * w0, sy1 + ny * w1, sy1 - ny * w1, sy0 - ny * w0};
@@ -582,23 +584,14 @@ static uint16_t *girar() {
   }
   return fbGiro;
 }
-// de 466 a 368, mezclando los cuatro vecinos (así la letra no sale dentada)
-static uint16_t *achicar(const uint16_t *src) {
-  const int32_t k = (int32_t)((D - 1) * 65536.f / (CH - 1));
-  for (int y = 0; y < CH; y++) {
-    const int32_t sy = y * k, iy = sy >> 16, fy = (sy >> 10) & 63, iy1 = iy + 1 < D ? iy + 1 : iy;
-    const uint16_t *a = src + iy * D, *b = src + iy1 * D; uint16_t *o = chico + y * CH;
-    for (int x = 0; x < CH; x++) {
-      const int32_t sx = x * k, ix = sx >> 16, fx = (sx >> 10) & 63, ix1 = ix + 1 < D ? ix + 1 : ix;
-      const uint16_t p00 = a[ix], p01 = a[ix1], p10 = b[ix], p11 = b[ix1];
-      int32_t c[3];
-      for (int j = 0; j < 3; j++) {
-        const int sh = j == 0 ? 11 : j == 1 ? 5 : 0, m = j == 1 ? 63 : 31;
-        const int32_t v0 = ((p00 >> sh) & m) * (64 - fx) + ((p01 >> sh) & m) * fx, v1 = ((p10 >> sh) & m) * (64 - fx) + ((p11 >> sh) & m) * fx;
-        c[j] = (v0 * (64 - fy) + v1 * fy + 2048) >> 12;
-      }
-      o[x] = (uint16_t)((c[0] << 11) | (c[1] << 5) | c[2]);
-    }
+// la cuadrada: el cuadro acostado (448 x 368) se pasa al panel, que es vertical (368 x 448). Con la pantalla girada
+// más de 90° desde la app, se gira para el otro lado (por si Mapi queda montado de cabeza).
+static uint16_t *acostar() {
+  const bool otro = fabsf(giroPantalla) > 90;
+  for (int py = 0; py < FW; py++) {
+    uint16_t *o = chico + py * FH;
+    if (otro) { const uint16_t *src = fb + (FW - 1 - py); for (int px = 0; px < FH; px++) o[px] = src[px * FW]; }
+    else { const uint16_t *src = fb + py; for (int px = 0; px < FH; px++) o[px] = src[(FH - 1 - px) * FW]; }
   }
   return chico;
 }
@@ -789,7 +782,59 @@ static void datosAbajo(bool conKm) {
   }
 }
 uint32_t tFondo, tMapa, tVela;   // cuánto tarda cada parte del cuadro (se ve mandando t por el cable)
+// La 1.8 cuadrada, acostada (448 x 368): a la izquierda una franja con la flecha, los metros y los datos; a la derecha
+// el mapa. Solo el mapa: las pantallas del carro y de la música son redondas (ponytail: pasarlas a la cuadrada si se usan).
+static void pintarCuadrada() {
+  const int L = 172; const Col BARRA{30, 42, 108}, TENUE{170, 185, 230};
+  uint32_t t0 = millis(); fondo(); tFondo = millis() - t0;
+  if (otaTotal) {
+    char p[24]; snprintf(p, sizeof p, "%d %%", (int)(100.f * otaHecho / otaTotal));
+    textoFilo("Actualizando", FW / 2, 150, 40, BLANCO); textoFilo(p, FW / 2, 210, 56, BLANCO); return;
+  }
+  const bool nav = giroDir[0] && tAhora - ultimoMsg < 180;
+  rutaVisible = nav;
+  mapaCx = L + (FW - L) * 0.45f; const float cyCarro = FH * 0.72f;
+  t0 = millis(); mapa(cyCarro); tMapa = millis() - t0;
+  carrito(mapaCx, cyCarro);
+  for (int y = 0; y < FH; y++) { fila(y, 0, L, BARRA, 1); fila(y, L, L + 2, BLANCO, 0.9f); }
+  const float cx = L / 2.f; char b[40];
+  auto dato = [&](float y, const char *e, const char *v) { texto(e, 18, y, 15, TENUE, 1, true); texto(v, L - 16 - anchoTexto(v, 20), y, 20, BLANCO, 1, true, L - 90); };
+  if (nav) {
+    const int gm = giroM >= 0 ? max(0, giroM - (int)(sqrtf(velX * velX + velY * velY) * (tAhora - giroT))) : -1;
+    if (!strcmp(giroDir, "fin")) snprintf(b, sizeof b, giroM >= 0 && giroM > 15 ? "Llegando" : "Llegaste"); else if (gm >= 0) metros(gm, b, sizeof b); else b[0] = 0;
+    flecha(cx, 72, 92, giroDir);
+    if (b[0]) texto(b, cx, 150, 44, BLANCO, 1, false, L - 20);
+    if (giroCalle[0]) texto(giroCalle, cx, 186, 18, Col{205, 218, 255}, 1, false, L - 20);
+    fila(214, 20, L - 20, Col{80, 96, 160}, 1); fila(215, 20, L - 20, Col{80, 96, 160}, 1);
+    char t[24] = ""; if (faltaT >= 0) { if (faltaT < 60) snprintf(t, sizeof t, "%d min", faltaT); else snprintf(t, sizeof t, "%d h %02d", faltaT / 60, faltaT % 60); }
+    char a[16] = ""; if (altura > -1000) altTexto(a, sizeof a);
+    float y = 240;
+    if (t[0]) { dato(y, "Llegas en", t); y += 44; }
+    if (llegaTxt[0]) { dato(y, "Llegada", llegaTxt); y += 44; }
+    if (a[0]) { dato(y, "Altura", a); y += 44; }
+    if (faltaM >= 0 && y < FH - 20) { char km[16]; metros(faltaM, km, sizeof km); dato(y, "Destino", km); }
+  } else {                                                   // sin ruta: la hora grande, el clima, la calle, la pila y la altura
+    horaTexto(b, sizeof b);
+    if (b[0]) texto(b, cx, 70, 58, BLANCO, 1, false, L - 16);
+    if (climaG > -1000) { snprintf(b, sizeof b, "%d°", climaG); nube(cx - 30, 134, 17); texto(b, cx + 22, 134, 26, BLANCO); }
+    if (climaLugar[0]) texto(climaLugar, cx, 168, 16, TENUE, 1, false, L - 20);
+    fila(196, 20, L - 20, Col{80, 96, 160}, 1); fila(197, 20, L - 20, Col{80, 96, 160}, 1);
+    float y = 224;
+    if (calleAhora[0]) { texto(calleAhora, cx, y, 16, Col{205, 218, 255}, 1, false, L - 20); y += 40; }
+    if (pilaCarga) { snprintf(b, sizeof b, pilaKw > 0.3f ? "%.1f kW" : "Sí", pilaKw); for (char *q = b; *q; q++) if (*q == '.') *q = ','; dato(y, "Cargando", b); y += 40; }
+    else if (pilaReal >= 0) { snprintf(b, sizeof b, "%d km", pilaReal); dato(y, "Alcanza", b); y += 40; }
+    if (altura > -1000) { altTexto(b, sizeof b); dato(y, "Altura", b); }
+  }
+  if (limV > 0) {   // el límite de velocidad, arriba a la derecha del mapa
+    const float sx = FW - 40, sy = 40, r = 27, late = limX ? 0.5f + 0.5f * sinf(tAhora * 9) : 0;
+    if (limX) disco(sx, sy, r + 8, Col{232, 69, 60}, 0.25f + 0.35f * late);
+    disco(sx, sy, r, Col{232, 40, 40}, 1); disco(sx, sy, r - 5.5f, BLANCO, 1);
+    char v[6]; snprintf(v, sizeof v, "%d", limV); texto(v, sx, sy, limV >= 100 ? 20 : 24, Col{20, 20, 24});
+  }
+  if (!conectado) textoFilo("buscando el celular…", mapaCx, FH - 18, 15, Col{200, 210, 235});
+}
 static void pintar() {
+  if (placa18) { pintarCuadrada(); return; }
   uint32_t t0 = millis();
   fondo();
   tFondo = millis() - t0;
@@ -922,7 +967,7 @@ void setup() {
     i2cW(0x20, 0x01, 0x00); delay(300);
     i2cW(0x20, 0x01, 0x07); delay(100);
     for (uint8_t a : {0x38, 0x15}) { Wire.beginTransmission(a); if (Wire.endTransmission() == 0) { tp18 = a; break; } }
-    chico = (uint16_t *)ps_malloc(CH * CH * 2);
+    chico = (uint16_t *)ps_malloc(368 * 448 * 2); FW = 448; FH = 368;
     bus = new Arduino_ESP32QSPI(P_CS, 11, P_D0, P_D1, P_D2, P_D3);
     if (tp18 == 0x38) panel = new Arduino_SH8601(bus, -1, 0, 368, 448);   // la V1 (FT3168) trae SH8601; la V2 (CST816), CO5300
     else panel = new Arduino_CO5300(bus, -1, 0, 368, 448);
@@ -952,6 +997,7 @@ void loop() {
   if (reinicioEn && (int32_t)(ahora - reinicioEn) > 0) ESP.restart();   // actualizado: arranca con la versión nueva
   Orden o; int n = 0;
   while (n++ < 12 && xQueueReceive(colaBle, &o, 0) == pdTRUE) orden(String(o.t));
+  if (placa18) pagina = 1;                     // la cuadrada solo tiene el mapa
   static int paginaVista = 1; static float transT = -100; static int transDir = 1; static uint16_t *fbAntes;
   if (pagina != paginaVista) {                  // cambió de pantalla: se guarda la de antes para deslizarla
     if (!fbAntes) fbAntes = (uint16_t *)ps_malloc(D * D * 2);
@@ -971,7 +1017,7 @@ void loop() {
   const uint32_t pintado = millis();
   // ponytail: dibujar y mandar en paralelo (dos memorias, otro núcleo) dañó la pantalla en la 2.0.415 (sin calles, fondo
   // en rayas): se volvió a uno tras otro. Reintentarlo solo con Mapi en el cable para ver qué dice.
-  if (placa18) panel->draw16bitRGBBitmap(0, CHY, achicar(girar()), CH, CH);
+  if (placa18) panel->draw16bitRGBBitmap(0, 0, acostar(), 368, 448);
   else panel->draw16bitRGBBitmap(0, 0, girar(), D, D);
   if (Serial.available() && Serial.read() == 't')
     Serial.printf("cuadro %lu ms (dibujo %lu: fondo %lu, calles %lu, velo %lu, letreros %lu; pantalla %lu, giro %d)\n", (unsigned long)(millis() - ahora), (unsigned long)(pintado - ahora),
