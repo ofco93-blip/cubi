@@ -1503,7 +1503,8 @@ void setup() {
   colaPantalla = xQueueCreate(1, sizeof(Envio));
   pantallaLibre = xSemaphoreCreateBinary();
   xSemaphoreGive(pantallaLibre);
-  xTaskCreatePinnedToCore(tareaPantalla, "pantalla", 4096, nullptr, 2, nullptr, 0);
+  // por encima del audio (2): con la misma prioridad se turnaban y un cuadro grande tardaba el doble en llegar
+  xTaskCreatePinnedToCore(tareaPantalla, "pantalla", 4096, nullptr, 4, nullptr, 0);
   caras::iniciar(esp_random());
 
   imuInit();
