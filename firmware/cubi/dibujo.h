@@ -26,14 +26,9 @@ constexpr Col BLANCO{255, 255, 255};
 
 inline float lim(float v, float a, float b) { return v < a ? a : (v > b ? b : v); }
 
-// rectángulo tocado en este cuadro (para mandar a la pantalla solo lo que cambió)
-extern int cx0, cy0, cx1, cy1;
-inline void marcar(int x0, int y0, int x1, int y1) {
-  if (x0 < cx0) cx0 = x0;
-  if (y0 < cy0) cy0 = y0;
-  if (x1 > cx1) cx1 = x1;
-  if (y1 > cy1) cy1 = y1;
-}
+// lo tocado en este cuadro (para mandar a la pantalla solo lo que cambió): varios rectángulos, no uno solo. Con uno
+// solo, dos lucecitas en orillas opuestas marcaban el círculo entero y cada cuadro de la música tardaba ~80 ms en llegar.
+void marcar(int x0, int y0, int x1, int y1);
 
 inline uint32_t idx(int x, int y) {
   x -= X0; y -= Y0;
@@ -283,9 +278,11 @@ void texto(const char *s, float cx, float cy, float tam, const Col &c, float alf
 // Hay dos memorias: mientras una se manda al panel, la otra se dibuja. Cada una recuerda lo que pintó la última
 // vez (para borrarlo) y al panel se manda lo de este cuadro junto con lo del anterior.
 struct Rect { int x0, y0, x1, y1; };            // en el panel (vertical)
+constexpr int NR = 6;                           // cuántos pedazos sueltos se mandan como mucho
+struct Rects { int n = 0; Rect r[NR]; };
 extern uint8_t cual;                            // qué memoria se está dibujando
 void empezar();                                 // borra lo que se pintó la última vez en esta memoria
-Rect terminar();                                // lo que hay que mandar al panel (ancho 0 = nada)
+Rects terminar();                               // los pedazos que hay que mandar al panel
 void todo();                                    // la próxima vez se manda la pantalla entera
 
 }  // namespace dib

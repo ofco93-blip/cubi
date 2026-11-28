@@ -8,10 +8,33 @@ uint16_t *fb = nullptr;
 uint8_t giro = 0;
 Col tinte{255, 255, 255};
 int X0 = 0, Y0 = 0, X1 = W, Y1 = H, RW = 368, RH = 448;
-int cx0 = W, cy0 = H, cx1 = 0, cy1 = 0;
 uint8_t cual = 0;
 struct RL { int x0, y0, x1, y1; };                  // rectángulo acostado
-static RL previo[2] = {{0, 0, W, H}, {0, 0, W, H}}, ultimo = {0, 0, W, H};
+struct Lista { int n = 0; RL r[NR]; };
+static Lista cur, previo[2], ultimo;
+static inline int area(const RL &a) { return (a.x1 - a.x0) * (a.y1 - a.y0); }
+static inline RL unir(const RL &a, const RL &b) { return {min(a.x0, b.x0), min(a.y0, b.y0), max(a.x1, b.x1), max(a.y1, b.y1)}; }
+// mete un rectángulo en la lista: se junta con los que toca (o casi: 12 px); si ya hay NR, con el que menos crece
+static void meter(Lista &l, RL a) {
+  if (a.x0 >= a.x1 || a.y0 >= a.y1) return;
+  for (bool junto = true; junto;) {
+    junto = false;
+    for (int i = 0; i < l.n; i++) {
+      const RL &b = l.r[i];
+      if (a.x0 <= b.x1 + 12 && b.x0 <= a.x1 + 12 && a.y0 <= b.y1 + 12 && b.y0 <= a.y1 + 12) { a = unir(a, b); l.r[i] = l.r[--l.n]; junto = true; break; }
+    }
+  }
+  if (l.n < NR) { l.r[l.n++] = a; return; }
+  int mejor = 0, crece = 1 << 30;
+  for (int i = 0; i < l.n; i++) { const int c = area(unir(a, l.r[i])) - area(l.r[i]); if (c < crece) { crece = c; mejor = i; } }
+  a = unir(a, l.r[mejor]); l.r[mejor] = l.r[--l.n]; meter(l, a);
+}
+void marcar(int x0, int y0, int x1, int y1) {
+  // lo que se pinta pegado a lo último que se marcó (las letras de un texto, las piezas de una mano) casi siempre cae
+  // dentro: así no se recorre la lista por cada letra
+  if (cur.n) { RL &u = cur.r[cur.n - 1]; if (x0 >= u.x0 && y0 >= u.y0 && x1 <= u.x1 && y1 <= u.y1) return; }
+  meter(cur, {x0, y0, x1, y1});
+}
 void redonda() {
   RW = RH = MAXD; X0 = (W - MAXD) / 2; Y0 = (H - MAXD) / 2; X1 = X0 + MAXD; Y1 = Y0 + MAXD;   // -9..457 x -49..417
   todo();
@@ -44,31 +67,32 @@ static void borrar(const RL &r) {
 }
 
 void empezar() {
-  borrar(previo[cual]);
-  cx0 = X1; cy0 = Y1; cx1 = X0; cy1 = Y0;
+  for (int i = 0; i < previo[cual].n; i++) borrar(previo[cual].r[i]);
+  cur.n = 0;
 }
 
-Rect terminar() {
-  RL cur = {cx0, cy0, cx1, cy1};
-  RL u = cur;
-  if (ultimo.x0 < ultimo.x1) {
-    if (u.x0 >= u.x1) u = ultimo;
-    else { u.x0 = min(u.x0, ultimo.x0); u.y0 = min(u.y0, ultimo.y0); u.x1 = max(u.x1, ultimo.x1); u.y1 = max(u.y1, ultimo.y1); }
-  }
+Rects terminar() {
+  Lista u = cur;                                     // lo de este cuadro y lo del anterior (que hay que borrar en el panel)
+  for (int i = 0; i < ultimo.n; i++) meter(u, ultimo.r[i]);
   previo[cual] = cur; ultimo = cur;
-  if (u.x0 >= u.x1 || u.y0 >= u.y1) return {0, 0, 0, 0};
-  u.x0 = max(X0, u.x0) - X0; u.y0 = max(Y0, u.y0) - Y0; u.x1 = min(X1, u.x1) - X0; u.y1 = min(Y1, u.y1) - Y0;   // ya en medidas del panel
-  Rect r;
-  if (giro) { r.x0 = u.y0; r.x1 = u.y1; r.y0 = RH - u.x1; r.y1 = RH - u.x0; }
-  else { r.x0 = RW - u.y1; r.x1 = RW - u.y0; r.y0 = u.x0; r.y1 = u.x1; }
-  r.x0 &= ~1; if (r.x1 & 1) r.x1++;                // el panel pide coordenadas pares
-  r.y0 &= ~1; if (r.y1 & 1) r.y1++;
-  if (r.x1 > RW) r.x1 = RW;
-  if (r.y1 > RH) r.y1 = RH;
-  return r;
+  Rects out;
+  for (int i = 0; i < u.n; i++) {
+    RL q = u.r[i];
+    q.x0 = max(X0, q.x0) - X0; q.y0 = max(Y0, q.y0) - Y0; q.x1 = min(X1, q.x1) - X0; q.y1 = min(Y1, q.y1) - Y0;   // ya en medidas del panel
+    if (q.x0 >= q.x1 || q.y0 >= q.y1) continue;
+    Rect r;
+    if (giro) { r.x0 = q.y0; r.x1 = q.y1; r.y0 = RH - q.x1; r.y1 = RH - q.x0; }
+    else { r.x0 = RW - q.y1; r.x1 = RW - q.y0; r.y0 = q.x0; r.y1 = q.x1; }
+    r.x0 &= ~1; if (r.x1 & 1) r.x1++;              // el panel pide coordenadas pares
+    r.y0 &= ~1; if (r.y1 & 1) r.y1++;
+    if (r.x1 > RW) r.x1 = RW;
+    if (r.y1 > RH) r.y1 = RH;
+    out.r[out.n++] = r;
+  }
+  return out;
 }
 
-void todo() { previo[0] = previo[1] = ultimo = {X0, Y0, X1, Y1}; }
+void todo() { previo[0].n = previo[1].n = ultimo.n = 1; previo[0].r[0] = previo[1].r[0] = ultimo.r[0] = {X0, Y0, X1, Y1}; }
 
 float anchoTexto(const char *s, float tam) {
   float esc = tam / FUENTE_ALTO, w = 0;

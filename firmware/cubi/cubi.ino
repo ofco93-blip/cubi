@@ -761,7 +761,7 @@ uint16_t *tmpPanel = nullptr;
 // Dos memorias como Lumi: mientras la tarea "pantalla" (núcleo 0) manda un cuadro al panel, el loop dibuja el otro.
 // Antes se dibujaba y después se mandaba, uno tras otro (~65 ms por cuadro, ~15 cuadros/s).
 uint16_t *memorias[2];
-struct Envio { uint16_t *mem; dib::Rect r; };
+struct Envio { uint16_t *mem; dib::Rects rs; };
 QueueHandle_t colaPantalla = nullptr;
 SemaphoreHandle_t pantallaLibre = nullptr;
 volatile uint32_t envioUs = 0, envioMax = 0, envioPx = 0;   // cuánto tarda mandar un cuadro al panel (sale en el "t" del cable)
@@ -769,17 +769,19 @@ void tareaPantalla(void *) {
   Envio e;
   for (;;) {
     if (xQueueReceive(colaPantalla, &e, portMAX_DELAY) != pdTRUE) continue;
-    if (placa175) { e.r.y0 &= ~1; e.r.y1 = min((e.r.y1 + 1) & ~1, dib::RH); }   // el CO5300 de la redonda pide filas pares
-    int w = e.r.x1 - e.r.x0, h = e.r.y1 - e.r.y0;
-    const uint32_t t0 = micros();
-    if (w > 0 && h > 0) {
-      if (w == dib::RW) panel->draw16bitRGBBitmap(panX, panY + e.r.y0, e.mem + (uint32_t)e.r.y0 * dib::RW, dib::RW, h);
+    const uint32_t t0 = micros(); uint32_t px = 0;
+    for (int k = 0; k < e.rs.n; k++) {                // cada pedazo que cambió (dib::terminar ya los deja en pares)
+      const dib::Rect &r = e.rs.r[k];
+      const int w = r.x1 - r.x0, h = r.y1 - r.y0;
+      if (w <= 0 || h <= 0) continue;
+      if (w == dib::RW) panel->draw16bitRGBBitmap(panX, panY + r.y0, e.mem + (uint32_t)r.y0 * dib::RW, dib::RW, h);
       else {
-        for (int f = 0; f < h; f++) memcpy(tmpPanel + (uint32_t)f * w, e.mem + (uint32_t)(e.r.y0 + f) * dib::RW + e.r.x0, w * 2);
-        panel->draw16bitRGBBitmap(panX + e.r.x0, panY + e.r.y0, tmpPanel, w, h);
+        for (int f = 0; f < h; f++) memcpy(tmpPanel + (uint32_t)f * w, e.mem + (uint32_t)(r.y0 + f) * dib::RW + r.x0, w * 2);
+        panel->draw16bitRGBBitmap(panX + r.x0, panY + r.y0, tmpPanel, w, h);
       }
-      envioUs = micros() - t0; envioPx = w * h; if (envioUs > envioMax) envioMax = envioUs;
+      px += w * h;
     }
+    if (px) { envioUs = micros() - t0; envioPx = px; if (envioUs > envioMax) envioMax = envioUs; }
     xSemaphoreGive(pantallaLibre);
   }
 }
@@ -918,7 +920,7 @@ void pintar(uint32_t now) {
   static bool saludo = true;  // al prender saluda (después del primer cuadro: así arranca con el reloj de las caras al día)
   if (saludo) { saludo = false; reac(caras::SALUDO); }
   // solo se manda al panel lo que cambió (este cuadro y el anterior)
-  Envio env{ memorias[dib::cual], dib::terminar() };
+  Envio env{ memorias[dib::cual], dib::terminar() };   // (varios pedazos)
   xSemaphoreTake(pantallaLibre, portMAX_DELAY);   // espera a que termine de mandarse el cuadro anterior
   xQueueSend(colaPantalla, &env, portMAX_DELAY);
   dib::cual ^= 1;
